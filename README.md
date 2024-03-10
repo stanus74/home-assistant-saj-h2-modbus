@@ -13,11 +13,6 @@ Idea based on home-assistant-solaredge-modbus from @binsentsu. Modified for SAJ 
 * Configurable polling interval
 * All modbus registers are read within 1 read cycle for data consistency between sensors.
 
-## Configuration
-Go to the integrations page in your configuration and click on new integration -> SAJ Modbus
-
-Home Assistant Custom Component for reading data from SAJ Solar Inverters through modbus over TCP. This integration should work with SAJ R5, Sununo and Suntrio inverters.
-
 ## Installation
 
 This integration is NOT available in the HACS default repository.
@@ -25,3 +20,10 @@ This integration is NOT available in the HACS default repository.
 copy Files in a new Diretory /saj-modbus
 
 After reboot of Home-Assistant, this integration can be configured through the integration setup UI
+
+
+## Configuration
+Go to the integrations page in your configuration and click on new integration -> SAJ Modbus
+
+Home Assistant Custom Component for reading data from SAJ Solar Inverters through modbus over TCP. This integration should work with SAJ R5, Sununo and Suntrio inverters.
+
