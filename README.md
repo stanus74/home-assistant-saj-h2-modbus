@@ -25,4 +25,4 @@ This integration is NOT available in the HACS default repository.
 
 1. Go to the integrations page in your configuration and click on new integration -> SAJ Modbus
 
-Home Assistant Custom Component for reading data from SAJ Solar Inverters through Modbus over TCP. This integration should work with SAJ R5, Sununo and Suntrio inverters.
+Home Assistant Custom Component for reading data from SAJ Solar Inverters through Modbus over TCP. This integration should work with SAJ H2 and HS2.
