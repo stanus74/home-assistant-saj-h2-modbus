@@ -29,3 +29,5 @@ This integration is NOT available in the HACS default repository.
 
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval.
+
+![SAJ](https://github.com/stanus74/home-assistant-saj-h2-modbus/raw/main/images/saj_h2_modbus/logo.png)
