@@ -1,5 +1,5 @@
 {
-  "domain": "saj_modbus",
+  "domain": "saj_h2_modbus",
   "name": "SAJ H2 Modbus",
   "codeowners": ["@stan74","@wimb0"],
   "config_flow": true,
