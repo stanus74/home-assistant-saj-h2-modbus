@@ -63,15 +63,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.MEASUREMENT,
     ),
     
-    "SysGridPower": SajModbusSensorEntityDescription(  
-        key="SysGridPower",
-        name="Grid Total Power",
-        icon="",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
+        
     "BatteryPower": SajModbusSensorEntityDescription( 
         key="batteryPower",
         name="batteryPower",

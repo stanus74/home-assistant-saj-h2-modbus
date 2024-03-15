@@ -51,7 +51,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         self.inverter_data: dict = {}
         self.data: dict = {}
-        self.last_valid_data = {}  # Hinzufügen eines Attributs für den letzten gültigen Zustand
+        self.last_valid_data = {}  
 
     @callback
     def async_remove_listener(self, update_callback: CALLBACK_TYPE) -> None:
@@ -155,31 +155,29 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         try:
             inverter_data = self._read_holding_registers(unit=1, address=0x8F00, count=29)
             if not isinstance(inverter_data, ReadHoldingRegistersResponse) or inverter_data.isError():
-                self.log_error("Fehler beim Lesen der Inverter-Modbus-Daten")
+                self.log_error("Error when reading the inverter Modbus data")
                 return {}
         except ModbusIOException as e:
-            self.log_error(f"Modbus IO Exception beim Lesen der Inverter-Daten: {e}")
+            self.log_error(f"Modbus IO exception when reading the inverter data: {e}")
             return {}
 
         if len(inverter_data.registers) < 29:  # Stellen Sie sicher, dass genügend Register für die gesamte geplante Dekodierung vorliegen
-            _LOGGER.error(f"Unvollständige Daten beim Lesen der Inverter-Daten: Erwartet 29, erhalten {len(inverter_data.registers) if not inverter_data.isError() else 'Fehler'}")
+            _LOGGER.error(f"Incomplete data when reading the inverter data: Expected 29, received {len(inverter_data.registers) if not inverter_data.isError() else 'Fehler'}")
             return {}
 
-    # Hier kannst du den Rest deines Codes hinzufügen
-
-
+    
         decoder = BinaryPayloadDecoder.fromRegisters(inverter_data.registers, byteorder=Endian.BIG)
         keys = ["devtype", "subtype", "commver", "sn", "pc", "dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]
         data = {}
 
-        for key in keys[:3]:  # For the first three keys, decode as uint then transform if necessary
+        for key in keys[:3]:  
             value = decoder.decode_16bit_uint()
             data[key] = round(value * 0.001, 3) if key == "commver" else value
 
-        for key in keys[3:5]:  # Decode strings
+        for key in keys[3:5]:  
             data[key] = decoder.decode_string(20).decode("ascii").strip()
 
-        for key in keys[5:]:  # Decode the remaining uints and transform
+        for key in keys[5:]:  
             data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
         return data
@@ -189,14 +187,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         try:
             realtime_data = self._read_holding_registers(unit=1, address=0x4004, count=19)
             if not isinstance(realtime_data, ReadHoldingRegistersResponse) or realtime_data.isError():
-                self.log_error("Fehler beim Lesen der zusätzlichen Modbus-Daten")
+                self.log_error("Error when reading the additional Modbus data")
                 return {}
         except ModbusIOException as e:
-            self.log_error(f"Modbus IO Exception beim Lesen der zusätzlichen Daten: {e}")
+            self.log_error(f"Modbus IO exception when reading the realtime data: {e}")
             return {}
             
-        if len(realtime_data.registers) < 19:  # Stellen Sie sicher, dass genügend Register für die gesamte geplante Dekodierung vorliegen
-            _LOGGER.error(f"Unvollständige Daten beim Lesen der Modbus-Daten: Erwartet 19, erhalten {len(realtime_data.registers)}")
+        if len(realtime_data.registers) < 19:  
+            _LOGGER.error(f"Incomplete data when reading Modbus data: Expected 19, received {len(realtime_data.registers)}")
 
             return {}
 
@@ -232,7 +230,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         if faultMsg:
             _LOGGER.error("Fault message: " + ", ".join(faultMsg).strip())
             
-        decoder.skip_bytes(8)  # Jedes 16-Bit-Register ist 2 Bytes groß
+        decoder.skip_bytes(8)  
         
         
         errorcount = decoder.decode_16bit_uint()
@@ -240,8 +238,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         
         SinkTemp = decoder.decode_16bit_int()
-        data["SinkTemp"] = round(SinkTemp * 0.1, 1)  # Runden auf 1 Dezimalstelle, wenn Skalierung von Zehntelgrad auf Grad
-            
+        data["SinkTemp"] = round(SinkTemp * 0.1, 1)  
         AmbTemp = decoder.decode_16bit_int()
         data["AmbTemp"] = round(AmbTemp * 0.1, 1)
         
@@ -262,34 +259,34 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         return data
 
         
-    ## weitere Sensor Daten    
+       
         
     def read_additional_modbus_data(self) -> dict:
         try:
             additional_data = self._read_holding_registers(unit=1, address=16494, count=64)
             if not isinstance(additional_data, ReadHoldingRegistersResponse) or additional_data.isError():
-                self.log_error("Fehler beim Lesen der zusätzlichen Modbus-Daten")
-                # Verwende den letzten gültigen Zustand für diese spezifische Datengruppe, falls vorhanden
-                return self.last_valid_data.get('additional_data', {})  # Geändert von 'additional_data_2' zu 'additional_data'
+                self.log_error("Error when reading the additional Modbus data")
+                
+                return self.last_valid_data.get('additional_data', {})  
             
         except ModbusIOException as e:
-            self.log_error(f"Modbus IO Exception beim Lesen der zusätzlichen Daten: {e}")
-            # Verwende den letzten gültigen Zustand für diese spezifische Datengruppe, falls vorhanden
+            self.log_error(f"Modbus IO exception when reading the additional data: {e}")
+            
             return self.last_valid_data.get('additional_data', {})  
 
-        if len(additional_data.registers) < 64:  # Stellen Sie sicher, dass genügend Register für die gesamte geplante Dekodierung vorliegen
-            self.log_error("Unvollständige Daten beim Lesen der zusätzlichen Modbus-Daten")
+        if len(additional_data.registers) < 64:  
+            self.log_error("Incomplete data when reading the additional Modbus data 2")
             return self.last_valid_data.get('additional_data', {})  
 
 
         decoder = BinaryPayloadDecoder.fromRegisters(additional_data.registers, byteorder=Endian.BIG)
         data = {}
 
-        # Direkte Zuweisung von Werten mit Berechnung
+        
         data["BatTemp"] = round(decoder.decode_16bit_uint() * 0.1, 1)
         data["batEnergyPercent"] = round(decoder.decode_16bit_uint() / 100.0, 2)
 
-        # Anpassung der skip_bytes-Werte basierend auf der Datenstruktur
+        
         decoder.skip_bytes(96)
 
         data["TotalLoadPower"] = decoder.decode_16bit_int()
@@ -303,7 +300,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         data["gridPower"] = decoder.decode_16bit_int()
 
-        # Aktualisiere den letzten gültigen Zustand für diese spezifische Datengruppe
+        
         self.last_valid_data['additional_data_2'] = data
 
         return data
@@ -316,31 +313,31 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         try:
             additional_data2 = self._read_holding_registers(unit=1, address=16572, count=66)
             if not isinstance(additional_data2, ReadHoldingRegistersResponse) or additional_data2.isError():
-                self.log_error("Fehler beim Lesen der zusätzlichen Modbus-Daten 2")
-                return self.last_valid_data.get('additional_data_2', {})  # Sicherstellen, dass dieser Schlüssel korrekt ist
+                self.log_error("Error when reading the additional Modbus data 2")
+                return self.last_valid_data.get('additional_data_2', {})  
 
         except ModbusIOException as e:
-            self.log_error(f"Modbus IO Exception beim Lesen der zusätzlichen Daten 2: {e}")
+            self.log_error(f"Modbus IO exception when reading the additional data 2: {e}")
             return self.last_valid_data.get('additional_data_2', {})
 
-        if len(additional_data2.registers) < 66:  # Überprüfung der Anzahl der Register
-            self.log_error("Unvollständige Daten beim Lesen der zusätzlichen Modbus-Daten 2")
-            return self.last_valid_data.get('additional_data_2', {})  # Sicherstellen, dass dieser Schlüssel korrekt ist
+        if len(additional_data2.registers) < 66:  
+            self.log_error("Incomplete data when reading the additional Modbus data 2")
+            return self.last_valid_data.get('additional_data_2', {})  
 
 
         decoder2 = BinaryPayloadDecoder.fromRegisters(additional_data2.registers, byteorder=Endian.BIG)
         data = {}
 
-        # Direkte Zuweisung für heute und Gesamtstunden mit Anpassung
+        
         data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
         data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
 
-        # Schleife zur Vereinfachung der Energiedatenerfassung
+        
         energy_keys = ["todayenergy", "monthenergy", "yearenergy", "totalenergy"]
         for key in energy_keys:
             data[key] = round(decoder2.decode_32bit_uint() * 0.01, 2)
 
-        # Aktualisiere den letzten gültigen Zustand für diese spezifische Datengruppe
+        
         self.last_valid_data['additional_data_2'] = data
 
         return data
