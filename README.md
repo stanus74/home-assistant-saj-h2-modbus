@@ -30,7 +30,6 @@ This integration is NOT available in the HACS default repository.
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval.
 
-![SAJ](https://github.com/stanus74/home-assistant-saj-h2-modbus/raw/main/images/saj_h2_modbus/logo.png)
 
 ## Additional Imformation
 
@@ -53,3 +52,6 @@ Using the AIO3 for data collection in Home Assistant is completely sufficient.
 
 Even controlling the battery charging times is possible in HA with the integrated Modbus module.
 We will soon provide a guide on GitHub with code for this.
+
+
+![SAJ](https://github.com/stanus74/home-assistant-saj-h2-modbus/raw/main/images/saj_h2_modbus/logo.png)
