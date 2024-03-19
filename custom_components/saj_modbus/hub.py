@@ -307,7 +307,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
   
     def read_additional_modbus_data_2(self) -> dict:
         try:
-            additional_data2 = self._read_holding_registers(unit=1, address=16572, count=66)
+            additional_data2 = self._read_holding_registers(unit=1, address=16572, count=67)
             if not isinstance(additional_data2, ReadHoldingRegistersResponse) or additional_data2.isError():
                 self.log_error("Error when reading the additional Modbus data 2")
                 return self.last_valid_data.get('additional_data_2', {})  
@@ -316,7 +316,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             self.log_error(f"Modbus IO exception when reading the additional data 2: {e}")
             return self.last_valid_data.get('additional_data_2', {})
 
-        if len(additional_data2.registers) < 66:  
+        if len(additional_data2.registers) < 67:  
             self.log_error("Incomplete data when reading the additional Modbus data 2")
             return self.last_valid_data.get('additional_data_2', {})  
 
@@ -328,11 +328,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
         data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
 
-        
-        data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
-        data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
-
-        
+               
         data["todayenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["monthenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["yearenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
