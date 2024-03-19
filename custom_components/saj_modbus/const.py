@@ -26,7 +26,7 @@ ATTR_MANUFACTURER = "SAJ Electric"
 
 @dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
-    """A class that describes Zoonneplan sensor entities."""
+    """A class that describes SAJ H2 sensor entities."""
 
 
 SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
@@ -36,6 +36,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "TotalLoadPower": SajModbusSensorEntityDescription(
         key="TotalLoadPower",
         name="TotalLoadPower",
@@ -70,8 +71,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:solar-panel-large",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        
+        state_class=SensorStateClass.MEASUREMENT,        
     ),
     
     "BatEnergyPercent": SajModbusSensorEntityDescription(
@@ -82,9 +82,10 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
+
     "SinkTemp": SajModbusSensorEntityDescription(
         key="SinkTemp",
-        name="SinkTemp",
+        name="Inverter temperature",
         icon="",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -94,7 +95,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
     "AmbTemp": SajModbusSensorEntityDescription(
         key="AmbTemp",
         name="Environment temperature",
-        icon="",
+        icon="mdi:thermometer",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -103,99 +104,101 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
     "BatTemp": SajModbusSensorEntityDescription(
         key="BatTemp",
         name="Battery temperature",
-        icon="",
+        icon="mdi:battery-thermometer",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
-    
-    
+        
     "SubType": SajModbusSensorEntityDescription(
         name="Sub Type",
         key="subtype",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "CommVer": SajModbusSensorEntityDescription(
         name="Comms Protocol Version",
         key="commver",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "SN": SajModbusSensorEntityDescription(
         name="Serial Number",
         key="sn",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "PC": SajModbusSensorEntityDescription(
         name="Product Code",
         key="pc",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "DV": SajModbusSensorEntityDescription(
         name="Display Software Version",
         key="dv",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "MCV": SajModbusSensorEntityDescription(
         name="Master Ctrl Software Version",
         key="mcv",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "SCV": SajModbusSensorEntityDescription(
         name="Slave Ctrl Software Version",
         key="scv",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "DispHWVersion": SajModbusSensorEntityDescription(
         name="Display Board Hardware Version",
         key="disphwversion",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "CtrlHWVersion": SajModbusSensorEntityDescription(
         name="Control Board Hardware Version",
         key="ctrlhwversion",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "PowerHWVersion": SajModbusSensorEntityDescription(
         name="Power Board Hardware Version",
         key="powerhwversion",
         icon="mdi:information-outline",
         entity_registry_enabled_default=False,
     ),
+
     "MPVStatus": SajModbusSensorEntityDescription(
         name="Inverter status",
         key="mpvstatus",
         icon="mdi:information-outline",
     ),
+
     "MPVMode": SajModbusSensorEntityDescription(
         name="Inverter working mode",
         key="mpvmode",
         icon="mdi:information-outline",
     ),
+
     "FaultMSG": SajModbusSensorEntityDescription(
         name="Inverter error message",
         key="faultmsg",
         icon="mdi:message-alert-outline",
     ),
   
-  
-    "InvTempC": SajModbusSensorEntityDescription(
-        name="Inverter temperature",
-        key="invtempc",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-    
+       
     "GFCI": SajModbusSensorEntityDescription(
         name="GFCI",
         key="gfci",
@@ -212,10 +215,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:counter",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
-    
-    
-    
-    
+        
     "ISO1": SajModbusSensorEntityDescription(
         name="PV1+_ISO",
         key="iso1",
@@ -223,6 +223,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:omega",
         #entity_registry_enabled_default=False,
     ),
+
     "ISO2": SajModbusSensorEntityDescription(
         name="PV2+_ISO",
         key="iso2",
@@ -230,6 +231,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:omega",
         #entity_registry_enabled_default=False,
     ),
+
     "ISO3": SajModbusSensorEntityDescription(
         name="PV3+_ISO",
         key="iso3",
@@ -237,6 +239,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:omega",
         entity_registry_enabled_default=False,
     ),
+
     "ISO4": SajModbusSensorEntityDescription(
         name="PV__ISO",
         key="iso4",
@@ -244,8 +247,6 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:omega",
         entity_registry_enabled_default=False,
     ),
-    
-    
     
     "TodayEnergy": SajModbusSensorEntityDescription(
         name="Power generation on current day",
@@ -255,6 +256,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+
     "MonthEnergy": SajModbusSensorEntityDescription(
         name="Power generation in current month",
         key="monthenergy",
@@ -264,6 +266,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
     ),
+
     "YearEnergy": SajModbusSensorEntityDescription(
         name="Power generation in current year",
         key="yearenergy",
@@ -273,6 +276,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
     ),
+
     "TotalEnergy": SajModbusSensorEntityDescription(
         name="Total power generation",
         key="totalenergy",
@@ -281,6 +285,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+
     "TodayHour": SajModbusSensorEntityDescription(
         name="Daily working hours",
         key="todayhour",
@@ -288,6 +293,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         icon="mdi:progress-clock",
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+
     "TotalHour": SajModbusSensorEntityDescription(
         name="Total working hours",
         key="totalhour",
@@ -296,6 +302,162 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     
+
+    "BatTodayCharge": SajModbusSensorEntityDescription(
+        name="Battery Today Charge",
+        key="bat_today_charge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-charging",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+
+    "BatMonthCharge": SajModbusSensorEntityDescription(
+        name="Battery Month Charge",
+        key="bat_month_charge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-charging",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "BatYearCharge": SajModbusSensorEntityDescription(
+        name="Battery Year Charge",
+        key="bat_year_charge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-charging",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "BatTotalCharge": SajModbusSensorEntityDescription(
+        name="Battery Total Charge",
+        key="bat_total_charge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-charging-100",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+
+    "BatTodayDischarge": SajModbusSensorEntityDescription(
+        name="Battery Today Discharge",
+        key="bat_today_discharge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-minus",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+
+    "BatMonthDischarge": SajModbusSensorEntityDescription(
+        name="Battery Month Discharge",
+        key="bat_month_discharge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-minus",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "BatYearDischarge": SajModbusSensorEntityDescription(
+        name="Battery Year Discharge",
+        key="bat_year_discharge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-minus",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+    "BatTotalDischarge": SajModbusSensorEntityDescription(
+        name="Battery Total Discharge",
+        key="bat_total_discharge",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:battery-minus",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+
+    ),
+
+    "InvTodayGen": SajModbusSensorEntityDescription(
+        name="Inverter Today Generation",
+        key="inv_today_gen",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+
+    "InvMonthGen": SajModbusSensorEntityDescription(
+        name="Inverter Month Generation",
+        key="inv_month_gen",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "InvYearGen": SajModbusSensorEntityDescription(
+        name="Inverter Year Generation",
+        key="inv_year_gen",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "InvTotalGen": SajModbusSensorEntityDescription(
+        name="Inverter Total Generation",
+        key="inv_total_gen",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "TotalTodayLoad": SajModbusSensorEntityDescription(
+        name="Total Today Load",
+        key="total_today_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:home-import-outline",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+
+    "TotalMonthLoad": SajModbusSensorEntityDescription(
+        name="Total Month Load",
+        key="total_month_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:home-import-outline",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "TotalYearLoad": SajModbusSensorEntityDescription(
+        name="Total Year Load",
+        key="total_year_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:home-import-outline",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "TotalTotalLoad": SajModbusSensorEntityDescription(
+        name="Total Load",
+        key="total_total_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:home-import-outline",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
     "ErrorCount": SajModbusSensorEntityDescription(
         name="Error count",
         key="errorcount",
@@ -303,8 +465,8 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
 
-    
-    
+  
+
     
 }
 

@@ -147,10 +147,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
 
 
-
-
-## passt für H2
-
     def read_modbus_inverter_data(self) -> dict:
         try:
             inverter_data = self._read_holding_registers(unit=1, address=0x8F00, count=29)
@@ -333,11 +329,60 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
 
         
-        energy_keys = ["todayenergy", "monthenergy", "yearenergy", "totalenergy"]
-        for key in energy_keys:
-            data[key] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
+        data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
 
         
+        data["todayenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["monthenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["yearenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["totalenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        
+        
+        data["bat_today_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_month_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_year_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_total_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+        
+        data["bat_today_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_month_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_year_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["bat_total_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+          
+        
+        data["inv_today_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["inv_month_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["inv_year_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["inv_total_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+        
+        data["total_today_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["total_month_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["total_year_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["total_total_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+        
+        data["backup_today_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["backup_month_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["backup_year_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["backup_total_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+        
+        data["sell_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+        
+        data["feedin_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        
+        
+
         self.last_valid_data['additional_data_2'] = data
 
         return data
