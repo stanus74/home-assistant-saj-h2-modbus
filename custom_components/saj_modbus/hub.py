@@ -271,7 +271,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             return self.last_valid_data.get('additional_data', {})  
 
         if len(additional_data.registers) < 64:  
-            self.log_error("Incomplete data when reading the additional Modbus data 2")
+            self.log_error("Incomplete data when reading the additional Modbus data")
             return self.last_valid_data.get('additional_data', {})  
 
 
@@ -297,7 +297,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["gridPower"] = decoder.decode_16bit_int()
 
         
-        self.last_valid_data['additional_data_2'] = data
+        self.last_valid_data['additional_data'] = data
 
         return data
 
@@ -308,22 +308,25 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
     def read_additional_modbus_data_2(self) -> dict:
         try:
             additional_data2 = self._read_holding_registers(unit=1, address=16572, count=67)
-            if not isinstance(additional_data2, ReadHoldingRegistersResponse) or additional_data2.isError():
-                self.log_error("Error when reading the additional Modbus data 2")
+            additional_data3 = self._read_holding_registers(unit=1, address=16711, count=48)
+        
+            if not isinstance(additional_data2, ReadHoldingRegistersResponse) or additional_data2.isError() or not isinstance(additional_data3, ReadHoldingRegistersResponse) or additional_data3.isError():
+                self.log_error("Error when reading the additional Modbus data 2 or 3")
                 return self.last_valid_data.get('additional_data_2', {})  
 
         except ModbusIOException as e:
-            self.log_error(f"Modbus IO exception when reading the additional data 2: {e}")
+            self.log_error(f"Modbus IO exception when reading the additional data 2 or 3: {e}")
             return self.last_valid_data.get('additional_data_2', {})
 
-        if len(additional_data2.registers) < 67:  
-            self.log_error("Incomplete data when reading the additional Modbus data 2")
+        if len(additional_data2.registers) < 67 or len(additional_data3.registers) < 48:  
+            self.log_error("Incomplete data when reading the additional Modbus data 2 or 3")
             return self.last_valid_data.get('additional_data_2', {})  
 
-
-        decoder2 = BinaryPayloadDecoder.fromRegisters(additional_data2.registers, byteorder=Endian.BIG)
+        # Kombiniere beide Registerblöcke für die Dekodierung
+        all_registers = additional_data2.registers + additional_data3.registers
+        
+        decoder2 = BinaryPayloadDecoder.fromRegisters(all_registers, byteorder=Endian.BIG)
         data = {}
-
         
         data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
         data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
@@ -365,19 +368,58 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["backup_year_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["backup_total_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
 
-        
+        # R Phase 16623 - 16629
         data["sell_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["sell_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["sell_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["sell_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
 
-        
+        # R Phase Buy 16631 16637
         data["feedin_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["feedin_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["feedin_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         data["feedin_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         
+        # S Phase 16711 - 16717
+        data["sell_today_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_month_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_year_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_total_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
         
+        # T Phase Sell 16719 - 16725
+        data["sell_today_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_month_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_year_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sell_total_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        
+        
+        # S Phase Buy 16727 - 16733
+        data["feedin_today_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_month_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_year_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_total_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        
+        # T Phase Buy 16735 - 16741
+        data["feedin_today_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_month_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_year_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["feedin_total_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+
+    
+        data["sum_feed_in_today"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_feed_in_month"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_feed_in_year"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_feed_in_total"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+
+        data["sum_sell_today"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_sell_month"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_sell_year"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+        data["sum_sell_total"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
+
+
+
 
         self.last_valid_data['additional_data_2'] = data
 

@@ -78,7 +78,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         key="batEnergyPercent",
         name="Battery Energy Percent",
         icon="mdi:battery-charging-100",
-        native_unit_of_measurement='%',  # Verwenden Sie einfach einen String für Prozentsätze
+        native_unit_of_measurement='%',  
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
@@ -86,7 +86,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
     "SinkTemp": SajModbusSensorEntityDescription(
         key="SinkTemp",
         name="Inverter temperature",
-        icon="",
+        icon="mdi:thermometer",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -241,7 +241,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
     ),
 
     "ISO4": SajModbusSensorEntityDescription(
-        name="PV__ISO",
+        name="PV4+_ISO",
         key="iso4",
         native_unit_of_measurement="kΩ",
         icon="mdi:omega",
@@ -292,6 +292,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         native_unit_of_measurement=UnitOfTime.HOURS,
         icon="mdi:progress-clock",
         state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
     ),
 
     "TotalHour": SajModbusSensorEntityDescription(
@@ -300,6 +301,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         native_unit_of_measurement=UnitOfTime.HOURS,
         icon="mdi:progress-clock",
         state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
     ),
     
 
@@ -369,6 +371,7 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
     ),
+    
     "BatTotalDischarge": SajModbusSensorEntityDescription(
         name="Battery Total Discharge",
         key="bat_total_discharge",
@@ -458,6 +461,378 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         entity_registry_enabled_default=False,
     ),
 
+
+    "SellTodayEnergy": SajModbusSensorEntityDescription(
+        name="Sell Today Energy",
+        key="sell_today_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+
+    "SellMonthEnergy": SajModbusSensorEntityDescription(
+        name="Sell Month Energy",
+        key="sell_month_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellYearEnergy": SajModbusSensorEntityDescription(
+        name="Sell Year Energy",
+        key="sell_year_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellTotalEnergy": SajModbusSensorEntityDescription(
+        name="Sell Total Energy",
+        key="sell_total_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+
+    "SellTodayEnergy2": SajModbusSensorEntityDescription(
+        name="Sell Today Energy 2",
+        key="sell_today_energy_2",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellMonthEnergy2": SajModbusSensorEntityDescription(
+        name="Sell Month Energy 2",
+        key="sell_month_energy_2",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellYearEnergy2": SajModbusSensorEntityDescription(
+        name="Sell Year Energy 2",
+        key="sell_year_energy_2",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellTotalEnergy2": SajModbusSensorEntityDescription(
+        name="Sell Total Energy 2",
+        key="sell_total_energy_2",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellTodayEnergy3": SajModbusSensorEntityDescription(
+        name="Sell Today Energy 3",
+        key="sell_today_energy_3",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellMonthEnergy3": SajModbusSensorEntityDescription(
+        name="Sell Month Energy 3",
+        key="sell_month_energy_3",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellYearEnergy3": SajModbusSensorEntityDescription(
+        name="Sell Year Energy 3",
+        key="sell_year_energy_3",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SellTotalEnergy3": SajModbusSensorEntityDescription(
+        name="Sell Total Energy 3",
+        key="sell_total_energy_3",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:solar-power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "FeedinTodayEnergy": SajModbusSensorEntityDescription(
+        name="Feed-in Today Energy",
+        key="feedin_today_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+
+    "FeedinMonthEnergy": SajModbusSensorEntityDescription(
+        name="Feed-in Month Energy",
+        key="feedin_month_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "FeedinYearEnergy": SajModbusSensorEntityDescription(
+        name="Feed-in Year Energy",
+        key="feedin_year_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "FeedinTotalEnergy": SajModbusSensorEntityDescription(
+        name="Feed-in Total Energy",
+        key="feedin_total_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+    
+
+    "FeedinTodayEnergy2": SajModbusSensorEntityDescription(
+    	name="Feed-In Today Energy 2",
+	    key="feedin_today_energy_2",
+	    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+	    icon="mdi:transmission-tower",
+	    device_class=SensorDeviceClass.ENERGY,
+	    state_class=SensorStateClass.TOTAL_INCREASING,
+	    entity_registry_enabled_default=False,
+    ),
+
+	"FeedinMonthEnergy2": SajModbusSensorEntityDescription(
+		name="Feed-In Month Energy 2",
+		key="feedin_month_energy_2",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:calendar-month",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+	"FeedinYearEnergy2": SajModbusSensorEntityDescription(
+		name="Feed-In Year Energy 2",
+		key="feedin_year_energy_2",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:calendar",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+	"FeedinTotalEnergy2": SajModbusSensorEntityDescription(
+		name="Feed-In Total Energy 2",
+		key="feedin_total_energy_2",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:transmission-tower",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+    "FeedinTodayEnergy3": SajModbusSensorEntityDescription(
+	    name="Feed-In Today Energy 3",
+	    key="feedin_today_energy_3",
+	    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+	    icon="mdi:transmission-tower",
+	    device_class=SensorDeviceClass.ENERGY,
+	    state_class=SensorStateClass.TOTAL_INCREASING,
+	    entity_registry_enabled_default=False,
+    ),
+
+	"FeedinMonthEnergy3": SajModbusSensorEntityDescription(
+		name="Feed-In Month Energy 3",
+		key="feedin_month_energy_3",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:calendar-month",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+	"FeedinYearEnergy3": SajModbusSensorEntityDescription(
+		name="Feed-In Year Energy 3",
+		key="feedin_year_energy_3",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:calendar",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+	"FeedinTotalEnergy3": SajModbusSensorEntityDescription(
+		name="Feed-In Total Energy 3",
+		key="feedin_total_energy_3",
+		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+		icon="mdi:transmission-tower",
+		device_class=SensorDeviceClass.ENERGY,
+		state_class=SensorStateClass.TOTAL_INCREASING,
+		entity_registry_enabled_default=False,
+	),
+
+
+
+    "SumFeedinToday": SajModbusSensorEntityDescription(
+        name="Sum All Phases Feed-In Today",
+        key="sum_feed_in_today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SumFeedinMonth": SajModbusSensorEntityDescription(
+        name="Sum All Phases Feed-In Month",
+        key="sum_feed_in_month",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SumFeedinYear": SajModbusSensorEntityDescription(
+        name="Sum All Phases Feed-In Year",
+        key="sum_feed_in_year",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+
+    "SumFeedinTotal": SajModbusSensorEntityDescription(
+        name="Sum All Phases Feed-In Total",
+        key="sum_feed_in_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:transmission-tower",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        #entity_registry_enabled_default=False,
+    ),
+
+
+    "SumSellToday": SajModbusSensorEntityDescription(
+        name="Sum All Phases Sell Today",
+        key="sum_sell_today",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:currency-usd",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SumSellMonth": SajModbusSensorEntityDescription(
+        name="Sum All Phases Sell Month",
+        key="sum_sell_month",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:currency-usd",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SumSellYear": SajModbusSensorEntityDescription(
+        name="Sum All Phases Sell Year",
+        key="sum_sell_year",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:currency-usd",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+    "SumSellTotal": SajModbusSensorEntityDescription(
+        name="Sum All Phases Sell Total",
+        key="sum_sell_total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:currency-usd",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        #entity_registry_enabled_default=False,
+    ),
+
+
+
+    "BackupTodayLoad": SajModbusSensorEntityDescription(
+        name="Backup Today Load",
+        key="backup_today_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+    "BackupMonthLoad": SajModbusSensorEntityDescription(
+        name="Backup Month Load",
+        key="backup_month_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+    "BackupYearLoad": SajModbusSensorEntityDescription(
+        name="Backup Year Load",
+        key="backup_year_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+    "BackupTotalLoad": SajModbusSensorEntityDescription(
+        name="Backup Total Load",
+        key="backup_total_load",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+    ),
+
+
+
+
+
     "ErrorCount": SajModbusSensorEntityDescription(
         name="Error count",
         key="errorcount",
@@ -465,17 +840,19 @@ SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
 
-  
-
-    
 }
 
 DEVICE_STATUSSES = {
-    0: "Not Connected",
+    0: "Initialization",
     1: "Waiting",
-    2: "Normal",
-    3: "Error",
-    4: "Upgrading",
+    2: "Running",
+    3: "Offnet mode, used for energy storage",
+    4: "Grid on-load mode, used for energy storage",
+    5: "Fault",
+    6: "Update",
+    7: "Test",
+    8: "Self-checking",
+    9: "Reset",
 }
 
 FAULT_MESSAGES = {
