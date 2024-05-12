@@ -1,3 +1,5 @@
+from typing import Optional
+
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,6 +17,8 @@ from homeassistant.const import (
     UnitOfTime,
 )
 
+from typing import Dict, NamedTuple, Any
+
 
 DOMAIN = "saj_modbus"
 DEFAULT_NAME = "SAJ"
@@ -25,822 +29,213 @@ ATTR_MANUFACTURER = "SAJ Electric"
 
 
 @dataclass
+class SensorGroup:
+    unit_of_measurement: Optional[str] = None
+    icon: str = ""  # Optional
+    device_class: Optional[str] = None  
+    state_class: Optional[str] = None  
+    
+@dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
     """A class that describes SAJ H2 sensor entities."""
 
 
-SENSOR_TYPES: dict[str, list[SajModbusSensorEntityDescription]] = {
-    "DevType": SajModbusSensorEntityDescription(
-        name="Device Type",
-        key="devtype",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
+power_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfPower.WATT,
+    device_class=SensorDeviceClass.POWER,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:solar-power",  
+)
 
-    "TotalLoadPower": SajModbusSensorEntityDescription(
-        key="TotalLoadPower",
-        name="TotalLoadPower",
-        icon="",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
-    "gridPower": SajModbusSensorEntityDescription(
-        key="gridPower",
-        name="gridPower",
-        icon="mdi:solar-panel-large",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
-    "pvPower": SajModbusSensorEntityDescription(  
-        key="pvPower",
-        name="PV Power",
-        icon="mdi:solar-panel-large",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
+temperature_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfTemperature.CELSIUS,
+    device_class=SensorDeviceClass.TEMPERATURE,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:thermometer",  
+)
+
+energy_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    icon="mdi:solar-power",  
+)
+
+information_sensors_group = SensorGroup(
+    icon="mdi:information-outline"  
+)
+
+
+gfci_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:current-dc"
+)
+
+iso_resistance_sensors_group = SensorGroup(
+    unit_of_measurement="kΩ",  
+    icon="mdi:omega"
+)
+
+
+battery_sensors_group = SensorGroup(
+    unit_of_measurement='%',  
+    device_class=SensorDeviceClass.BATTERY,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:battery"  
+)
+
+
+
+def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
+    descriptions = {}
+    for sensor in sensors:
         
-    "BatteryPower": SajModbusSensorEntityDescription( 
-        key="batteryPower",
-        name="batteryPower",
-        icon="mdi:solar-panel-large",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,        
-    ),
-    
-    "BatEnergyPercent": SajModbusSensorEntityDescription(
-        key="batEnergyPercent",
-        name="Battery Energy Percent",
-        icon="mdi:battery-charging-100",
-        native_unit_of_measurement='%',  
-        device_class=SensorDeviceClass.BATTERY,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-
-    "SinkTemp": SajModbusSensorEntityDescription(
-        key="SinkTemp",
-        name="Inverter temperature",
-        icon="mdi:thermometer",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
-    "AmbTemp": SajModbusSensorEntityDescription(
-        key="AmbTemp",
-        name="Environment temperature",
-        icon="mdi:thermometer",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    
-    "BatTemp": SajModbusSensorEntityDescription(
-        key="BatTemp",
-        name="Battery temperature",
-        icon="mdi:battery-thermometer",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
+        icon = sensor.get("icon", group.icon)
+        if icon and not icon.startswith("mdi:"):
+            icon = f"mdi:{icon}"
         
-    "SubType": SajModbusSensorEntityDescription(
-        name="Sub Type",
-        key="subtype",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "CommVer": SajModbusSensorEntityDescription(
-        name="Comms Protocol Version",
-        key="commver",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "SN": SajModbusSensorEntityDescription(
-        name="Serial Number",
-        key="sn",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "PC": SajModbusSensorEntityDescription(
-        name="Product Code",
-        key="pc",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "DV": SajModbusSensorEntityDescription(
-        name="Display Software Version",
-        key="dv",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "MCV": SajModbusSensorEntityDescription(
-        name="Master Ctrl Software Version",
-        key="mcv",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "SCV": SajModbusSensorEntityDescription(
-        name="Slave Ctrl Software Version",
-        key="scv",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "DispHWVersion": SajModbusSensorEntityDescription(
-        name="Display Board Hardware Version",
-        key="disphwversion",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "CtrlHWVersion": SajModbusSensorEntityDescription(
-        name="Control Board Hardware Version",
-        key="ctrlhwversion",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "PowerHWVersion": SajModbusSensorEntityDescription(
-        name="Power Board Hardware Version",
-        key="powerhwversion",
-        icon="mdi:information-outline",
-        entity_registry_enabled_default=False,
-    ),
-
-    "MPVStatus": SajModbusSensorEntityDescription(
-        name="Inverter status",
-        key="mpvstatus",
-        icon="mdi:information-outline",
-    ),
-
-    "MPVMode": SajModbusSensorEntityDescription(
-        name="Inverter working mode",
-        key="mpvmode",
-        icon="mdi:information-outline",
-    ),
-
-    "FaultMSG": SajModbusSensorEntityDescription(
-        name="Inverter error message",
-        key="faultmsg",
-        icon="mdi:message-alert-outline",
-    ),
-  
-       
-    "GFCI": SajModbusSensorEntityDescription(
-        name="GFCI",
-        key="gfci",
-        native_unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
-        icon="mdi:current-dc",
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-  
-    "ErrorCount": SajModbusSensorEntityDescription(
-        name="Error count",
-        key="errorcount",
-        icon="mdi:counter",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
         
-    "ISO1": SajModbusSensorEntityDescription(
-        name="PV1+_ISO",
-        key="iso1",
-        native_unit_of_measurement="kΩ",
-        icon="mdi:omega",
-        #entity_registry_enabled_default=False,
-    ),
+        enable = sensor.get("enable", True)
+        
+        descriptions[sensor["key"]] = SajModbusSensorEntityDescription(
+            name=sensor["name"],
+            key=sensor["key"],
+            native_unit_of_measurement=group.unit_of_measurement,
+            icon=icon,
+            device_class=group.device_class,
+            state_class=group.state_class,
+            entity_registry_enabled_default=enable,
+        )
+    return descriptions
 
-    "ISO2": SajModbusSensorEntityDescription(
-        name="PV2+_ISO",
-        key="iso2",
-        native_unit_of_measurement="kΩ",
-        icon="mdi:omega",
-        #entity_registry_enabled_default=False,
-    ),
 
-    "ISO3": SajModbusSensorEntityDescription(
-        name="PV3+_ISO",
-        key="iso3",
-        native_unit_of_measurement="kΩ",
-        icon="mdi:omega",
-        entity_registry_enabled_default=False,
-    ),
-
-    "ISO4": SajModbusSensorEntityDescription(
-        name="PV4+_ISO",
-        key="iso4",
-        native_unit_of_measurement="kΩ",
-        icon="mdi:omega",
-        entity_registry_enabled_default=False,
-    ),
+power_sensors = [
+    {"name": "Total Load Power", "key": "TotalLoadPower", "icon": "transmission-tower"},
+    {"name": "Grid Load Power", "key": "gridPower", "icon": "power-socket"},
+    {"name": "PV Power", "key": "pvPower", "icon": "solar-power"},
+    {"name": "Battery Power", "key": "batteryPower", "icon": "battery-charging-100"},
     
-    "TodayEnergy": SajModbusSensorEntityDescription(
-        name="Power generation on current day",
-        key="todayenergy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
+]
 
-    "MonthEnergy": SajModbusSensorEntityDescription(
-        name="Power generation in current month",
-        key="monthenergy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+battery_sensors = [
+    {"name": "Battery Energy Percent", "key": "batEnergyPercent", "icon": "battery-charging-100", "enable": True}
+]
 
-    "YearEnergy": SajModbusSensorEntityDescription(
-        name="Power generation in current year",
-        key="yearenergy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+gfci_sensors = [
+    {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False}
+]
 
-    "TotalEnergy": SajModbusSensorEntityDescription(
-        name="Total power generation",
-        key="totalenergy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
-    "TodayHour": SajModbusSensorEntityDescription(
-        name="Daily working hours",
-        key="todayhour",
-        native_unit_of_measurement=UnitOfTime.HOURS,
-        icon="mdi:progress-clock",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "TotalHour": SajModbusSensorEntityDescription(
-        name="Total working hours",
-        key="totalhour",
-        native_unit_of_measurement=UnitOfTime.HOURS,
-        icon="mdi:progress-clock",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+temperature_sensors = [
+    {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
+    {"name": "Environment Temperature", "key": "AmbTemp", "icon": "thermometer-lines"},
+    {"name": "Battery Temperature", "key": "BatTemp", "icon": "battery-thermometer"},
     
-
-    "BatTodayCharge": SajModbusSensorEntityDescription(
-        name="Battery Today Charge",
-        key="bat_today_charge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-charging",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
-    "BatMonthCharge": SajModbusSensorEntityDescription(
-        name="Battery Month Charge",
-        key="bat_month_charge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-charging",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "BatYearCharge": SajModbusSensorEntityDescription(
-        name="Battery Year Charge",
-        key="bat_year_charge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-charging",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "BatTotalCharge": SajModbusSensorEntityDescription(
-        name="Battery Total Charge",
-        key="bat_total_charge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-charging-100",
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-
-    "BatTodayDischarge": SajModbusSensorEntityDescription(
-        name="Battery Today Discharge",
-        key="bat_today_discharge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-minus",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
-    "BatMonthDischarge": SajModbusSensorEntityDescription(
-        name="Battery Month Discharge",
-        key="bat_month_discharge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-minus",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "BatYearDischarge": SajModbusSensorEntityDescription(
-        name="Battery Year Discharge",
-        key="bat_year_discharge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-minus",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-    
-    "BatTotalDischarge": SajModbusSensorEntityDescription(
-        name="Battery Total Discharge",
-        key="bat_total_discharge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:battery-minus",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-
-    ),
-
-    "InvTodayGen": SajModbusSensorEntityDescription(
-        name="Inverter Today Generation",
-        key="inv_today_gen",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
-    "InvMonthGen": SajModbusSensorEntityDescription(
-        name="Inverter Month Generation",
-        key="inv_month_gen",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "InvYearGen": SajModbusSensorEntityDescription(
-        name="Inverter Year Generation",
-        key="inv_year_gen",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "InvTotalGen": SajModbusSensorEntityDescription(
-        name="Inverter Total Generation",
-        key="inv_total_gen",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "TotalTodayLoad": SajModbusSensorEntityDescription(
-        name="Total Today Load",
-        key="total_today_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:home-import-outline",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
-    "TotalMonthLoad": SajModbusSensorEntityDescription(
-        name="Total Month Load",
-        key="total_month_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:home-import-outline",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "TotalYearLoad": SajModbusSensorEntityDescription(
-        name="Total Year Load",
-        key="total_year_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:home-import-outline",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "TotalTotalLoad": SajModbusSensorEntityDescription(
-        name="Total Load",
-        key="total_total_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:home-import-outline",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+]
 
 
-    "SellTodayEnergy": SajModbusSensorEntityDescription(
-        name="Sell Today Energy",
-        key="sell_today_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+
+iso_resistance_sensors = [
+    {"name": "PV1+ Isolation Resistance", "key": "iso1", "icon": "omega"},
+    {"name": "PV2+ Isolation Resistance", "key": "iso2", "icon": "omega"},
+    {"name": "PV3+ Isolation Resistance", "key": "iso3", "icon": "omega", "enable": False},  
+    {"name": "PV4+ Isolation Resistance", "key": "iso4", "icon": "omega", "enable": False},  
+ 
+]
 
 
-    "SellMonthEnergy": SajModbusSensorEntityDescription(
-        name="Sell Month Energy",
-        key="sell_month_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellYearEnergy": SajModbusSensorEntityDescription(
-        name="Sell Year Energy",
-        key="sell_year_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellTotalEnergy": SajModbusSensorEntityDescription(
-        name="Sell Total Energy",
-        key="sell_total_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+information_sensors = [
+    {"name": "Device Type", "key": "devtype", "icon": "information-outline", "enable": False},
+    {"name": "Sub Type", "key": "subtype", "icon": "information-outline", "enable": False},
+    {"name": "Comms Protocol Version", "key": "commver", "icon": "information-outline", "enable": False},
+    {"name": "Serial Number", "key": "sn", "icon": "information-outline", "enable": False},
+    {"name": "Product Code", "key": "pc", "icon": "information-outline", "enable": False},
+    {"name": "Display Software Version", "key": "dv", "icon": "information-outline", "enable": False},
+    {"name": "Master Ctrl Software Version", "key": "mcv", "icon": "information-outline", "enable": False},
+    {"name": "Slave Ctrl Software Version", "key": "scv", "icon": "information-outline", "enable": False},
+    {"name": "Display Board Hardware Version", "key": "disphwversion", "icon": "information-outline", "enable": False},
+    {"name": "Control Board Hardware Version", "key": "ctrlhwversion", "icon": "information-outline", "enable": False},
+    {"name": "Power Board Hardware Version", "key": "powerhwversion", "icon": "information-outline", "enable": False},
+    {"name": "Inverter Status", "key": "mpvstatus", "icon": "information-outline"},
+    {"name": "Inverter Working Mode", "key": "mpvmode", "icon": "information-outline"},
+    {"name": "Inverter Error Message", "key": "faultmsg", "icon": "message-alert-outline", "enable": True},  
+]
 
 
-    "SellTodayEnergy2": SajModbusSensorEntityDescription(
-        name="Sell Today Energy 2",
-        key="sell_today_energy_2",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
 
-    "SellMonthEnergy2": SajModbusSensorEntityDescription(
-        name="Sell Month Energy 2",
-        key="sell_month_energy_2",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellYearEnergy2": SajModbusSensorEntityDescription(
-        name="Sell Year Energy 2",
-        key="sell_year_energy_2",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellTotalEnergy2": SajModbusSensorEntityDescription(
-        name="Sell Total Energy 2",
-        key="sell_total_energy_2",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellTodayEnergy3": SajModbusSensorEntityDescription(
-        name="Sell Today Energy 3",
-        key="sell_today_energy_3",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellMonthEnergy3": SajModbusSensorEntityDescription(
-        name="Sell Month Energy 3",
-        key="sell_month_energy_3",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellYearEnergy3": SajModbusSensorEntityDescription(
-        name="Sell Year Energy 3",
-        key="sell_year_energy_3",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SellTotalEnergy3": SajModbusSensorEntityDescription(
-        name="Sell Total Energy 3",
-        key="sell_total_energy_3",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:solar-power",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "FeedinTodayEnergy": SajModbusSensorEntityDescription(
-        name="Feed-in Today Energy",
-        key="feedin_today_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-
-    "FeedinMonthEnergy": SajModbusSensorEntityDescription(
-        name="Feed-in Month Energy",
-        key="feedin_month_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "FeedinYearEnergy": SajModbusSensorEntityDescription(
-        name="Feed-in Year Energy",
-        key="feedin_year_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "FeedinTotalEnergy": SajModbusSensorEntityDescription(
-        name="Feed-in Total Energy",
-        key="feedin_total_energy",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
+energy_sensors = [
+    {"name": "Power current day", "key": "todayenergy", "enable": False, "icon": "solar-power"},
+    {"name": "Power current month", "key": "monthenergy", "enable": False, "icon": "solar-power"},
+    {"name": "Power current year", "key": "yearenergy", "enable": False, "icon": "solar-power"},
+    {"name": "Total power generation", "key": "totalenergy", "enable": False, "icon": "solar-power"},
+    {"name": "Battery Today Charge", "key": "bat_today_charge", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Month Charge", "key": "bat_month_charge", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Year Charge", "key": "bat_year_charge", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Total Charge", "key": "bat_total_charge", "enable": False, "icon": "battery-charging-100"},
+    {"name": "Battery Today Discharge", "key": "bat_today_discharge", "enable": False, "icon": "battery-minus"},
+    {"name": "Battery Month Discharge", "key": "bat_month_discharge", "enable": False, "icon": "battery-minus"},
+    {"name": "Battery Year Discharge", "key": "bat_year_discharge", "enable": False, "icon": "battery-minus"},
+    {"name": "Battery Total Discharge", "key": "bat_total_discharge", "enable": False, "icon": "battery-minus"},
+    {"name": "Inverter Today Generation", "key": "inv_today_gen", "enable": False, "icon": "solar-power"},
+    {"name": "Inverter Month Generation", "key": "inv_month_gen", "enable": False, "icon": "solar-power"},
+    {"name": "Inverter Year Generation", "key": "inv_year_gen", "enable": False, "icon": "solar-power"},
+    {"name": "Inverter Total Generation", "key": "inv_total_gen", "enable": False, "icon": "solar-power"},
+    {"name": "Total Today Load", "key": "total_today_load", "enable": False, "icon": "home-import-outline"},
+    {"name": "Total Month Load", "key": "total_month_load", "enable": False, "icon": "home-import-outline"},
+    {"name": "Total Year Load", "key": "total_year_load", "enable": False, "icon": "home-import-outline"},
+    {"name": "Total Load", "key": "total_total_load", "enable": False, "icon": "home-import-outline"},
+    {"name": "Sell Today Energy", "key": "sell_today_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Month Energy", "key": "sell_month_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy", "key": "sell_year_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Total Energy", "key": "sell_total_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Today Energy 2", "key": "sell_today_energy_2", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Month Energy 2", "key": "sell_month_energy_2", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy 2", "key": "sell_year_energy_2", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Total Energy 2", "key": "sell_total_energy_2", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Today Energy 3", "key": "sell_today_energy_3", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Month Energy 3", "key": "sell_month_energy_3", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy 3", "key": "sell_year_energy_3", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Total Energy 3", "key": "sell_total_energy_3", "enable": False, "icon": "solar-power"},
+    {"name": "Feed-in Today Energy", "key": "feedin_today_energy", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-in Month Energy", "key": "feedin_month_energy", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-in Year Energy", "key": "feedin_year_energy", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-in Total Energy", "key": "feedin_total_energy", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Today Energy 2", "key": "feedin_today_energy_2", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Month Energy 2", "key": "feedin_month_energy_2", "enable": False, "icon": "calendar-month"},
+    {"name": "Feed-In Year Energy 2", "key": "feedin_year_energy_2", "enable": False, "icon": "calendar"},
+    {"name": "Feed-In Total Energy 2", "key": "feedin_total_energy_2", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Today Energy 3", "key": "feedin_today_energy_3", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Month Energy 3", "key": "feedin_month_energy_3", "enable": False, "icon": "calendar-month"},
+    {"name": "Feed-In Year Energy 3", "key": "feedin_year_energy_3", "enable": False, "icon": "calendar"},
+    {"name": "Feed-In Total Energy 3", "key": "feedin_total_energy_3", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Today", "key": "sum_feed_in_today", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Month", "key": "sum_feed_in_month", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Year", "key": "sum_feed_in_year", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Total", "key": "sum_feed_in_total", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Sell Today", "key": "sum_sell_today", "enable": False, "icon": "currency-usd"},
+    {"name": "Sum All Phases Sell Month", "key": "sum_sell_month", "enable": False, "icon": "currency-usd"},
+    {"name": "Sum All Phases Sell Year", "key": "sum_sell_year", "enable": False, "icon": "currency-usd"},
+    {"name": "Sum All Phases Sell Total", "key": "sum_sell_total", "enable": False, "icon": "currency-usd"},
+    {"name": "Backup Today Load", "key": "backup_today_load", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Backup Month Load", "key": "backup_month_load", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Backup Year Load", "key": "backup_year_load", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Backup Total Load", "key": "backup_total_load", "enable": False, "icon": "lightning-bolt"},
+]
     
 
-    "FeedinTodayEnergy2": SajModbusSensorEntityDescription(
-    	name="Feed-In Today Energy 2",
-	    key="feedin_today_energy_2",
-	    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-	    icon="mdi:transmission-tower",
-	    device_class=SensorDeviceClass.ENERGY,
-	    state_class=SensorStateClass.TOTAL_INCREASING,
-	    entity_registry_enabled_default=False,
-    ),
 
-	"FeedinMonthEnergy2": SajModbusSensorEntityDescription(
-		name="Feed-In Month Energy 2",
-		key="feedin_month_energy_2",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:calendar-month",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-	"FeedinYearEnergy2": SajModbusSensorEntityDescription(
-		name="Feed-In Year Energy 2",
-		key="feedin_year_energy_2",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:calendar",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-	"FeedinTotalEnergy2": SajModbusSensorEntityDescription(
-		name="Feed-In Total Energy 2",
-		key="feedin_total_energy_2",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:transmission-tower",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-    "FeedinTodayEnergy3": SajModbusSensorEntityDescription(
-	    name="Feed-In Today Energy 3",
-	    key="feedin_today_energy_3",
-	    native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-	    icon="mdi:transmission-tower",
-	    device_class=SensorDeviceClass.ENERGY,
-	    state_class=SensorStateClass.TOTAL_INCREASING,
-	    entity_registry_enabled_default=False,
-    ),
-
-	"FeedinMonthEnergy3": SajModbusSensorEntityDescription(
-		name="Feed-In Month Energy 3",
-		key="feedin_month_energy_3",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:calendar-month",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-	"FeedinYearEnergy3": SajModbusSensorEntityDescription(
-		name="Feed-In Year Energy 3",
-		key="feedin_year_energy_3",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:calendar",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-	"FeedinTotalEnergy3": SajModbusSensorEntityDescription(
-		name="Feed-In Total Energy 3",
-		key="feedin_total_energy_3",
-		native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-		icon="mdi:transmission-tower",
-		device_class=SensorDeviceClass.ENERGY,
-		state_class=SensorStateClass.TOTAL_INCREASING,
-		entity_registry_enabled_default=False,
-	),
-
-
-
-    "SumFeedinToday": SajModbusSensorEntityDescription(
-        name="Sum All Phases Feed-In Today",
-        key="sum_feed_in_today",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SumFeedinMonth": SajModbusSensorEntityDescription(
-        name="Sum All Phases Feed-In Month",
-        key="sum_feed_in_month",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SumFeedinYear": SajModbusSensorEntityDescription(
-        name="Sum All Phases Feed-In Year",
-        key="sum_feed_in_year",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-
-    "SumFeedinTotal": SajModbusSensorEntityDescription(
-        name="Sum All Phases Feed-In Total",
-        key="sum_feed_in_total",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:transmission-tower",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        #entity_registry_enabled_default=False,
-    ),
-
-
-    "SumSellToday": SajModbusSensorEntityDescription(
-        name="Sum All Phases Sell Today",
-        key="sum_sell_today",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:currency-usd",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SumSellMonth": SajModbusSensorEntityDescription(
-        name="Sum All Phases Sell Month",
-        key="sum_sell_month",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:currency-usd",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SumSellYear": SajModbusSensorEntityDescription(
-        name="Sum All Phases Sell Year",
-        key="sum_sell_year",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:currency-usd",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-    "SumSellTotal": SajModbusSensorEntityDescription(
-        name="Sum All Phases Sell Total",
-        key="sum_sell_total",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:currency-usd",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        #entity_registry_enabled_default=False,
-    ),
-
-
-
-    "BackupTodayLoad": SajModbusSensorEntityDescription(
-        name="Backup Today Load",
-        key="backup_today_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:lightning-bolt",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-    "BackupMonthLoad": SajModbusSensorEntityDescription(
-        name="Backup Month Load",
-        key="backup_month_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:lightning-bolt",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-    "BackupYearLoad": SajModbusSensorEntityDescription(
-        name="Backup Year Load",
-        key="backup_year_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:lightning-bolt",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-    "BackupTotalLoad": SajModbusSensorEntityDescription(
-        name="Backup Total Load",
-        key="backup_total_load",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:lightning-bolt",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        entity_registry_enabled_default=False,
-    ),
-
-
-
-
-
-    "ErrorCount": SajModbusSensorEntityDescription(
-        name="Error count",
-        key="errorcount",
-        icon="mdi:counter",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-
+SENSOR_TYPES = {
+    **create_sensor_descriptions(power_sensors_group, power_sensors),
+    **create_sensor_descriptions(temperature_sensors_group, temperature_sensors),
+    **create_sensor_descriptions(energy_sensors_group, energy_sensors),
+    **create_sensor_descriptions(information_sensors_group, information_sensors),
+    **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
+    **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
+    **create_sensor_descriptions(gfci_sensors_group,gfci_sensors),
+   
 }
+
 
 DEVICE_STATUSSES = {
     0: "Initialization",

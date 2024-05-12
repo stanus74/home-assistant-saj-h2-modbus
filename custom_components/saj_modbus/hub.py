@@ -2,22 +2,19 @@
 from pymodbus.register_read_message import ReadHoldingRegistersResponse
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from voluptuous.validators import Number
-from homeassistant.helpers.typing import HomeAssistantType
+from homeassistant.core import HomeAssistant  
 
 import logging
 import threading
 import asyncio
 import time
 
-
 from datetime import timedelta
 from homeassistant.core import CALLBACK_TYPE, callback
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
-from pymodbus.exceptions import ConnectionException
+from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.payload import BinaryPayloadDecoder
-from pymodbus.exceptions import ModbusIOException
-
 
 from .const import (
     DEVICE_STATUSSES,
@@ -28,37 +25,21 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SAJModbusHub(DataUpdateCoordinator[dict]):
-    """Thread safe wrapper class for pymodbus."""
+    """Thread-safe wrapper class for pymodbus."""
 
-    def __init__(
-        self,
-        hass: HomeAssistantType,
-        name: str,
-        host: str,
-        port: Number,
-        scan_interval: Number,
-    ):
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: Number, scan_interval: Number):
         """Initialize the Modbus hub."""
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=name,
-            update_interval=timedelta(seconds=scan_interval),
-        )
-
+        super().__init__(hass, _LOGGER, name=name, update_interval=timedelta(seconds=scan_interval))
         self._client = ModbusTcpClient(host=host, port=port, timeout=7)
         self._lock = threading.Lock()
-
         self.inverter_data: dict = {}
         self.data: dict = {}
-        self.last_valid_data = {}  
+        self.last_valid_data = {}
 
     @callback
     def async_remove_listener(self, update_callback: CALLBACK_TYPE) -> None:
         """Remove data update listener."""
         super().async_remove_listener(update_callback)
-
-        """No listeners left then close connection"""
         if not self._listeners:
             self.close()
 
@@ -67,10 +48,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         with self._lock:
             self._client.close()
 
-    def _read_holding_registers(
-        self, unit, address, count
-    ) -> ReadHoldingRegistersResponse:
-        """Read holding registers."""
+    def _read_holding_registers(self, unit, address, count) -> ReadHoldingRegistersResponse:
+        """Read holding registers with retry logic."""
         if not self._client.connect():
             _LOGGER.error("Failed to connect to the inverter.")
             self._client = ModbusTcpClient(host=self._client.host, port=self._client.port, timeout=7)
@@ -78,72 +57,62 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         with self._lock:
             return self._client.read_holding_registers(address=address, count=count, slave=unit)
 
-    
-    async def _check_and_reconnect(self):
-        """Check if the connection is stable and reconnect if necessary."""
-        if not self._client.connected:
-            _LOGGER.error("Connection to the inverter is not stable, reconnecting...")
-            self._client.close()
-            await asyncio.sleep(2)  # wait for 2 seconds before attempting to reconnect
-            if not self._client.connect():
-                _LOGGER.error("Failed to reconnect to the inverter.")
-                raise ConnectionException("Failed to reconnect to the inverter.")
-
-
-    
-    
     async def _async_update_data(self) -> dict:
-     realtime_data = {}
-     additional_data = {}
-     additional_data_2 = {}
+        """Fetch all required data with pauses and better connection handling."""
+        realtime_data = {}
+        additional_data = {}
+        additional_data_2 = {}
+        additional_data_3 = {}
 
-     try:
-        # Connect to the inverter
-        if not self._client.connect():
-            _LOGGER.error("Failed to connect to the inverter.")
-            raise ConnectionException("Failed to connect to the inverter.")
+        def execute_modbus_task(task_function):
+            """Wrapper function to execute Modbus tasks with logging and connection checks."""
+            if not self._client.connect():
+                _LOGGER.error("Failed to connect to the inverter.")
+                raise ConnectionException("Failed to connect to the inverter.")
+            result = task_function()
+            return result
 
-        """Inverter info is only fetched once"""
-        if not self.inverter_data:
-            self.inverter_data = await self.hass.async_add_executor_job(
-                self.read_modbus_inverter_data
+        try:
+            # Fetch inverter data if not already fetched
+            if not self.inverter_data:
+                self.inverter_data = await self.hass.async_add_executor_job(
+                    lambda: execute_modbus_task(self.read_modbus_inverter_data)
+                )
+                await asyncio.sleep(2)  # Pause to reduce load
+
+            # Fetch realtime data
+            realtime_data = await self.hass.async_add_executor_job(
+                lambda: execute_modbus_task(self.read_modbus_realtime_data)
             )
-            #self._client.close()  # Close the connection after fetching inverter data
+            await asyncio.sleep(2)
 
-        # Second query without rebuilding the connection
-        if not self._client.connect():
-            _LOGGER.error("Failed to connect to the inverter.")
-            raise ConnectionException("Failed to connect to the inverter.")
-        realtime_data = await self.hass.async_add_executor_job(
-            self.read_modbus_realtime_data
-        )
-        self._client.close()  # Close the connection after fetching realtime data
+            # Fetch additional data
+            additional_data = await self.hass.async_add_executor_job(
+                lambda: execute_modbus_task(self.read_additional_modbus_data)
+            )
+            await asyncio.sleep(2)
 
-        # Third query without rebuilding the connection
-        if not self._client.connect():
-            _LOGGER.error("Failed to connect to the inverter.")
-            raise ConnectionException("Failed to connect to the inverter.")
-        additional_data = await self.hass.async_add_executor_job(
-            self.read_additional_modbus_data
-        )
-        self._client.close()  # Close the connection after fetching additional data
+            # Fetch additional data 2
+            additional_data_2 = await self.hass.async_add_executor_job(
+                lambda: execute_modbus_task(self.read_additional_modbus_data_2)
+            )
+            await asyncio.sleep(2)
 
-        # Fourth query without rebuilding the connection
-        if not self._client.connect():
-            _LOGGER.error("Failed to connect to the inverter.")
-            raise ConnectionException("Failed to connect to the inverter.")
-        additional_data_2 = await self.hass.async_add_executor_job(
-            self.read_additional_modbus_data_2
-        )
-        self._client.close()  # Close the connection after fetching additional data 2
+            # Fetch additional data 3
+            additional_data_3 = await self.hass.async_add_executor_job(
+                lambda: execute_modbus_task(self.read_additional_modbus_data_3)
+            )
 
-     except ConnectionException as e:
-        _LOGGER.error("Reading realtime data failed! Inverter is unreachable. Error: %s", e)
-        realtime_data["mpvmode"] = 0
-        realtime_data["mpvstatus"] = DEVICE_STATUSSES[0]
-        realtime_data["power"] = 0
+        except ConnectionException as e:
+            _LOGGER.error("Reading realtime data failed! Inverter is unreachable. Error: %s", e)
+            realtime_data["mpvmode"] = 0
+            realtime_data["mpvstatus"] = DEVICE_STATUSSES[0]
+            realtime_data["power"] = 0
 
-     return {**self.inverter_data, **realtime_data, **additional_data, **additional_data_2}
+        finally:
+            self.close()
+
+        return {**self.inverter_data, **realtime_data, **additional_data, **additional_data_2, **additional_data_3}
 
 
 
@@ -157,7 +126,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             self.log_error(f"Modbus IO exception when reading the inverter data: {e}")
             return {}
 
-        if len(inverter_data.registers) < 29:  # Stellen Sie sicher, dass genügend Register für die gesamte geplante Dekodierung vorliegen
+        if len(inverter_data.registers) < 29:  
             _LOGGER.error(f"Incomplete data when reading the inverter data: Expected 29, received {len(inverter_data.registers) if not inverter_data.isError() else 'Fehler'}")
             return {}
 
@@ -209,7 +178,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         faultMsg0 = decoder.decode_32bit_uint()
         faultMsg1 = decoder.decode_32bit_uint()
         faultMsg2 = decoder.decode_32bit_uint()
-
+        
         faultMsg = []
         faultMsg.extend(
             self.translate_fault_code_to_messages(faultMsg0, FAULT_MESSAGES[0].items())
@@ -254,35 +223,29 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         return data
 
-        
-       
-        
     def read_additional_modbus_data(self) -> dict:
-        try:
-            additional_data = self._read_holding_registers(unit=1, address=16494, count=64)
-            if not isinstance(additional_data, ReadHoldingRegistersResponse) or additional_data.isError():
-                self.log_error("Error when reading the additional Modbus data")
-                
-                return self.last_valid_data.get('additional_data', {})  
-            
-        except ModbusIOException as e:
-            self.log_error(f"Modbus IO exception when reading the additional data: {e}")
-            
-            return self.last_valid_data.get('additional_data', {})  
+        def try_read_registers(unit, address, count):
+            try:
+                response = self._read_holding_registers(unit=unit, address=address, count=count)
+                if not isinstance(response, ReadHoldingRegistersResponse) or response.isError() or len(response.registers) < count:
+                    self.log_error(f"Error when reading the additional Modbus data from unit {unit} and address {address}")
+                    return None
+                return response.registers
+            except ModbusIOException as e:
+                self.log_error(f"Modbus IO exception when reading the additional data: {e}")
+                return None
 
-        if len(additional_data.registers) < 64:  
-            self.log_error("Incomplete data when reading the additional Modbus data")
-            return self.last_valid_data.get('additional_data', {})  
+        additional_data_regs = try_read_registers(1, 16494, 64)
 
+        if additional_data_regs is None:
+            return self.last_valid_data.get('additional_data', {})
 
-        decoder = BinaryPayloadDecoder.fromRegisters(additional_data.registers, byteorder=Endian.BIG)
+        decoder = BinaryPayloadDecoder.fromRegisters(additional_data_regs, byteorder=Endian.BIG)
         data = {}
 
-        
         data["BatTemp"] = round(decoder.decode_16bit_uint() * 0.1, 1)
         data["batEnergyPercent"] = round(decoder.decode_16bit_uint() / 100.0, 2)
 
-        
         decoder.skip_bytes(96)
 
         data["TotalLoadPower"] = decoder.decode_16bit_int()
@@ -296,135 +259,109 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         data["gridPower"] = decoder.decode_16bit_int()
 
-        
         self.last_valid_data['additional_data'] = data
-
         return data
 
     def log_error(self, message: str):
         _LOGGER.error(message)
-        
-  
+
+
     def read_additional_modbus_data_2(self) -> dict:
-        try:
-            additional_data2 = self._read_holding_registers(unit=1, address=16572, count=67)
-            additional_data3 = self._read_holding_registers(unit=1, address=16711, count=48)
-        
-            if not isinstance(additional_data2, ReadHoldingRegistersResponse) or additional_data2.isError() or not isinstance(additional_data3, ReadHoldingRegistersResponse) or additional_data3.isError():
-                self.log_error("Error when reading the additional Modbus data 2 or 3")
-                return self.last_valid_data.get('additional_data_2', {})  
+        def try_read_registers(unit, address, count):
+            
+            try:
+                response = self._read_holding_registers(unit=unit, address=address, count=count)
+                if not isinstance(response, ReadHoldingRegistersResponse) or response.isError() or len(response.registers) < count:
+                    self.log_error(f"Error when reading the Modbus data from unit {unit} and address {address}")
+                    return None, False
+                return response.registers, True
+            except ModbusIOException as e:
+                self.log_error(f"Modbus IO exception when reading the data: {e}")
+                return None, False
 
-        except ModbusIOException as e:
-            self.log_error(f"Modbus IO exception when reading the additional data 2 or 3: {e}")
+        additional_data2_regs, additional_data2_success = try_read_registers(1, 16575, 64)
+        
+        
+        if not additional_data2_success:
             return self.last_valid_data.get('additional_data_2', {})
+            
+            
+        def decode_and_round(value):
+            
+            return round(value * 0.01, 2)  
 
-        if len(additional_data2.registers) < 67 or len(additional_data3.registers) < 48:  
-            self.log_error("Incomplete data when reading the additional Modbus data 2 or 3")
-            return self.last_valid_data.get('additional_data_2', {})  
-
-        # Kombiniere beide Registerblöcke für die Dekodierung
-        all_registers = additional_data2.registers + additional_data3.registers
-        
-        decoder2 = BinaryPayloadDecoder.fromRegisters(all_registers, byteorder=Endian.BIG)
+        decoder = BinaryPayloadDecoder.fromRegisters(additional_data2_regs, byteorder=Endian.BIG)
         data = {}
-        
-        data["todayhour"] = round(decoder2.decode_16bit_uint() * 0.1, 1)
-        data["totalhour"] = round(decoder2.decode_32bit_uint() * 0.1, 1)
-
-               
-        data["todayenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["monthenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["yearenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["totalenergy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        
-        
-        data["bat_today_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_month_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_year_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_total_charge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
 
         
-        data["bat_today_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_month_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_year_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["bat_total_discharge"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-          
-        
-        data["inv_today_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["inv_month_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["inv_year_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["inv_total_gen"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-        
-        data["total_today_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["total_month_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["total_year_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["total_total_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-        
-        data["backup_today_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["backup_month_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["backup_year_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["backup_total_load"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-        # R Phase 16623 - 16629
-        data["sell_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-        # R Phase Buy 16631 16637
-        data["feedin_today_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_month_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_year_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_total_energy"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        
-        # S Phase 16711 - 16717
-        data["sell_today_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_month_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_year_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_total_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        
-        # T Phase Sell 16719 - 16725
-        data["sell_today_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_month_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_year_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sell_total_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        
-        
-        # S Phase Buy 16727 - 16733
-        data["feedin_today_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_month_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_year_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_total_energy_2"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        
-        # T Phase Buy 16735 - 16741
-        data["feedin_today_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_month_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_year_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["feedin_total_energy_3"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-
+        data_keys = [
+            "todayenergy", "monthenergy", "yearenergy", "totalenergy",
+            "bat_today_charge", "bat_month_charge", "bat_year_charge", "bat_total_charge",
+            "bat_today_discharge", "bat_month_discharge", "bat_year_discharge", "bat_total_discharge",
+            "inv_today_gen", "inv_month_gen", "inv_year_gen", "inv_total_gen",
+            "total_today_load", "total_month_load", "total_year_load", "total_total_load",
+            "backup_today_load", "backup_month_load", "backup_year_load", "backup_total_load",
+            "sell_today_energy", "sell_month_energy", "sell_year_energy", "sell_total_energy",
+            "feedin_today_energy", "feedin_month_energy", "feedin_year_energy", "feedin_total_energy",
+            
+        ]
     
-        data["sum_feed_in_today"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_feed_in_month"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_feed_in_year"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_feed_in_total"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-
-        data["sum_sell_today"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_sell_month"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_sell_year"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-        data["sum_sell_total"] = round(decoder2.decode_32bit_uint() * 0.01, 2)
-
-
-
+        
+        for key in data_keys:
+            decoded_value = decoder.decode_32bit_uint()
+            data[key] = decode_and_round(decoded_value)
 
         self.last_valid_data['additional_data_2'] = data
-
         return data
         
+        
+    def read_additional_modbus_data_3(self) -> dict:
+        def try_read_registers(unit, address, count):
+            
+            try:
+                response = self._read_holding_registers(unit=unit, address=address, count=count)
+                if not isinstance(response, ReadHoldingRegistersResponse) or response.isError() or len(response.registers) < count:
+                    self.log_error(f"Error when reading the Modbus data from unit {unit} and address {address}")
+                    return None, False
+                return response.registers, True
+            except ModbusIOException as e:
+                self.log_error(f"Modbus IO Exception exception when reading the data: {e}")
+                return None, False
+
+        
+        additional_data3_regs, additional_data3_success = try_read_registers(1, 16711, 48)
+
+        if not additional_data3_success:
+            return self.last_valid_data.get('additional_data_3', {})
+            
+        def decode_and_round(value):
+            
+            return round(value * 0.01, 2)  
+
+        decoder = BinaryPayloadDecoder.fromRegisters(additional_data3_regs, byteorder=Endian.BIG)
+        data = {}
+
+        
+        data_keys = [
+            
+            "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
+            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
+            "feedin_today_energy_2", "feedin_month_energy_2", "feedin_year_energy_2", "feedin_total_energy_2",
+            "feedin_today_energy_3", "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
+            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
+            "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total"
+        ]
+    
+        
+        for key in data_keys:
+            decoded_value = decoder.decode_32bit_uint()
+            data[key] = decode_and_round(decoded_value)
+
+        self.last_valid_data['additional_data_3'] = data
+        return data
+        
+
+
 
     def log_error(self, message: str):
         _LOGGER.error(message)
