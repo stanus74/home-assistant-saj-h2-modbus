@@ -47,6 +47,20 @@ power_sensors_group = SensorGroup(
     icon="mdi:solar-power",  
 )
 
+voltage_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfElectricPotential.VOLT,
+    device_class=SensorDeviceClass.VOLTAGE,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:sine-wave",  
+)
+
+current_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:current-dc",  
+)
+
 temperature_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfTemperature.CELSIUS,
     device_class=SensorDeviceClass.TEMPERATURE,
@@ -114,9 +128,28 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
 power_sensors = [
     {"name": "Total Load Power", "key": "TotalLoadPower", "icon": "transmission-tower"},
     {"name": "Grid Load Power", "key": "gridPower", "icon": "power-socket"},
+    {"name": "Total Grid Power", "key": "totalgridPower", "icon": "power-socket"},
     {"name": "PV Power", "key": "pvPower", "icon": "solar-power"},
     {"name": "Battery Power", "key": "batteryPower", "icon": "battery-charging-100"},
-    
+    {"name": "Inverter Power", "key": "inverterPower", "icon": "power-socket"},
+    {"name": "PV1 Power", "key": "pv1Power", "icon": "flash"},
+    {"name": "PV2 Power", "key": "pv2Power", "icon": "flash"},
+    {"name": "PV3 Power", "key": "pv3Power", "icon": "flash", "enable": False},
+    {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
+]
+
+voltage_sensors = [
+    {"name": "PV1 Voltage", "key": "pv1Voltage", "icon": "sine-wave"},
+    {"name": "PV2 Voltage", "key": "pv2Voltage", "icon": "sine-wave"},
+    {"name": "PV3 Voltage", "key": "pv3Voltage", "icon": "sine-wave", "enable": False},
+    {"name": "PV4 Voltage", "key": "pv4Voltage", "icon": "sine-wave", "enable": False},
+]
+
+current_sensors = [
+    {"name": "PV1 Total Current", "key": "pv1TotalCurrent", "icon": "current-dc"},
+    {"name": "PV2 Total Current", "key": "pv2TotalCurrent", "icon": "current-dc"},
+    {"name": "PV3 Total Current", "key": "pv3TotalCurrent", "icon": "current-dc", "enable": False},
+    {"name": "PV4 Total Current", "key": "pv4TotalCurrent", "icon": "current-dc", "enable": False},
 ]
 
 battery_sensors = [
@@ -134,8 +167,6 @@ temperature_sensors = [
     
 ]
 
-
-
 iso_resistance_sensors = [
     {"name": "PV1+ Isolation Resistance", "key": "iso1", "icon": "omega"},
     {"name": "PV2+ Isolation Resistance", "key": "iso2", "icon": "omega"},
@@ -143,7 +174,6 @@ iso_resistance_sensors = [
     {"name": "PV4+ Isolation Resistance", "key": "iso4", "icon": "omega", "enable": False},  
  
 ]
-
 
 information_sensors = [
     {"name": "Device Type", "key": "devtype", "icon": "information-outline", "enable": False},
@@ -159,10 +189,12 @@ information_sensors = [
     {"name": "Power Board Hardware Version", "key": "powerhwversion", "icon": "information-outline", "enable": False},
     {"name": "Inverter Status", "key": "mpvstatus", "icon": "information-outline"},
     {"name": "Inverter Working Mode", "key": "mpvmode", "icon": "information-outline"},
-    {"name": "Inverter Error Message", "key": "faultmsg", "icon": "message-alert-outline", "enable": True},  
+    {"name": "Inverter Error Message", "key": "faultmsg", "icon": "message-alert-outline", "enable": True},
+    {"name": "Direction PV", "key": "directionPV", "icon": "arrow-all"},
+    {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
+    {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
+    {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
 ]
-
-
 
 energy_sensors = [
     {"name": "Power current day", "key": "todayenergy", "enable": False, "icon": "solar-power"},
@@ -227,6 +259,8 @@ energy_sensors = [
 
 SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
+    **create_sensor_descriptions(voltage_sensors_group, voltage_sensors),
+    **create_sensor_descriptions(current_sensors_group, current_sensors),
     **create_sensor_descriptions(temperature_sensors_group, temperature_sensors),
     **create_sensor_descriptions(energy_sensors_group, energy_sensors),
     **create_sensor_descriptions(information_sensors_group, information_sensors),
