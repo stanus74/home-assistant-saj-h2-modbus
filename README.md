@@ -17,14 +17,7 @@ Idea based on [home-assistant-solaredge-modbus](https://github.com/binsentsu/hom
 
 ## Installation
 
-This integration is NOT available in the HACS default repository.
-
-1. Open HACS and click the three dots in the top right corner.
-2. Select "Custom repositories," then enter the GitHub URL.
-3. Choose "Integration" and click "Add."
-4. Find "SAJ H2 Inverter Modbus", click and go to download.
-5. Restart Home Assistant.
-6. After reboot of Home-Assistant, this integration can be configured through the integration setup UI
+This integration should be available in the [HACS](https://hacs.xyz/) default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home-Assistant. After restart, this integration can be configured through the integration setup UI.
 
 ## Configuration
 
