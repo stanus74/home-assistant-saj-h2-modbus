@@ -4,7 +4,7 @@ Home Assistant Custom Component for reading data from SAJ Inverters through Modb
 
 Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/saj-h2-modbus.zip)
 
-It should work for EKD-Solar too. They use SAJ HS2 Inverter.
+It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inverter.
 
 Idea based on [home-assistant-solaredge-modbus](https://github.com/binsentsu/home-assistant-solaredge-modbus) from [@binsentsu](https://github.com/binsentsu). Modified for SAJ Inverters by [@wimb0](https://github.com/wimb0)
 
@@ -17,7 +17,7 @@ Idea based on [home-assistant-solaredge-modbus](https://github.com/binsentsu/hom
 
 ## Installation
 
-This integration should be available in the [HACS](https://hacs.xyz/) default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home-Assistant. After restart, this integration can be configured through the integration setup UI.
+This integration should be available in the HACS default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home-Assistant. After restart, this integration can be configured through the integration setup UI.
 
 ## Configuration
 

@@ -1,37 +1,26 @@
 """SAJ Modbus Hub"""
 from pymodbus.register_read_message import ReadHoldingRegistersResponse
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from voluptuous.validators import Number
-from homeassistant.core import HomeAssistant  
-
-import logging
-import threading
-import asyncio
-import time
-
-from datetime import timedelta
-from homeassistant.core import CALLBACK_TYPE, callback
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.payload import BinaryPayloadDecoder
-
-from .const import (
-    DEVICE_STATUSSES,
-    FAULT_MESSAGES,
-)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from voluptuous.validators import Number
+from homeassistant.core import HomeAssistant, CALLBACK_TYPE, callback
+from datetime import timedelta
+from typing import Tuple, List, Optional
+import logging
+import asyncio
+import random
+from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class SAJModbusHub(DataUpdateCoordinator[dict]):
-    """Thread-safe wrapper class for pymodbus."""
-
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: Number, scan_interval: Number):
-        """Initialize the Modbus hub."""
         super().__init__(hass, _LOGGER, name=name, update_interval=timedelta(seconds=scan_interval))
         self._client = ModbusTcpClient(host=host, port=port, timeout=7)
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self.inverter_data: dict = {}
         self.data: dict = {}
         self.last_valid_data = {}
@@ -41,109 +30,190 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         """Remove data update listener."""
         super().async_remove_listener(update_callback)
         if not self._listeners:
-            self.close()
+            asyncio.create_task(self.close())
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Disconnect client."""
-        with self._lock:
-            self._client.close()
+        async with self._lock:
+            await self.hass.async_add_executor_job(self._client.close)
 
-    def _read_holding_registers(self, unit, address, count) -> ReadHoldingRegistersResponse:
-        """Read holding registers with retry logic."""
-        if not self._client.connect():
-            _LOGGER.error("Failed to connect to the inverter.")
-            self._client = ModbusTcpClient(host=self._client.host, port=self._client.port, timeout=7)
-            self._client.connect()
-        with self._lock:
-            return self._client.read_holding_registers(address=address, count=count, slave=unit)
+   
+    def _connect(self) -> bool:
+        """Ensure the Modbus client is connected."""
+        try:
+            if not self._client.connect():
+                _LOGGER.error("Failed to connect to the inverter. Attempting to reconnect...")
+                self._client.close()
+                return self._client.connect()
+            return True
+        except Exception as e:
+            _LOGGER.error(f"Unexpected error during connection attempt: {e}")
+            return False
 
     async def _async_update_data(self) -> dict:
-	    """Fetch all required data with pauses and better connection handling."""
-	    data_tasks = [
-	        ("inverter_data", self.read_modbus_inverter_data, 2),
-	        ("realtime_data", self.read_modbus_realtime_data, 2),
-	        ("additional_data", self.read_additional_modbus_data, 2),
-	        ("additional_data_2", self.read_additional_modbus_data_2, 2),
-	        ("additional_data_3", self.read_additional_modbus_data_3, 2)
-	    ]
-	    
-	    results = {}
+        """Fetch all required data sequentially with pauses."""
+        data_tasks = [
+            ("inverter_data", self.read_modbus_inverter_data),
+            ("realtime_data", self.read_modbus_realtime_data),
+            ("additional_data", self.read_additional_modbus_data_1),
+            ("additional_data_2", self.read_additional_modbus_data_2),
+            ("additional_data_3", self.read_additional_modbus_data_3)
+        ]
 
-	    def execute_modbus_task(task_function):
-	        """Wrapper function to execute Modbus tasks with logging and connection checks."""
-	        if not self._client.connect():
-	            _LOGGER.error("Failed to connect to the inverter.")
-	            raise ConnectionException("Failed to connect to the inverter.")
-	        return task_function()
+        results = {}
 
-	    try:
-	        for key, task_function, sleep_time in data_tasks:
-	            if key not in self.inverter_data or key == "realtime_data":
-	                results[key] = await self.hass.async_add_executor_job(lambda: execute_modbus_task(task_function))
-	                await asyncio.sleep(sleep_time)
-	                
-	        self.inverter_data.update(results.get("inverter_data", {}))
-
-	    except ConnectionException as e:
-	        _LOGGER.error("Reading realtime data failed! Inverter is unreachable. Error: %s", e)
-	        results["realtime_data"] = {"mpvmode": 0, "mpvstatus": DEVICE_STATUSSES[0], "power": 0}
-
-	    finally:
-	        self.close()
-
-	    return {**self.inverter_data, **results.get("realtime_data", {}), **results.get("additional_data", {}), 
-	            **results.get("additional_data_2", {}), **results.get("additional_data_3", {})}
-
-
-    def try_read_registers(self, unit, address, count):
-            """General function to read Modbus registers."""
+        for key, task_function in data_tasks:
             try:
-              response = self._read_holding_registers(unit=unit, address=address, count=count)
-              if not isinstance(response, ReadHoldingRegistersResponse) or response.isError() or len(response.registers) < count:
-                self.log_error(f"Error when reading the Modbus data from unit {unit} and address {address}")
-                return None, False
-              return response.registers, True
-            except ModbusIOException as e:
-             self.log_error(f"Modbus IO Exception when reading the data: {e}")
-             return None, False
+                results[key] = await task_function()
+            except ConnectionException as e:
+                _LOGGER.error(f"Connection error during {key} data fetch: {e}")
+                if key == "realtime_data":
+                    results[key] = {"mpvmode": 0, "mpvstatus": DEVICE_STATUSSES[0], "power": 0}
+                else:
+                    results[key] = {}
+            except Exception as e:
+                _LOGGER.error(f"Unexpected error during {key} data fetch: {e}")
+                results[key] = {}
+
+            finally:
+                # Ensure the connection is closed even in case of errors
+                await self.close()
+
+            # Wait 2 seconds before the next query
+            await asyncio.sleep(2)
+
+        # Update the inverter data
+        self.inverter_data.update(results.get("inverter_data", {}))
+
+        return {**self.inverter_data, **results.get("realtime_data", {}), **results.get("additional_data", {}),
+                **results.get("additional_data_2", {}), **results.get("additional_data_3", {})}
+
+
+    async def try_read_registers(self, unit: int, address: int, count: int, max_retries: int = 5, base_delay: float = 0.5, max_delay: float = 30) -> Tuple[Optional[List[int]], bool]:
+        for attempt in range(max_retries):
+            try:
+                if not self._client.is_socket_open():
+                    if not await self.hass.async_add_executor_job(self._connect):
+                        raise ConnectionException("Failed to reconnect")
+    
+                async with self._lock:
+                    response = await self.hass.async_add_executor_job(
+                        self._client.read_holding_registers,
+                        address,
+                        count,
+                        unit
+                    )
+    
+                if response.isError() or not isinstance(response, ReadHoldingRegistersResponse) or len(response.registers) < count:
+                    raise ValueError(f"Incomplete or unexpected response")
+                
+                return response.registers, True
+    
+            except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay))
+    
+        _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
+        return None, False
 
 
 
-    def read_modbus_inverter_data(self) -> dict:
-        inverter_data_regs, inverter_data_success = self.try_read_registers(1, 0x8F00, 29)
+
+
+    async def read_modbus_inverter_data(self) -> dict:
+        inverter_data_regs, inverter_data_success = await self.try_read_registers(1, 0x8F00, 29)
         if not inverter_data_success:
             return {}
 
-        if len(inverter_data_regs) < 29:
-            _LOGGER.error(f"Incomplete data when reading the inverter data: Expected 29, received {len(inverter_data_regs)}")
-            return {}
+       
 
-    
         decoder = BinaryPayloadDecoder.fromRegisters(inverter_data_regs, byteorder=Endian.BIG)
 
         keys = ["devtype", "subtype", "commver", "sn", "pc", "dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]
         data = {}
 
-        for key in keys[:3]:  
+        for key in keys[:3]:
             value = decoder.decode_16bit_uint()
+            
             data[key] = round(value * 0.001, 3) if key == "commver" else value
 
-        for key in keys[3:5]:  
+        for key in keys[3:5]:
             data[key] = decoder.decode_string(20).decode("ascii").strip()
 
-        for key in keys[5:]:  
+        for key in keys[5:]:
             data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
         return data
 
-    def read_modbus_realtime_data(self) -> dict:
-        realtime_data_regs, realtime_data_success = self.try_read_registers(1, 16388, 19)
+    
+
+    async def read_additional_modbus_data_1(self) -> dict:
+        decode_instructions = [
+            ("BatTemp", "decode_16bit_int", 0.1),
+            ("batEnergyPercent", "decode_16bit_int", 0.01),
+            ("skip", "skip_bytes", 2),
+            ("pv1Voltage", "decode_16bit_int", 0.1),
+            ("pv1TotalCurrent", "decode_16bit_int", 0.01),
+            ("pv1Power", "decode_16bit_int", 1),
+            ("pv2Voltage", "decode_16bit_int", 0.1),
+            ("pv2TotalCurrent", "decode_16bit_int", 0.01),
+            ("pv2Power", "decode_16bit_int", 1),
+            ("pv3Voltage", "decode_16bit_int", 0.1),
+            ("pv3TotalCurrent", "decode_16bit_int", 0.01),
+            ("pv3Power", "decode_16bit_int", 1),
+            ("pv4Voltage", "decode_16bit_int", 0.1),
+            ("pv4TotalCurrent", "decode_16bit_int", 0.01),
+            ("pv4Power", "decode_16bit_int", 1),
+            ("skip", "skip_bytes", 48),
+            ("directionPV", "decode_16bit_int", 1),
+            ("directionBattery", "decode_16bit_int", 1),
+            ("directionGrid", "decode_16bit_int", 1),
+            ("directionOutput", "decode_16bit_int", 1),
+            ("skip", "skip_bytes", 14),
+            ("TotalLoadPower", "decode_16bit_int", 1),
+            ("skip", "skip_bytes", 8),
+            ("pvPower", "decode_16bit_int", 1),
+            ("batteryPower", "decode_16bit_int", 1),
+            ("totalgridPower", "decode_16bit_int", 1),
+            ("skip", "skip_bytes", 2),
+            ("inverterPower", "decode_16bit_int", 1),
+            ("skip", "skip_bytes", 6),
+            ("gridPower", "decode_16bit_int", 1)
+        ]
+        return await self._read_modbus_data(16494, 64, decode_instructions)
+
+    async def read_additional_modbus_data_2(self) -> dict:
+        data_keys = [
+            "todayenergy", "monthenergy", "yearenergy", "totalenergy",
+            "bat_today_charge", "bat_month_charge", "bat_year_charge", "bat_total_charge",
+            "bat_today_discharge", "bat_month_discharge", "bat_year_discharge", "bat_total_discharge",
+            "inv_today_gen", "inv_month_gen", "inv_year_gen", "inv_total_gen",
+            "total_today_load", "total_month_load", "total_year_load", "total_total_load",
+            "backup_today_load", "backup_month_load", "backup_year_load", "backup_total_load",
+            "sell_today_energy", "sell_month_energy", "sell_year_energy", "sell_total_energy",
+            "feedin_today_energy", "feedin_month_energy", "feedin_year_energy", "feedin_total_energy",
+        ]
+        return await self._read_modbus_data(16575, 64, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
+
+    async def read_additional_modbus_data_3(self) -> dict:
+        data_keys = [
+            "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
+            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
+            "feedin_today_energy_2", "feedin_month_energy_2", "feedin_year_energy_2", "feedin_total_energy_2",
+            "feedin_today_energy_3", "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
+            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
+            "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total"
+        ]
+        return await self._read_modbus_data(16711, 48, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
+
+    async def read_modbus_realtime_data(self) -> dict:
+        realtime_data_regs, realtime_data_success = await self.try_read_registers(1, 16388, 19)
         if not realtime_data_success:
             return self.last_valid_data.get('realtime_data', {})
-    
+
         data = {}
         decoder = BinaryPayloadDecoder.fromRegisters(realtime_data_regs, byteorder=Endian.BIG)
-        
+
         decode_instructions = [
             ("mpvmode", "decode_16bit_uint", 1, False),
             ("faultMsg0", "decode_32bit_uint", 1, False),
@@ -169,123 +239,44 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
                     data[key] = round(decoded_value * factor, 1)
                 else:
                     data[key] = round(decoded_value * factor, 2) if factor != 1 else decoded_value
-            
+
                 if key in ["faultMsg0", "faultMsg1", "faultMsg2"]:
                     faultMsg.extend(
                         self.translate_fault_code_to_messages(decoded_value, FAULT_MESSAGES[int(key[-1])].items())
                     )
-        
+
         mpvmode = data["mpvmode"]
         data["mpvstatus"] = DEVICE_STATUSSES.get(mpvmode, "Unknown")
-        # status value can hold max 255 chars in HA
         data["faultmsg"] = ", ".join(faultMsg).strip()[0:254]
         if faultMsg:
             _LOGGER.error("Fault message: " + ", ".join(faultMsg).strip())
-        return data    
-   
+        return data
 
-    def read_additional_modbus_data(self) -> dict:
-        additional_data_regs, additional_data_success = self.try_read_registers(1, 16494, 64)
-        if not additional_data_success:
-            return self.last_valid_data.get('additional_data', {})
+    async def _read_modbus_data(self, start_address: int, count: int, decode_instructions: list) -> dict:
+        regs, success = await self.try_read_registers(1, start_address, count)
+        if not success:
+            return self.last_valid_data.get('realtime_data', {})
 
-        decoder = BinaryPayloadDecoder.fromRegisters(additional_data_regs, byteorder=Endian.BIG)
         data = {}
+        decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
 
-        
-        decode_instructions = [
-        ("BatTemp", 0.1), ("batEnergyPercent", 0.01), ("skip", 2),
-        ("pv1Voltage", 0.1), ("pv1TotalCurrent", 0.01), ("pv1Power", 1),
-        ("pv2Voltage", 0.1), ("pv2TotalCurrent", 0.01), ("pv2Power", 1),
-        ("pv3Voltage", 0.1), ("pv3TotalCurrent", 0.01), ("pv3Power", 1),
-        ("pv4Voltage", 0.1), ("pv4TotalCurrent", 0.01), ("pv4Power", 1),
-        ("skip", 48), ("directionPV", 1), ("directionBattery", 1),
-        ("directionGrid", 1), ("directionOutput", 1), ("skip", 14),
-        ("TotalLoadPower", 1), ("skip", 8), ("pvPower", 1),
-        ("batteryPower", 1), ("totalgridPower", 1), ("skip", 2),
-        ("inverterPower", 1), ("skip", 6), ("gridPower", 1)
-        ]
-
-        for key, factor in decode_instructions:
-            if key == "skip":
-                decoder.skip_bytes(factor)
+        for instruction in decode_instructions:
+            if instruction[0] == "skip":
+                decoder.skip_bytes(instruction[2])
             else:
-                data[key] = round(decoder.decode_16bit_int() * factor, 2)
+                decoded_value = getattr(decoder, instruction[1])()
+                if isinstance(decoded_value, bytes):
+                    data[instruction[0]] = decoded_value.decode("ascii").strip()
+                else:
+                    data[instruction[0]] = round(decoded_value * instruction[2], 2) if instruction[2] != 1 else decoded_value
 
-        self.last_valid_data['additional_data'] = data
+        self.last_valid_data['realtime_data'] = data
         return data
-
-    
-    
-    def read_additional_modbus_data_2(self) -> dict:
-        additional_data2_regs, additional_data2_success = self.try_read_registers(1, 16575, 64)
-        
-        if not additional_data2_success:
-            return self.last_valid_data.get('additional_data_2', {})
-        
-        decoder = BinaryPayloadDecoder.fromRegisters(additional_data2_regs, byteorder=Endian.BIG)
-        data = {}    
-        
-        
-        data_keys = [
-            "todayenergy", "monthenergy", "yearenergy", "totalenergy",
-            "bat_today_charge", "bat_month_charge", "bat_year_charge", "bat_total_charge",
-            "bat_today_discharge", "bat_month_discharge", "bat_year_discharge", "bat_total_discharge",
-            "inv_today_gen", "inv_month_gen", "inv_year_gen", "inv_total_gen",
-            "total_today_load", "total_month_load", "total_year_load", "total_total_load",
-            "backup_today_load", "backup_month_load", "backup_year_load", "backup_total_load",
-            "sell_today_energy", "sell_month_energy", "sell_year_energy", "sell_total_energy",
-            "feedin_today_energy", "feedin_month_energy", "feedin_year_energy", "feedin_total_energy",
-            
-        ]
-    
-        
-        for key in data_keys:
-            decoded_value = decoder.decode_32bit_uint()
-            data[key] = round(decoded_value * 0.01, 2)
-
-        self.last_valid_data['additional_data_2'] = data
-        return data
-        
-        
-    def read_additional_modbus_data_3(self) -> dict:
-        additional_data3_regs, additional_data3_success = self.try_read_registers(1, 16711, 48)
-        
-        if not additional_data3_success:
-            return self.last_valid_data.get('additional_data_3', {})
-        
-        decoder = BinaryPayloadDecoder.fromRegisters(additional_data3_regs, byteorder=Endian.BIG)
-        data = {}
-
-
-        data_keys = [
-            
-            "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
-            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
-            "feedin_today_energy_2", "feedin_month_energy_2", "feedin_year_energy_2", "feedin_total_energy_2",
-            "feedin_today_energy_3", "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
-            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
-            "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total"
-        ]
-    
-        
-        for key in data_keys:
-            decoded_value = decoder.decode_32bit_uint()
-            data[key] = round(decoded_value * 0.01, 2)
-
-        self.last_valid_data['additional_data_3'] = data
-        return data
-        
-
-
 
     def log_error(self, message: str):
         _LOGGER.error(message)
 
-
-    def translate_fault_code_to_messages(
-        self, fault_code: int, fault_messages: list
-    ) -> list:
+    def translate_fault_code_to_messages(self, fault_code: int, fault_messages: list) -> list:
         messages = []
         if not fault_code:
             return messages
