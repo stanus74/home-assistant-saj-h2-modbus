@@ -180,7 +180,11 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             ("skip", "skip_bytes", 6),
             ("gridPower", "decode_16bit_int", 1)
         ]
-        return await self._read_modbus_data(16494, 64, decode_instructions)
+        data, success = await self._read_modbus_data(16494, 64, decode_instructions)
+        if not success:
+            return self.last_valid_data.get('additional_modbus_data_1', {})
+        self.last_valid_data['additional_modbus_data_1'] = data
+        return data
 
     async def read_additional_modbus_data_2(self) -> dict:
         data_keys = [
@@ -193,8 +197,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             "sell_today_energy", "sell_month_energy", "sell_year_energy", "sell_total_energy",
             "feedin_today_energy", "feedin_month_energy", "feedin_year_energy", "feedin_total_energy",
         ]
-        return await self._read_modbus_data(16575, 64, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
-
+        data, success = await self._read_modbus_data(16575, 64, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
+        if not success:
+            return self.last_valid_data.get('additional_modbus_data_2', {})
+        self.last_valid_data['additional_modbus_data_2'] = data
+        return data
+        
+        
     async def read_additional_modbus_data_3(self) -> dict:
         data_keys = [
             "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
@@ -204,9 +213,21 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
             "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total"
         ]
-        return await self._read_modbus_data(16711, 48, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
-
+        data, success = await self._read_modbus_data(16711, 48, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
+        if not success:
+            return self.last_valid_data.get('additional_modbus_data_3', {})
+        self.last_valid_data['additional_modbus_data_3'] = data
+        return data
+    
+    
     async def read_modbus_realtime_data(self) -> dict:
+        # Festgelegte Testwerte für faultMsg0, faultMsg1 und faultMsg2
+        test_values = {
+           # "faultMsg0": 0b00000000000000000000000000000001,  # Erstes Bit gesetzt
+          #  "faultMsg1": 0b00000000000000000000000000000010,  # Zweites Bit gesetzt
+          #  "faultMsg2": 0b00000000000000000000000000000100   # Drittes Bit gesetzt
+        }
+
         realtime_data_regs, realtime_data_success = await self.try_read_registers(1, 16388, 19)
         if not realtime_data_success:
             return self.last_valid_data.get('realtime_data', {})
@@ -234,7 +255,12 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             if key == "skip":
                 decoder.skip_bytes(factor)
             else:
-                decoded_value = getattr(decoder, method)()
+                # Setze Testwerte für faultMsg0, faultMsg1 und faultMsg2
+                if key in test_values:
+                    decoded_value = test_values[key]
+                else:
+                    decoded_value = getattr(decoder, method)()
+                
                 if is_temp:
                     data[key] = round(decoded_value * factor, 1)
                 else:
@@ -250,12 +276,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["faultmsg"] = ", ".join(faultMsg).strip()[0:254]
         if faultMsg:
             _LOGGER.error("Fault message: " + ", ".join(faultMsg).strip())
+        self.last_valid_data['realtime_data'] = data
         return data
 
-    async def _read_modbus_data(self, start_address: int, count: int, decode_instructions: list) -> dict:
+    async def _read_modbus_data(self, start_address: int, count: int, decode_instructions: list) -> tuple[dict, bool]:
         regs, success = await self.try_read_registers(1, start_address, count)
         if not success:
-            return self.last_valid_data.get('realtime_data', {})
+            return {}, False
 
         data = {}
         decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
@@ -269,9 +296,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
                     data[instruction[0]] = decoded_value.decode("ascii").strip()
                 else:
                     data[instruction[0]] = round(decoded_value * instruction[2], 2) if instruction[2] != 1 else decoded_value
-
-        self.last_valid_data['realtime_data'] = data
-        return data
+        return data, True
+        
+        
 
     def log_error(self, message: str):
         _LOGGER.error(message)
