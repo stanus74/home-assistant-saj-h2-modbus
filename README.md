@@ -25,7 +25,7 @@ This integration should be available in the HACS default repository. Simply go t
 2. Enter the IP Address and Interval.
 
 
-## Additional Imformation
+## Additional Information
 
 The data from the SAJ H2 inverter is transmitted to the SAJ server via a WiFi interface, AIO3.
 
