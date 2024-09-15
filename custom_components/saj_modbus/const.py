@@ -1,5 +1,4 @@
 from typing import Optional
-
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -7,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    POWER_VOLT_AMPERE_REACTIVE,
+    UnitOfReactivePower,  # Ersetze den Import für die veraltete Konstante
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -79,7 +78,6 @@ information_sensors_group = SensorGroup(
     icon="mdi:information-outline"  
 )
 
-
 gfci_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
     device_class=SensorDeviceClass.CURRENT,
@@ -92,15 +90,12 @@ iso_resistance_sensors_group = SensorGroup(
     icon="mdi:omega"
 )
 
-
 battery_sensors_group = SensorGroup(
     unit_of_measurement='%',  
     device_class=SensorDeviceClass.BATTERY,
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:battery"  
 )
-
-
 
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
@@ -123,6 +118,8 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
             entity_registry_enabled_default=enable,
         )
     return descriptions
+
+# Weitere Definitionen bleiben unverändert...
 
 
 power_sensors = [

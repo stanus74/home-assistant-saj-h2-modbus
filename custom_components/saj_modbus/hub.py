@@ -1,5 +1,5 @@
 """SAJ Modbus Hub"""
-from pymodbus.register_read_message import ReadHoldingRegistersResponse
+#from pymodbus.register_read_message import ReadHoldingRegistersResponse
 from pymodbus.client import ModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.exceptions import ConnectionException, ModbusIOException
@@ -88,34 +88,34 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         return {**self.inverter_data, **results.get("realtime_data", {}), **results.get("additional_data", {}),
                 **results.get("additional_data_2", {}), **results.get("additional_data_3", {})}
 
-
     async def try_read_registers(self, unit: int, address: int, count: int, max_retries: int = 5, base_delay: float = 0.5, max_delay: float = 30) -> Tuple[Optional[List[int]], bool]:
-        for attempt in range(max_retries):
-            try:
-                if not self._client.is_socket_open():
-                    if not await self.hass.async_add_executor_job(self._connect):
-                        raise ConnectionException("Failed to reconnect")
-    
-                async with self._lock:
-                    response = await self.hass.async_add_executor_job(
-                        self._client.read_holding_registers,
-                        address,
-                        count,
-                        unit
-                    )
-    
-                if response.isError() or not isinstance(response, ReadHoldingRegistersResponse) or len(response.registers) < count:
-                    raise ValueError(f"Incomplete or unexpected response")
-                
-                return response.registers, True
-    
-            except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay))
-    
-        _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
-        return None, False
+     for attempt in range(max_retries):
+        try:
+            if not self._client.is_socket_open():
+                if not await self.hass.async_add_executor_job(self._connect):
+                    raise ConnectionException("Failed to reconnect")
 
+            async with self._lock:
+                # Verwende den neuen Aufruf von read_holding_registers direkt
+                response = await self.hass.async_add_executor_job(
+                    self._client.read_holding_registers,
+                    address,
+                    count,
+                    unit
+                )
+
+            # Anstatt nach ReadHoldingRegistersResponse zu prüfen, prüfe direkt die Register
+            if response.isError() or response.registers is None or len(response.registers) < count:
+                raise ValueError(f"Incomplete or unexpected response")
+
+            return response.registers, True
+
+        except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay))
+
+     _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
+     return None, False
 
 
 
@@ -221,12 +221,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
     
     
     async def read_modbus_realtime_data(self) -> dict:
-        # Festgelegte Testwerte für faultMsg0, faultMsg1 und faultMsg2
-        test_values = {
-           # "faultMsg0": 0b00000000000000000000000000000001,  # Erstes Bit gesetzt
-          #  "faultMsg1": 0b00000000000000000000000000000010,  # Zweites Bit gesetzt
-          #  "faultMsg2": 0b00000000000000000000000000000100   # Drittes Bit gesetzt
-        }
+        
 
         realtime_data_regs, realtime_data_success = await self.try_read_registers(1, 16388, 19)
         if not realtime_data_success:

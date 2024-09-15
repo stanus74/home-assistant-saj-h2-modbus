@@ -4,19 +4,6 @@ import logging
 
 
 
-# Konfigurieren des Root-Loggers
-#logging.basicConfig(level=logging.DEBUG)
-
-# Konfigurieren des Loggers für pymodbus, um Debug-Meldungen zu sehen
-#pymodbus_logger = logging.getLogger('pymodbus')
-#pymodbus_logger.setLevel(logging.DEBUG)
-
-# Konfigurieren des Loggers für Ihre Custom Component
-#custom_component_logger = logging.getLogger('custom_components.saj_modbus')
-#custom_component_logger.setLevel(logging.DEBUG)
-
-
-
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -57,7 +44,7 @@ async def async_setup(hass, config):
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    """Set up a SAJ mobus."""
+    """Set up a SAJ modbus entry."""
     host = entry.data[CONF_HOST]
     name = entry.data[CONF_NAME]
     port = entry.data[CONF_PORT]
@@ -71,15 +58,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Register the hub."""
     hass.data[DOMAIN][name] = {"hub": hub}
 
-    for component in PLATFORMS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, component)
-        )
+    # Verwende async_forward_entry_setups, um mehrere Plattformen gleichzeitig zu registrieren
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     return True
 
 
 async def async_unload_entry(hass, entry):
-    """Unload SAJ mobus entry."""
+    """Unload SAJ modbus entry."""
     unload_ok = all(
         await asyncio.gather(
             *[
