@@ -250,11 +250,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             if key == "skip":
                 decoder.skip_bytes(factor)
             else:
-                # Setze Testwerte für faultMsg0, faultMsg1 und faultMsg2
-                if key in test_values:
-                    decoded_value = test_values[key]
-                else:
-                    decoded_value = getattr(decoder, method)()
+                decoded_value = getattr(decoder, method)()
                 
                 if is_temp:
                     data[key] = round(decoded_value * factor, 1)
