@@ -17,14 +17,16 @@ from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 _LOGGER = logging.getLogger(__name__)
 
 class SAJModbusHub(DataUpdateCoordinator[dict]):
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: Number, scan_interval: Number):
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int):
         super().__init__(hass, _LOGGER, name=name, update_interval=timedelta(seconds=scan_interval))
+        self._host = host  # Speichere den Host lokal
+        self._port = port  # Speichere den Port lokal
         self._client = ModbusTcpClient(host=host, port=port, timeout=7)
         self._lock = asyncio.Lock()
         self.inverter_data: dict = {}
         self.data: dict = {}
         self.last_valid_data = {}
-
+        
     @callback
     def async_remove_listener(self, update_callback: CALLBACK_TYPE) -> None:
         """Remove data update listener."""
@@ -37,18 +39,43 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         async with self._lock:
             await self.hass.async_add_executor_job(self._client.close)
 
-   
-    def _connect(self) -> bool:
+    async def _connect(self, retries: int, base_delay: float, max_delay: float) -> bool:
         """Ensure the Modbus client is connected."""
-        try:
-            if not self._client.connect():
-                _LOGGER.error("Failed to connect to the inverter. Attempting to reconnect...")
-                self._client.close()
-                return self._client.connect()
-            return True
-        except Exception as e:
-            _LOGGER.error(f"Unexpected error during connection attempt: {e}")
-            return False
+        for attempt in range(retries):
+            try:
+                if not self._client.connect():
+                    #_LOGGER.error("Failed to connect to the inverter. Attempting to reconnect...")
+                    self._client.close()
+                    if not self._client.connect():
+                        _LOGGER.error("Reconnection attempt failed.")
+                        if attempt < retries - 1:
+                            delay = min(base_delay * (2 ** attempt), max_delay) + random.uniform(0, 1)
+                            #_LOGGER.info(f"Retrying connection in {delay:.2f} seconds... (Attempt {attempt + 1}/{retries})")
+                            await asyncio.sleep(delay)
+                        else:
+                            return True
+            except Exception as e:
+                _LOGGER.error(f"Unexpected error during connection attempt: {e}")
+                return False
+        return False
+
+
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int):
+        """Update connection settings and recreate the Modbus client if needed."""
+
+        if self._host != host or self._port != port:
+            _LOGGER.info(f"Updating Modbus client connection settings: host={host}, port={port}")
+            async with self._lock:
+                await self.hass.async_add_executor_job(self._client.close)
+                self._client = ModbusTcpClient(host=host, port=port, timeout=7)
+                self._host = host
+                self._port = port
+
+        # Aktualisiere das Scan-Intervall
+        self.update_interval = timedelta(seconds=scan_interval)
+        _LOGGER.info(f"Updated polling interval to {scan_interval} seconds.")
+
+
 
     async def _async_update_data(self) -> dict:
         """Fetch all required data sequentially with pauses."""
@@ -89,13 +116,24 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
                 **results.get("additional_data_2", {}), **results.get("additional_data_3", {})}
 
 
-    async def try_read_registers(self, unit: int, address: int, count: int, max_retries: int = 5, base_delay: float = 0.5, max_delay: float = 30) -> Tuple[Optional[List[int]], bool]:
+    async def try_read_registers(
+        self,
+        unit: int,
+        address: int,
+        count: int,
+        max_retries: int = 5,
+        base_delay: float = 0.5,
+        max_delay: float = 30
+    ) -> Tuple[Optional[List[int]], bool]:
+        """Try reading Modbus registers with retries and exponential backoff."""
+
         for attempt in range(max_retries):
             try:
                 if not self._client.is_socket_open():
-                    if not await self.hass.async_add_executor_job(self._connect):
+                    # Pass parameters to _connect
+                    if not await self._connect(max_retries, base_delay, max_delay):
                         raise ConnectionException("Failed to reconnect")
-    
+
                 async with self._lock:
                     response = await self.hass.async_add_executor_job(
                         self._client.read_holding_registers,
@@ -103,22 +141,20 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
                         count,
                         unit
                     )
-    
+
                 if response.isError() or not isinstance(response, ReadHoldingRegistersResponse) or len(response.registers) < count:
                     raise ValueError(f"Incomplete or unexpected response")
-                
+
                 return response.registers, True
-    
+
             except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
+                #_LOGGER.error(f"Error reading registers: {e}. Retrying {attempt + 1}/{max_retries}...")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay))
-    
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    await asyncio.sleep(delay)
+
         _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
         return None, False
-
-
-
-
 
     async def read_modbus_inverter_data(self) -> dict:
         inverter_data_regs, inverter_data_success = await self.try_read_registers(1, 0x8F00, 29)

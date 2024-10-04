@@ -1,13 +1,14 @@
 import ipaddress
 import re
-
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DEFAULT_NAME, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .hub import SAJModbusHub  # Importiere den Hub, um die Einstellungen zu aktualisieren
 
+# Schema für die Initialkonfiguration
 DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
     vol.Required(CONF_HOST): str,
@@ -15,6 +16,14 @@ DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
 })
 
+# Schema für die Optionskonfiguration
+OPTIONS_SCHEMA = vol.Schema({
+    vol.Required(CONF_HOST): str,
+    vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
+    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
+})
+
+# Fehlerkonstanten
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
 
@@ -58,3 +67,45 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
 
         return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Return the options flow to allow configuration changes after setup."""
+        return SAJModbusOptionsFlowHandler(config_entry)
+
+
+class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle an options flow for SAJ Modbus."""
+
+    def __init__(self, config_entry):
+        """Initialize the options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        if user_input is not None:
+            # Hole den Hub aus den gespeicherten Daten
+            hub: SAJModbusHub = self.hass.data[DOMAIN][self.config_entry.data[CONF_NAME]]["hub"]
+
+            # Aktualisiere die Konfiguration des Hubs
+            await hub.update_connection_settings(user_input[CONF_HOST], user_input[CONF_PORT], user_input[CONF_SCAN_INTERVAL])
+
+            # Speichere die neuen Optionen in der Konfigurationsinstanz
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={**self.config_entry.data, **user_input},  # Aktualisiere die gespeicherten Daten
+            )
+
+            return self.async_create_entry(title="", data=user_input)
+
+        # Zeige das Optionsformular
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(CONF_HOST, default=self.config_entry.data.get(CONF_HOST, '')): str,
+                vol.Required(CONF_PORT, default=self.config_entry.data.get(CONF_PORT, 502)): int,
+                vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.data.get(CONF_SCAN_INTERVAL, 30)): int,
+            }),
+        )
+
