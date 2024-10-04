@@ -77,5 +77,4 @@ For the Waveshare or any other device that has a regular DE-9 male connector: co
 
 Set the Waveshare RS232 settings to 115200 8N1, flow mode NONE, packet time none, work mode TCP Server / ModbusTCP. You can choose any port number you like - enter this port number in the configuration of the integration. I left it at 23. It is possible to use port 502 but then you must renumber the RS485 port in the Waveshare web interface - they cannot both use the same port.
 
-
-![SAJ](https://github.com/stanus74/home-assistant-saj-h2-modbus/raw/main/images/saj_h2_modbus/logo.png)
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/stanus74)
