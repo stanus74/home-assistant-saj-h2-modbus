@@ -37,6 +37,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = device_info
         self._attr_unique_id = f"{hub.name}_{description.key}"
         self._attr_name = f"{hub.name} {description.name}"
+        self._attr_force_update = True  # Force-Update aktivieren
         _LOGGER.debug(f"Initialized sensor: {self._attr_name}")
 
     @property
@@ -55,10 +56,8 @@ class SajSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        is_available = self.coordinator.last_update_success and self.native_value is not None
-        _LOGGER.debug(f"Sensor {self._attr_name} availability: {is_available}")
-        return is_available
+        return self.coordinator.last_update_success or self.native_value is not None
+
 
     @callback
     def _handle_coordinator_update(self) -> None:
