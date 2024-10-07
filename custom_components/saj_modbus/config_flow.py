@@ -4,11 +4,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+import logging
 
 from .const import DEFAULT_NAME, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .hub import SAJModbusHub  # Importiere den Hub, um die Einstellungen zu aktualisieren
+from .hub import SAJModbusHub
 
-# Schema für die Initialkonfiguration
+_LOGGER = logging.getLogger(__name__)
+
 DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
     vol.Required(CONF_HOST): str,
@@ -16,14 +18,12 @@ DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
 })
 
-# Schema für die Optionskonfiguration
 OPTIONS_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST): str,
     vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
     vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
 })
 
-# Fehlerkonstanten
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
 
@@ -85,21 +85,29 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
-            # Hole den Hub aus den gespeicherten Daten
-            hub: SAJModbusHub = self.hass.data[DOMAIN][self.config_entry.data[CONF_NAME]]["hub"]
+            try:
+                # Get the hub from the saved data
+                hub = self.hass.data[DOMAIN].get(self.config_entry.entry_id, {}).get("hub")
 
-            # Aktualisiere die Konfiguration des Hubs
-            await hub.update_connection_settings(user_input[CONF_HOST], user_input[CONF_PORT], user_input[CONF_SCAN_INTERVAL])
+                if hub is None:
+                    _LOGGER.error(f"Hub not found for entry_id: {self.config_entry.entry_id}")
+                    return self.async_abort(reason="hub_not_found")
 
-            # Speichere die neuen Optionen in der Konfigurationsinstanz
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data={**self.config_entry.data, **user_input},  # Aktualisiere die gespeicherten Daten
-            )
+                # Update the hub configuration
+                await hub.update_connection_settings(user_input[CONF_HOST], user_input[CONF_PORT], user_input[CONF_SCAN_INTERVAL])
 
-            return self.async_create_entry(title="", data=user_input)
+                # Save the new options in the configuration entry
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data={**self.config_entry.data, **user_input},
+                )
 
-        # Zeige das Optionsformular
+                return self.async_create_entry(title="", data=user_input)
+            except Exception as e:
+                _LOGGER.error(f"Error updating SAJ Modbus configuration: {str(e)}")
+                return self.async_abort(reason="update_failed")
+
+        # Show the options form
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
@@ -108,4 +116,3 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.data.get(CONF_SCAN_INTERVAL, 30)): int,
             }),
         )
-

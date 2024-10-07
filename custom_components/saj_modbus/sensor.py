@@ -37,35 +37,38 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = device_info
         self._attr_unique_id = f"{hub.name}_{description.key}"
         self._attr_name = f"{hub.name} {description.name}"
-        self._last_update = None
         _LOGGER.debug(f"Initialized sensor: {self._attr_name}")
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        value = self.coordinator.data.get(self.entity_description.key)
-        if value is not None:
-            self._last_update = self.coordinator.last_update_success_time
-        return value
+        try:
+            value = self.coordinator.data.get(self.entity_description.key)
+            if value is not None:
+                _LOGGER.debug(f"Sensor {self._attr_name} updated with value: {value}")
+            else:
+                _LOGGER.warning(f"No data for sensor {self._attr_name}")
+            return value
+        except Exception as e:
+            _LOGGER.error(f"Error getting native value for {self._attr_name}: {str(e)}")
+            return None
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return self.coordinator.last_update_success and self.native_value is not None
+        is_available = self.coordinator.last_update_success and self.native_value is not None
+        _LOGGER.debug(f"Sensor {self._attr_name} availability: {is_available}")
+        return is_available
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        old_value = self._attr_native_value
-        new_value = self.native_value
-        if old_value != new_value:
-            _LOGGER.debug(f"Sensor {self._attr_name} updated: {old_value} -> {new_value}")
         self.async_write_ha_state()
+        _LOGGER.debug(f"Sensor {self._attr_name} state updated")
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
-        self.async_on_remove(self.coordinator.async_add_listener(self._handle_coordinator_update))
         _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
 
     async def async_update(self) -> None:
