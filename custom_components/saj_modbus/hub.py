@@ -5,8 +5,7 @@ from pymodbus.constants import Endian
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.payload import BinaryPayloadDecoder
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from voluptuous.validators import Number
-from homeassistant.core import HomeAssistant, CALLBACK_TYPE, callback
+from homeassistant.core import HomeAssistant
 from datetime import timedelta
 from typing import Tuple, List, Optional
 import logging
@@ -16,42 +15,29 @@ from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 
 _LOGGER = logging.getLogger(__name__)
 
-class SAJModbusHub(DataUpdateCoordinator[dict]):
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: Number, scan_interval: Number):
-        super().__init__(hass, _LOGGER, name=name, update_interval=timedelta(seconds=scan_interval))
+class SAJModbusHub(DataUpdateCoordinator):
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int):
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=name,
+            update_interval=timedelta(seconds=scan_interval),
+        )
+        self._host = host
+        self._port = port
         self._client = ModbusTcpClient(host=host, port=port, timeout=7)
         self._lock = asyncio.Lock()
         self.inverter_data: dict = {}
         self.data: dict = {}
-        self.last_valid_data = {}
-
-    @callback
-    def async_remove_listener(self, update_callback: CALLBACK_TYPE) -> None:
-        """Remove data update listener."""
-        super().async_remove_listener(update_callback)
-        if not self._listeners:
-            asyncio.create_task(self.close())
-
-    async def close(self) -> None:
-        """Disconnect client."""
-        async with self._lock:
-            await self.hass.async_add_executor_job(self._client.close)
-
-   
-    def _connect(self) -> bool:
-        """Ensure the Modbus client is connected."""
-        try:
-            if not self._client.connect():
-                _LOGGER.error("Failed to connect to the inverter. Attempting to reconnect...")
-                self._client.close()
-                return self._client.connect()
-            return True
-        except Exception as e:
-            _LOGGER.error(f"Unexpected error during connection attempt: {e}")
-            return False
+        self._scan_interval = scan_interval
+        self.last_valid_data: dict = {}  # Reintroduced last_valid_data
+        _LOGGER.info(f"Initialized SAJModbusHub with scan interval: {scan_interval} seconds")
 
     async def _async_update_data(self) -> dict:
         """Fetch all required data sequentially with pauses."""
+        _LOGGER.debug(f"Starting data update for {self.name}")
+        start_time = asyncio.get_event_loop().time()
+
         data_tasks = [
             ("inverter_data", self.read_modbus_inverter_data),
             ("realtime_data", self.read_modbus_realtime_data),
@@ -65,15 +51,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         for key, task_function in data_tasks:
             try:
                 results[key] = await task_function()
+                self.last_valid_data[key] = results[key]  # Store last valid data
+                _LOGGER.debug(f"Updated {key} for {self.name}")
             except ConnectionException as e:
                 _LOGGER.error(f"Connection error during {key} data fetch: {e}")
-                if key == "realtime_data":
-                    results[key] = {"mpvmode": 0, "mpvstatus": DEVICE_STATUSSES[0], "power": 0}
-                else:
-                    results[key] = {}
+                results[key] = self.last_valid_data.get(key, {})  # Use last valid data as fallback
             except Exception as e:
                 _LOGGER.error(f"Unexpected error during {key} data fetch: {e}")
-                results[key] = {}
+                results[key] = self.last_valid_data.get(key, {})  # Use last valid data as fallback
 
             finally:
                 # Ensure the connection is closed even in case of errors
@@ -85,9 +70,57 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         # Update the inverter data
         self.inverter_data.update(results.get("inverter_data", {}))
 
-        return {**self.inverter_data, **results.get("realtime_data", {}), **results.get("additional_data", {}),
-                **results.get("additional_data_2", {}), **results.get("additional_data_3", {})}
+        # Combine all results into a single dictionary
+        combined_data = {
+            **self.inverter_data,
+            **results.get("realtime_data", {}),
+            **results.get("additional_data", {}),
+            **results.get("additional_data_2", {}),
+            **results.get("additional_data_3", {})
+        }
 
+        end_time = asyncio.get_event_loop().time()
+        _LOGGER.debug(f"Completed data update for {self.name} in {end_time - start_time:.2f} seconds")
+
+        # Reset the update interval for all sensors
+        self.update_interval = timedelta(seconds=self._scan_interval)
+
+        return combined_data
+
+    async def close(self) -> None:
+        """Disconnect client."""
+        async with self._lock:
+            await self.hass.async_add_executor_job(self._client.close)
+
+    def _connect(self) -> bool:
+        """Ensure the Modbus client is connected."""
+        try:
+            if not self._client.connect():
+                _LOGGER.error("Failed to connect to the inverter. Attempting to reconnect...")
+                self._client.close()
+                return self._client.connect()
+            return True
+        except Exception as e:
+            _LOGGER.error(f"Unexpected error during connection attempt: {e}")
+            return False
+
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int):
+        """Update connection settings and recreate the Modbus client if needed."""
+        if self._host != host or self._port != port:
+            _LOGGER.info(f"Updating Modbus client connection settings: host={host}, port={port}")
+            async with self._lock:
+                await self.hass.async_add_executor_job(self._client.close)
+                self._client = ModbusTcpClient(host=host, port=port, timeout=7)
+                self._host = host
+                self._port = port
+
+        # Update the scan interval
+        self.update_interval = timedelta(seconds=scan_interval)
+        self._scan_interval = scan_interval
+        _LOGGER.info(f"Updated polling interval to {scan_interval} seconds.")
+        
+        # Force an immediate update
+        await self.async_refresh()
 
     async def try_read_registers(self, unit: int, address: int, count: int, max_retries: int = 5, base_delay: float = 0.5, max_delay: float = 30) -> Tuple[Optional[List[int]], bool]:
         for attempt in range(max_retries):
@@ -116,16 +149,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
         return None, False
 
-
-
-
-
     async def read_modbus_inverter_data(self) -> dict:
         inverter_data_regs, inverter_data_success = await self.try_read_registers(1, 0x8F00, 29)
         if not inverter_data_success:
-            return {}
-
-       
+            return self.last_valid_data.get('inverter_data', {})
 
         decoder = BinaryPayloadDecoder.fromRegisters(inverter_data_regs, byteorder=Endian.BIG)
 
@@ -134,7 +161,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
 
         for key in keys[:3]:
             value = decoder.decode_16bit_uint()
-            
             data[key] = round(value * 0.001, 3) if key == "commver" else value
 
         for key in keys[3:5]:
@@ -144,8 +170,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
         return data
-
-    
 
     async def read_additional_modbus_data_1(self) -> dict:
         decode_instructions = [
@@ -181,10 +205,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             ("gridPower", "decode_16bit_int", 1)
         ]
         data, success = await self._read_modbus_data(16494, 64, decode_instructions)
-        if not success:
-            return self.last_valid_data.get('additional_modbus_data_1', {})
-        self.last_valid_data['additional_modbus_data_1'] = data
-        return data
+        return data if success else self.last_valid_data.get('additional_data', {})
 
     async def read_additional_modbus_data_2(self) -> dict:
         data_keys = [
@@ -198,11 +219,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             "feedin_today_energy", "feedin_month_energy", "feedin_year_energy", "feedin_total_energy",
         ]
         data, success = await self._read_modbus_data(16575, 64, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
-        if not success:
-            return self.last_valid_data.get('additional_modbus_data_2', {})
-        self.last_valid_data['additional_modbus_data_2'] = data
-        return data
-        
+        return data if success else self.last_valid_data.get('additional_data_2', {})
         
     async def read_additional_modbus_data_3(self) -> dict:
         data_keys = [
@@ -214,15 +231,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
             "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total"
         ]
         data, success = await self._read_modbus_data(16711, 48, [(key, "decode_32bit_uint", 0.01) for key in data_keys])
-        if not success:
-            return self.last_valid_data.get('additional_modbus_data_3', {})
-        self.last_valid_data['additional_modbus_data_3'] = data
-        return data
-    
+        return data if success else self.last_valid_data.get('additional_data_3', {})
     
     async def read_modbus_realtime_data(self) -> dict:
-        
-
         realtime_data_regs, realtime_data_success = await self.try_read_registers(1, 16388, 19)
         if not realtime_data_success:
             return self.last_valid_data.get('realtime_data', {})
@@ -267,7 +278,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
         data["faultmsg"] = ", ".join(faultMsg).strip()[0:254]
         if faultMsg:
             _LOGGER.error("Fault message: " + ", ".join(faultMsg).strip())
-        self.last_valid_data['realtime_data'] = data
         return data
 
     async def _read_modbus_data(self, start_address: int, count: int, decode_instructions: list) -> tuple[dict, bool]:
@@ -288,11 +298,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict]):
                 else:
                     data[instruction[0]] = round(decoded_value * instruction[2], 2) if instruction[2] != 1 else decoded_value
         return data, True
-        
-        
-
-    def log_error(self, message: str):
-        _LOGGER.error(message)
 
     def translate_fault_code_to_messages(self, fault_code: int, fault_messages: list) -> list:
         messages = []
