@@ -18,11 +18,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        try:
-            entity = SajSensor(hub, device_info, description)
-            entities.append(entity)
-        except Exception as e:
-            _LOGGER.error(f"Error creating sensor {description.name}: {str(e)}")
+        entity = SajSensor(hub, device_info, description)
+        entities.append(entity)
 
     async_add_entities(entities)
     _LOGGER.info(f"Added {len(entities)} SAJ sensors")
@@ -37,27 +34,23 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = device_info
         self._attr_unique_id = f"{hub.name}_{description.key}"
         self._attr_name = f"{hub.name} {description.name}"
-        self._attr_force_update = True  # Force-Update aktivieren
+        self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
+        self._attr_force_update = description.force_update  
+        
         _LOGGER.debug(f"Initialized sensor: {self._attr_name}")
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        try:
-            value = self.coordinator.data.get(self.entity_description.key)
-            if value is not None:
-                _LOGGER.debug(f"Sensor {self._attr_name} updated with value: {value}")
-            else:
-                _LOGGER.warning(f"No data for sensor {self._attr_name}")
-            return value
-        except Exception as e:
-            _LOGGER.error(f"Error getting native value for {self._attr_name}: {str(e)}")
-            return None
+        value = self.coordinator.data.get(self.entity_description.key)
+        if value is None:
+            _LOGGER.debug(f"No data for sensor {self._attr_name}")
+        return value
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success or self.native_value is not None
-
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -68,17 +61,11 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self._handle_coordinator_update)
+        )
         _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
 
     async def async_update(self) -> None:
         """Update the entity."""
         await self.coordinator.async_request_refresh()
-        if self.native_value is None:
-            _LOGGER.warning(f"Sensor {self._attr_name} failed to update")
-        else:
-            _LOGGER.debug(f"Sensor {self._attr_name} updated successfully")
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Run when entity will be removed from hass."""
-        await super().async_will_remove_from_hass()
-        _LOGGER.debug(f"Sensor {self._attr_name} removed from Home Assistant")
