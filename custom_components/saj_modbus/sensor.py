@@ -36,8 +36,8 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{hub.name} {description.name}"
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update  
+
         
-        _LOGGER.debug(f"Initialized sensor: {self._attr_name}")
 
     @property
     def native_value(self):
