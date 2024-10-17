@@ -33,6 +33,7 @@ class SensorGroup:
     icon: str = ""  # Optional
     device_class: Optional[str] = None  
     state_class: Optional[str] = None  
+    force_update: bool = False  # Neues Attribut für die Gruppe
     
 @dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
@@ -43,7 +44,9 @@ power_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfPower.WATT,
     device_class=SensorDeviceClass.POWER,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:solar-power",  
+    icon="mdi:solar-power",
+    force_update=True  # force_update für die gesamte Gruppe aktivieren
+
 )
 
 voltage_sensors_group = SensorGroup(
@@ -116,10 +119,10 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
             device_class=group.device_class,
             state_class=group.state_class,
             entity_registry_enabled_default=enable,
+            force_update=group.force_update  # force_update von der Gruppe übernehmen
         )
     return descriptions
 
-# Weitere Definitionen bleiben unverändert...
 
 
 power_sensors = [
