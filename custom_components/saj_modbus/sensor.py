@@ -35,7 +35,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{hub.name}_{description.key}"
         self._attr_name = f"{hub.name} {description.name}"
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
-        self._attr_force_update = description.force_update  # force_update wird aus der Sensordefinition übernommen
+        self._attr_force_update = description.force_update
                 
        
 
@@ -56,7 +56,6 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
-        #_LOGGER.debug(f"Sensor {self._attr_name} state updated")
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
