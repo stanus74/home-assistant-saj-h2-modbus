@@ -17,7 +17,7 @@ from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 _LOGGER = logging.getLogger(__name__)
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
-    """Optimierte SAJ Modbus Hub Implementation."""
+    """Optimized SAJ Modbus Hub Implementation."""
     
     def __init__(
         self,
@@ -27,7 +27,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         port: int,
         scan_interval: int,
     ) -> None:
-        """Initialisiert den SAJ Modbus Hub mit verbesserter Fehlerbehandlung."""
+        """Initializes the SAJ Modbus Hub with improved error handling."""
         super().__init__(
             hass,
             _LOGGER,
@@ -50,7 +50,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._operation_timeout = 30
 
     def _create_client(self) -> AsyncModbusTcpClient:
-        """Erstellt eine neue optimierte Instanz des AsyncModbusTcpClient."""
+        """Creates a new optimized instance of the AsyncModbusTcpClient."""
         client = AsyncModbusTcpClient(
             host=self._host,
             port=self._port,
@@ -64,7 +64,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return client
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
-        """Aktualisiert die Verbindungseinstellungen mit verbesserter Synchronisation."""
+        """Updates the connection settings with improved synchronization."""
         async with self._connection_lock:
             self.updating_settings = True
             try:
@@ -81,24 +81,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.updating_settings = False
 
     async def _safe_close(self) -> bool:
-        """Sichere Methode zum Schließen der Verbindung mit Rückmeldung."""
+        """Safe method to close the connection with feedback."""
         client = self._client
         if not client:
                 _LOGGER.debug("No client instance to close.")
-                return True  # Keine aktive Verbindung, daher bereits "erfolgreich geschlossen"
+                return True  # No active connection, therefore already "successfully closed"
 
         try:
-                # Wenn die Verbindung aktiv ist, schließen
+                # If the connection is active, close it
                 if getattr(client, 'connected', False):
                         close = getattr(client, 'close', None)
                         if close:
-                                # Wenn close eine Coroutine ist, await verwenden
+                                # If close is a coroutine, use await
                                 if inspect.iscoroutinefunction(close):
                                         await close()
                                 else:
                                         close()
 
-                # Transportverbindung sicherstellen und schließen
+                # Ensure transport connection and close it
                 transport = getattr(client, 'transport', None)
                 if transport:
                         transport.close()
@@ -106,25 +106,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
                 await asyncio.sleep(0.2)
 
-                # Überprüfen, ob die Verbindung geschlossen ist
+                # Check if the connection is closed
                 if not client.connected:
                         _LOGGER.info("Modbus client disconnected successfully.")
-                        return True  # Erfolgreiche Schließung
+                        return True  # Successful closure
                 else:
                         _LOGGER.warning("Failed to disconnect Modbus client properly.")
-                        return False  # Verbindung konnte nicht korrekt beendet werden
+                        return False  # Connection could not be terminated correctly
 
         except Exception as e:
                 _LOGGER.error(f"Error while closing Modbus client: {e}", exc_info=True)
-                return False  # Fehlerfall, Verbindung wurde nicht ordnungsgemäß geschlossen
+                return False  # Error case, connection was not closed properly
 
         finally:
-                self._client = None  # Client-Referenz zurücksetzen
+                self._client = None  # Reset client reference
 
 
 
     async def close(self) -> None:
-        """Schließt die Modbus-Verbindung mit verbesserter Ressourcenverwaltung."""
+        """Closes the Modbus connection with improved resource management."""
         if self._closing:
             return
 
@@ -143,22 +143,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._closing = False
 
     async def ensure_connection(self) -> bool:
-        """Stellt eine stabile Modbus-Verbindung sicher."""
+        """Ensures a stable Modbus connection."""
         async with self._connection_lock:
                 try:
-                        # Prüfen, ob die Verbindung bereits aktiv ist
+                        # Check if the connection is already active
                         if self._client and self._client.connected:
                                 #_LOGGER.debug("Modbus client is already connected.")
                                 return True
 
-                        # Initialisieren des Modbus-Clients, falls nicht vorhanden
+                        # Initialize the Modbus client if it doesn't exist
                         self._client = self._client or self._create_client()
 
-                        # Mehrere Versuche zur Wiederverbindung mit exponentiellem Backoff
+                        # Multiple reconnection attempts with exponential backoff
                         for attempt in range(3):
                                 try:
                                         _LOGGER.debug(f"Connection attempt {attempt + 1}/3 to Modbus server.")
-                                        # Verbindung herstellen und Timeout anpassen
+                                        # Establish connection and adjust timeout
                                         if await asyncio.wait_for(self._client.connect(), timeout=10):
                                                 _LOGGER.info("Successfully connected to Modbus server.")
                                                 return True
@@ -166,16 +166,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                                 except (asyncio.TimeoutError, ConnectionException) as e:
                                         _LOGGER.warning(f"Connection attempt {attempt + 1} failed: {e}")
 
-                                        # Exponentielles Backoff zwischen den Versuchen
+                                        # Exponential backoff between attempts
                                         if attempt < 2:
                                                 await asyncio.sleep(2 ** attempt + 2)
 
-                                        # Bei Fehler, sicher schließen und neuen Client erstellen
+                                        # In case of error, safely close and create a new client
                                         if not await self._safe_close():
                                                 _LOGGER.error("Error during safe close; attempting new client creation.")
                                         self._client = self._create_client()
 
-                        # Nach allen fehlgeschlagenen Verbindungsversuchen
+                        # After all failed connection attempts
                         _LOGGER.error("All connection attempts to Modbus server failed.")
                         return False
 
@@ -191,20 +191,20 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         max_retries: int = 3,
         base_delay: float = 2.0
     ) -> List[int]:
-        """Liest Modbus-Register mit optimierter Fehlerbehandlung und bedarfsbasierter Verbindungsprüfung."""
+        """Reads Modbus registers with optimized error handling and on-demand connection check."""
         start_time = time.time()
 
         for attempt in range(max_retries):
                 try:
-                        # Verbindung nur bei Bedarf herstellen
+                        # Establish connection only if needed
                         if not self._client or not await self.ensure_connection():
                                 raise ConnectionException("Unable to establish connection")
 
-                        # Leseversuch mit Modbus-Client
+                        # Read attempt with Modbus client
                         async with self._read_lock:
                                 response = await self._client.read_holding_registers(address, count, slave=unit)
 
-                        # Überprüfen der Antwort und Registeranzahl
+                        # Check the response and number of registers
                         if not isinstance(response, ReadHoldingRegistersResponse) or response.isError() or len(response.registers) != count:
                                 raise ModbusIOException(f"Invalid response from address {address}")
 
@@ -214,28 +214,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
                         _LOGGER.error(f"Read attempt {attempt + 1} failed at address {address}: {e}")
 
-                        # Exponentielles Backoff für die Wiederholung
+                        # Exponential backoff for retry
                         if attempt < max_retries - 1:
                                 await asyncio.sleep(min(base_delay * (2 ** attempt), 10.0))
 
-                                # Bei Verbindungsproblemen aktuelle Verbindung sicher schließen und neu aufbauen
+                                # In case of connection problems, safely close the current connection and rebuild it
                                 if not await self._safe_close():
                                         _LOGGER.error("Failed to safely close the Modbus client.")
                                         
-                                await asyncio.sleep(0.5)  # Zusätzliche Pause nach Verbindungsproblem  
+                                await asyncio.sleep(0.5)  # Additional pause after connection problem  
                                 
-                                # Sicherstellen der Neuverbindung
+                                # Ensure reconnection
                                 if not await self.ensure_connection():
                                         _LOGGER.error("Failed to reconnect Modbus client.")
                                 else:
                                         _LOGGER.info("Reconnected Modbus client successfully.")
 
-        # Wenn alle Versuche fehlgeschlagen sind
+        # If all attempts failed
         _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
         raise ConnectionException(f"Read operation failed for address {address} after {max_retries} attempts")
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Aktualisiert alle Datensätze."""
+        """Updates all data records."""
         if not self.inverter_data:
                 self.inverter_data.update(await self.read_modbus_inverter_data())
 
@@ -252,7 +252,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         for read_method in data_read_methods:
                 combined_data.update(await read_method())
-                await asyncio.sleep(0.5)  # 500ms Pause zwischen Lesevorgängen
+                await asyncio.sleep(0.5)  # 500ms pause between read operations
 
         return combined_data
 
@@ -265,7 +265,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         decode_instructions: List[tuple],
         data_key: str
     ) -> Dict[str, Any]:
-        """Liest und dekodiert Modbus-Daten."""
+        """Reads and decodes Modbus data."""
         last_valid = self.last_valid_data.get(data_key, {})
 
         try:
@@ -303,24 +303,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_modbus_inverter_data(self) -> Dict[str, Any]:
-        """Liest Inverter-Basisdaten."""
+        """Reads basic inverter data."""
         try:
             regs = await self.try_read_registers(1, 0x8F00, 29)
             decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
             data = {}
 
-            # Basis-Parameter
+            # Basic parameters
             for key in ["devtype", "subtype"]:
                 data[key] = decoder.decode_16bit_uint()
 
-            # Kommunikationsversion
+            # Communication version
             data["commver"] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
-            # Seriennummer und PC
+            # Serial number and PC
             for key in ["sn", "pc"]:
                 data[key] = decoder.decode_string(20).decode("ascii", errors="replace").strip()
 
-            # Hardware-Versionen
+            # Hardware versions
             for key in ["dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]:
                 data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
@@ -332,7 +332,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return self.last_valid_data.get('inverter_data', {})
 
     async def read_modbus_realtime_data(self) -> Dict[str, Any]:
-        """Liest Echtzeit-Betriebsdaten."""
+        """Reads real-time operating data."""
         decode_instructions = [
             ("mpvmode", "decode_16bit_uint", 1),
             ("faultMsg0", "decode_32bit_uint", 1),
@@ -351,7 +351,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         data = await self._read_modbus_data(16388, 19, decode_instructions, 'realtime_data')
         
-        # Fehlermeldungen verarbeiten
+        # Process fault messages
         fault_messages = []
         for key in ["faultMsg0", "faultMsg1", "faultMsg2"]:
             fault_code = data.get(key, 0)
@@ -371,7 +371,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_additional_modbus_data_1_part_1(self) -> Dict[str, Any]:
-        """Liest den ersten Teil zusätzlicher Betriebsdaten (Set 1), bis Sensor pv4Power."""
+        """Reads the first part of additional operating data (Set 1), up to sensor pv4Power."""
 
         decode_instructions_part_1 = [
                 ("BatTemp", "decode_16bit_int", 0.1), ("batEnergyPercent", "decode_16bit_uint", 0.01), (None, "skip_bytes", 2),
@@ -384,7 +384,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return await self._read_modbus_data(16494, 15, decode_instructions_part_1, 'additional_data_1_part_1')
 
     async def read_additional_modbus_data_1_part_2(self) -> Dict[str, Any]:
-        """Liest den zweiten Teil zusätzlicher Betriebsdaten (Set 1), ab Sensor directionPV bis gridPower."""
+        """Reads the second part of additional operating data (Set 1), from sensor directionPV to gridPower."""
 
         decode_instructions_part_2 = [
                 ("directionPV", "decode_16bit_uint", 1), ("directionBattery", "decode_16bit_int", 1),
@@ -398,7 +398,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_additional_modbus_data_2_part_1(self) -> Dict[str, Any]:
-        """Liest den ersten Teil zusätzlicher Betriebsdaten (Set 2)."""
+        """Reads the first part of additional operating data (Set 2)."""
 
         data_keys_part_1 = [
                 "todayenergy", "monthenergy", "yearenergy", "totalenergy",
@@ -411,7 +411,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return await self._read_modbus_data(16575, 32, decode_instructions_part_1, 'additional_data_2_part_1')
 
     async def read_additional_modbus_data_2_part_2(self) -> Dict[str, Any]:
-        """Liest den zweiten Teil zusätzlicher Betriebsdaten (Set 2)."""
+        """Reads the second part of additional operating data (Set 2)."""
 
         data_keys_part_2 = [
                 "total_today_load", "total_month_load", "total_year_load", "total_total_load",
@@ -426,7 +426,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_additional_modbus_data_3(self) -> Dict[str, Any]:
-        """Liest zusätzliche Betriebsdaten (Set 3)."""
+        """Reads additional operating data (Set 3)."""
         data_keys = [
             "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
             "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
