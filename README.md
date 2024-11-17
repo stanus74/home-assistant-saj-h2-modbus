@@ -2,9 +2,9 @@
 [![Buy Me a Coffee](https://buymeacoffee.com/assets/img/custom_images/white_img.png)](https://buymeacoffee.com/stanus74)
 
 
-# SAJ H2 Inverter Modbus - A Home Assistant Custom Component for SAJ H2 Inverters
+# SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-Home Assistant Custom Component for reading data from SAJ Inverters through Modbus TCP.
+Integration for reading data from SAJ Inverters through Modbus TCP.
 
 Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/saj-h2-modbus.zip)
 
