@@ -17,17 +17,7 @@ from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 _LOGGER = logging.getLogger(__name__)
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
-    """Optimized SAJ Modbus Hub Implementation."""
-    
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        name: str,
-        host: str,
-        port: int,
-        scan_interval: int,
-    ) -> None:
-        """Initializes the SAJ Modbus Hub with improved error handling."""
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -42,7 +32,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
         self.inverter_data: Dict[str, Any] = {}
-        self.last_valid_data: Dict[str, Any] = {}
+        # self.last_valid_data wurde entfernt
         self._closing = False
         self._reconnecting = False
         self._max_retries = 2
@@ -81,107 +71,59 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.updating_settings = False
 
     async def _safe_close(self) -> bool:
-        """Safe method to close the connection with feedback."""
-        client = self._client
-        if not client:
-                _LOGGER.debug("No client instance to close.")
-                return True  # No active connection, therefore already "successfully closed"
+        """Safely closes the Modbus connection."""
+        if not self._client:
+                return True
 
         try:
-                # If the connection is active, close it
-                if getattr(client, 'connected', False):
-                        close = getattr(client, 'close', None)
+                if self._client.connected:
+                        close = getattr(self._client, "close", None)
                         if close:
-                                # If close is a coroutine, use await
-                                if inspect.iscoroutinefunction(close):
-                                        await close()
-                                else:
-                                        close()
-
-                # Ensure transport connection and close it
-                transport = getattr(client, 'transport', None)
-                if transport:
-                        transport.close()
-                        _LOGGER.debug("Transport layer closed successfully.")
-
-                await asyncio.sleep(0.2)
-
-                # Check if the connection is closed
-                if not client.connected:
-                        _LOGGER.info("Modbus client disconnected successfully.")
-                        return True  # Successful closure
-                else:
-                        _LOGGER.warning("Failed to disconnect Modbus client properly.")
-                        return False  # Connection could not be terminated correctly
-
+                                await close() if inspect.iscoroutinefunction(close) else close()
+                        transport = getattr(self._client, "transport", None)
+                        if transport:
+                                transport.close()
+                        await asyncio.sleep(0.2)
+                        return not self._client.connected
+                return True
         except Exception as e:
-                _LOGGER.error(f"Error while closing Modbus client: {e}", exc_info=True)
-                return False  # Error case, connection was not closed properly
-
+                _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
+                return False
         finally:
-                self._client = None  # Reset client reference
-
+                self._client = None
 
 
     async def close(self) -> None:
         """Closes the Modbus connection with improved resource management."""
         if self._closing:
-            return
+                return
 
         self._closing = True
         try:
-            async with asyncio.timeout(5.0):
-                async with self._connection_lock:
-                    await self._safe_close()
-        except asyncio.TimeoutError:
-            _LOGGER.error("Close operation timed out")
-            await self._safe_close()
-        except Exception as e:
-            _LOGGER.error(f"Unexpected error during close: {e}", exc_info=True)
-            await self._safe_close()
+                async with asyncio.timeout(5.0):
+                        async with self._connection_lock:
+                                await self._safe_close()
+        except (asyncio.TimeoutError, Exception) as e:
+                _LOGGER.warning(f"Error during close: {e}", exc_info=True)
         finally:
-            self._closing = False
+                self._closing = False
+
 
     async def ensure_connection(self) -> bool:
-        """Ensures a stable Modbus connection."""
-        async with self._connection_lock:
-                try:
-                        # Check if the connection is already active
-                        if self._client and self._client.connected:
-                                #_LOGGER.debug("Modbus client is already connected.")
-                                return True
+        """Ensure the Modbus connection is established and stable."""
+        if self._client and self._client.connected:
+                return True
 
-                        # Initialize the Modbus client if it doesn't exist
-                        self._client = self._client or self._create_client()
+        try:
+                self._client = self._client or self._create_client()
+                if await asyncio.wait_for(self._client.connect(), timeout=10):
+                        _LOGGER.info("Successfully connected to Modbus server.")
+                        return True
+                _LOGGER.warning("Failed to connect to Modbus server.")
+        except Exception as e:
+                _LOGGER.warning(f"Error during connection attempt: {e}", exc_info=True)
 
-                        # Multiple reconnection attempts with exponential backoff
-                        for attempt in range(3):
-                                try:
-                                        _LOGGER.debug(f"Connection attempt {attempt + 1}/3 to Modbus server.")
-                                        # Establish connection and adjust timeout
-                                        if await asyncio.wait_for(self._client.connect(), timeout=10):
-                                                _LOGGER.info("Successfully connected to Modbus server.")
-                                                return True
-
-                                except (asyncio.TimeoutError, ConnectionException) as e:
-                                        _LOGGER.warning(f"Connection attempt {attempt + 1} failed: {e}")
-
-                                        # Exponential backoff between attempts
-                                        if attempt < 2:
-                                                await asyncio.sleep(2 ** attempt + 2)
-
-                                        # In case of error, safely close and create a new client
-                                        if not await self._safe_close():
-                                                _LOGGER.error("Error during safe close; attempting new client creation.")
-                                        self._client = self._create_client()
-
-                        # After all failed connection attempts
-                        _LOGGER.error("All connection attempts to Modbus server failed.")
-                        return False
-
-                except Exception as e:
-                        _LOGGER.error(f"Unexpected error in ensure_connection: {e}", exc_info=True)
-                        return False
+        return False
 
     async def try_read_registers(
         self,
@@ -211,7 +153,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         #_LOGGER.info(f"Successfully read registers at address {address}.")
                         return response.registers
 
-                except (ModbusIOException, ConnectionException, TypeError, ValueError) as e:
+                except (ModbusIOException, ConnectionException) as e:
                         _LOGGER.error(f"Read attempt {attempt + 1} failed at address {address}: {e}")
 
                         # Exponential backoff for retry
@@ -220,10 +162,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
                                 # In case of connection problems, safely close the current connection and rebuild it
                                 if not await self._safe_close():
-                                        _LOGGER.error("Failed to safely close the Modbus client.")
+                                        _LOGGER.warning("Failed to safely close the Modbus client.")
                                         
-                                await asyncio.sleep(0.5)  # Additional pause after connection problem  
-                                
                                 # Ensure reconnection
                                 if not await self.ensure_connection():
                                         _LOGGER.error("Failed to reconnect Modbus client.")
@@ -252,22 +192,33 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         for read_method in data_read_methods:
                 combined_data.update(await read_method())
-                await asyncio.sleep(0.5)  # 500ms pause between read operations
+                await asyncio.sleep(0.2)  # 200ms pause between read operations
 
         return combined_data
-
-
 
     async def _read_modbus_data(
         self,
         start_address: int,
         count: int,
         decode_instructions: List[tuple],
-        data_key: str
+        data_key: str,
+        default_decoder: str = "decode_16bit_uint",
+        default_factor: float = 0.01
     ) -> Dict[str, Any]:
-        """Reads and decodes Modbus data."""
-        last_valid = self.last_valid_data.get(data_key, {})
+        """
+        Reads and decodes Modbus data with optional default decoder and factor.
 
+        Args:
+            start_address (int): Starting address for reading registers.
+            count (int): Number of registers to read.
+            decode_instructions (List[tuple]): Decoding instructions [(key, method, factor)].
+            data_key (str): Key for logging or tracking data context.
+            default_decoder (str): Default decoding method to use when none is specified.
+            default_factor (float): Default factor to apply when none is specified.
+
+        Returns:
+            Dict[str, Any]: Decoded data as a dictionary.
+        """
         try:
             regs = await self.try_read_registers(1, start_address, count)
             decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
@@ -275,7 +226,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
             for instruction in decode_instructions:
                 try:
-                    key, method, factor = instruction
+                    key, method, factor = instruction if len(instruction) == 3 else (*instruction, default_factor)
+                    method = method or default_decoder  # Use default decoder if none is specified
+
                     if method == "skip_bytes":
                         decoder.skip_bytes(factor)
                         continue
@@ -291,15 +244,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
                 except Exception as e:
                     _LOGGER.error(f"Error decoding {key}: {e}")
-                    return last_valid
+                    return {}
 
-            self.last_valid_data[data_key] = new_data
             return new_data
 
         except Exception as e:
             _LOGGER.error(f"Error reading modbus data: {e}")
-            return last_valid
-
+            return {}
 
 
     async def read_modbus_inverter_data(self) -> Dict[str, Any]:
@@ -324,33 +275,39 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             for key in ["dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]:
                 data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
 
-            self.last_valid_data['inverter_data'] = data
+            
             return data
 
         except Exception as e:
             _LOGGER.error(f"Error reading inverter data: {e}")
-            return self.last_valid_data.get('inverter_data', {})
+            return {}
 
     async def read_modbus_realtime_data(self) -> Dict[str, Any]:
         """Reads real-time operating data."""
+
         decode_instructions = [
-            ("mpvmode", "decode_16bit_uint", 1),
-            ("faultMsg0", "decode_32bit_uint", 1),
-            ("faultMsg1", "decode_32bit_uint", 1),
-            ("faultMsg2", "decode_32bit_uint", 1),
-            (None, "skip_bytes", 8),
-            ("errorcount", "decode_16bit_uint", 1),
+            ("mpvmode", None),                     
+            ("faultMsg0", "decode_32bit_uint"),    
+            ("faultMsg1", "decode_32bit_uint"),
+            ("faultMsg2", "decode_32bit_uint"),
+            (None, "skip_bytes", 8),              
+            ("errorcount", None),                
             ("SinkTemp", "decode_16bit_int", 0.1),
             ("AmbTemp", "decode_16bit_int", 0.1),
-            ("gfci", "decode_16bit_int", 1),
-            ("iso1", "decode_16bit_uint", 1),
-            ("iso2", "decode_16bit_uint", 1),
-            ("iso3", "decode_16bit_uint", 1),
-            ("iso4", "decode_16bit_uint", 1),
+            ("gfci", None),                      
+            ("iso1", None),                       
+            ("iso2", None),
+            ("iso3", None),
+            ("iso4", None),
         ]
 
-        data = await self._read_modbus_data(16388, 19, decode_instructions, 'realtime_data')
         
+        data = await self._read_modbus_data(
+            16388, 19, decode_instructions, 'realtime_data',
+            default_decoder="decode_16bit_uint", default_factor=1
+        )
+
+
         # Process fault messages
         fault_messages = []
         for key in ["faultMsg0", "faultMsg1", "faultMsg2"]:
@@ -374,27 +331,47 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Reads the first part of additional operating data (Set 1), up to sensor pv4Power."""
 
         decode_instructions_part_1 = [
-                ("BatTemp", "decode_16bit_int", 0.1), ("batEnergyPercent", "decode_16bit_uint", 0.01), (None, "skip_bytes", 2),
-                ("pv1Voltage", "decode_16bit_uint", 0.1), ("pv1TotalCurrent", "decode_16bit_uint", 0.01), ("pv1Power", "decode_16bit_uint", 1),
-                ("pv2Voltage", "decode_16bit_uint", 0.1), ("pv2TotalCurrent", "decode_16bit_uint", 0.01), ("pv2Power", "decode_16bit_uint", 1),
-                ("pv3Voltage", "decode_16bit_uint", 0.1), ("pv3TotalCurrent", "decode_16bit_uint", 0.01), ("pv3Power", "decode_16bit_uint", 1),
-                ("pv4Voltage", "decode_16bit_uint", 0.1), ("pv4TotalCurrent", "decode_16bit_uint", 0.01), ("pv4Power", "decode_16bit_uint", 1),
+            ("BatTemp", "decode_16bit_int", 0.1),      
+            ("batEnergyPercent", None),               
+            (None, "skip_bytes", 2),                  
+            ("pv1Voltage", None, 0.1),                
+            ("pv1TotalCurrent", None),                
+            ("pv1Power", None),                       
+            ("pv2Voltage", None, 0.1),                
+            ("pv2TotalCurrent", None),                
+            ("pv2Power", None),                       
+            ("pv3Voltage", None, 0.1),
+            ("pv3TotalCurrent", None),
+            ("pv3Power", None),
+            ("pv4Voltage", None, 0.1),
+            ("pv4TotalCurrent", None),
+            ("pv4Power", None),
         ]
 
-        return await self._read_modbus_data(16494, 15, decode_instructions_part_1, 'additional_data_1_part_1')
+        return await self._read_modbus_data(
+            16494, 15, decode_instructions_part_1, 'additional_data_1_part_1',
+            default_decoder="decode_16bit_uint", default_factor=0.01
+        )
 
     async def read_additional_modbus_data_1_part_2(self) -> Dict[str, Any]:
-        """Reads the second part of additional operating data (Set 1), from sensor directionPV to gridPower."""
-
+        """
+        Reads the second part of additional operating data (Set 1),
+        from sensor directionPV to gridPower.
+        """
         decode_instructions_part_2 = [
-                ("directionPV", "decode_16bit_uint", 1), ("directionBattery", "decode_16bit_int", 1),
-                ("directionGrid", "decode_16bit_int", 1), ("directionOutput", "decode_16bit_uint", 1), (None, "skip_bytes", 14),
-                ("TotalLoadPower", "decode_16bit_int", 1), (None, "skip_bytes", 8), ("pvPower", "decode_16bit_int", 1),
-                ("batteryPower", "decode_16bit_int", 1), ("totalgridPower", "decode_16bit_int", 1), (None, "skip_bytes", 2),
-                ("inverterPower", "decode_16bit_int", 1), (None, "skip_bytes", 6), ("gridPower", "decode_16bit_int", 1),
+            ("directionPV", None), ("directionBattery", "decode_16bit_int"),
+            ("directionGrid", "decode_16bit_int"), ("directionOutput", None),
+            (None, "skip_bytes", 14), ("TotalLoadPower", "decode_16bit_int"),
+            (None, "skip_bytes", 8), ("pvPower", "decode_16bit_int"),
+            ("batteryPower", "decode_16bit_int"), ("totalgridPower", "decode_16bit_int"),
+            (None, "skip_bytes", 2), ("inverterPower", "decode_16bit_int"),
+            (None, "skip_bytes", 6), ("gridPower", "decode_16bit_int"),
         ]
 
-        return await self._read_modbus_data(16533, 25, decode_instructions_part_2, 'additional_data_1_part_2')
+        return await self._read_modbus_data(
+            16533, 25, decode_instructions_part_2, 'additional_data_1_part_2',
+            default_decoder="decode_16bit_uint", default_factor=1
+        )
 
 
     async def read_additional_modbus_data_2_part_1(self) -> Dict[str, Any]:
