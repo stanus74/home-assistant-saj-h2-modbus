@@ -336,16 +336,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             (None, "skip_bytes", 2),                  
             ("pv1Voltage", None, 0.1),                
             ("pv1TotalCurrent", None),                
-            ("pv1Power", None),                       
+            ("pv1Power", None,1),                       
             ("pv2Voltage", None, 0.1),                
             ("pv2TotalCurrent", None),                
-            ("pv2Power", None),                       
+            ("pv2Power", None,1),                       
             ("pv3Voltage", None, 0.1),
             ("pv3TotalCurrent", None),
-            ("pv3Power", None),
+            ("pv3Power", None,1),
             ("pv4Voltage", None, 0.1),
             ("pv4TotalCurrent", None),
-            ("pv4Power", None),
+            ("pv4Power", None,1),
         ]
 
         return await self._read_modbus_data(
