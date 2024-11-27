@@ -185,7 +185,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.read_additional_modbus_data_1_part_2,
                 self.read_additional_modbus_data_2_part_1,
                 self.read_additional_modbus_data_2_part_2,
-                self.read_additional_modbus_data_3
+                self.read_additional_modbus_data_3,
+		self.read_charging_modbus_data_1
         ]
 
         combined_data = {**self.inverter_data}
@@ -414,3 +415,30 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         ]
         decode_instructions = [(key, "decode_32bit_uint", 0.01) for key in data_keys]
         return await self._read_modbus_data(16711, 48, decode_instructions, 'additional_data_3')
+
+    async def read_charging_modbus_data_1(self) -> Dict[str, Any]:
+        """Reads charging-related data (Set 1)."""
+
+        decode_instructions_charging_part_1 = [
+            ("passchargeena", "decode_16bit_uint"),      
+            ("passgridchargepow", "decode_16bit_uint", 0.001),               
+            ("passgriddischargepow", "decode_16bit_uint", 0.001),               
+            ("passbatchargepow", "decode_16bit_uint", 0.001),               
+            ("passbatdischargepow", "decode_16bit_uint", 0.001),               
+            (None, "skip_bytes", 18),                  
+            ("batongriddisdepth", "decode_16bit_uint"),               
+            ("batoffgriddisdepth", "decode_16bit_uint"),               
+            ("batchargedepth", "decode_16bit_uint"),               
+            ("appmode", "decode_16bit_uint"),               
+            (None, "skip_bytes", 10),                  
+            ("batchargepow", "decode_16bit_uint", 0.001),               
+            ("batdischargepow", "decode_16bit_uint", 0.001),               
+            ("gridchargepow", "decode_16bit_uint", 0.001),               
+            ("griddischargepow", "decode_16bit_uint", 0.001),               
+        ]
+
+        return await self._read_modbus_data(
+            13878, 27, decode_instructions_charging_part_1, 'charging_data_1',
+            default_decoder="decode_16bit_uint", default_factor=1
+        )
+

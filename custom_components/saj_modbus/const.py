@@ -194,6 +194,19 @@ information_sensors = [
     {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
     {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
     {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
+    {"name": "PassiveCharge Enable", "key": "passchargeena", "icon": "information-outline"},
+    {"name": "PassiveGridCharge Power", "key": "passgridchargepow", "icon": "information-outline"},
+    {"name": "PassiveGridDisCharge Power", "key": "passgriddischargepow", "icon": "information-outline"},
+    {"name": "PassiveBatteryCharge Power", "key": "passbatchargepow", "icon": "information-outline"},
+    {"name": "PassiveBatteryDisCharge Power", "key": "passbatdischargepow", "icon": "information-outline"},
+    {"name": "BatteryOnGridDisCharge Depth", "key": "batongriddisdepth", "icon": "information-outline"},
+    {"name": "BatteryOffGridDisCharge Depth", "key": "batoffgriddisdepth", "icon": "information-outline"},
+    {"name": "BatteryCharge Depth", "key": "batchargedepth", "icon": "information-outline"},
+    {"name": "AppMode", "key": "appmode", "icon": "information-outline"},
+    {"name": "BatteryCharge Power", "key": "batchargepow", "icon": "information-outline"},
+    {"name": "BatteryDisCharge Power", "key": "batdischargepow", "icon": "information-outline"},
+    {"name": "GridCharge Power", "key": "gridchargepow", "icon": "information-outline"},
+    {"name": "GridDisCharge Power", "key": "griddischargepow", "icon": "information-outline"},
 ]
 
 energy_sensors = [
