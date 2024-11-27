@@ -207,6 +207,13 @@ information_sensors = [
     {"name": "BatteryDisCharge Power", "key": "batdischargepow", "icon": "information-outline"},
     {"name": "GridCharge Power", "key": "gridchargepow", "icon": "information-outline"},
     {"name": "GridDisCharge Power", "key": "griddischargepow", "icon": "information-outline"},
+    {"name": "ekd 8300 AppMode", "key": "ekd_8300", "icon": "information-outline"},
+    {"name": "ekd 8301 -", "key": "ekd_8301", "icon": "information-outline"},
+    {"name": "ekd 8302 ChargePower", "key": "ekd_8302", "icon": "information-outline"},
+    {"name": "ekd 8303 ChargePower", "key": "ekd_8303", "icon": "information-outline"},
+    {"name": "ekd 8304 -", "key": "ekd_8304", "icon": "information-outline"},
+    {"name": "ekd 8305 max1", "key": "ekd_8305", "icon": "information-outline"},
+    {"name": "ekd 8306 max2", "key": "ekd_8306", "icon": "information-outline"},
 ]
 
 energy_sensors = [

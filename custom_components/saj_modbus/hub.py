@@ -442,3 +442,20 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             default_decoder="decode_16bit_uint", default_factor=1
         )
 
+    async def read_charging_modbus_data_2(self) -> Dict[str, Any]:
+        """Reads charging-related data (Set 2)."""
+
+        decode_instructions_charging_part_2 = [
+            ("ekd_8300", "decode_16bit_uint"),      
+            ("ekd_8301", "decode_16bit_uint"),      
+            ("ekd_8302", "decode_16bit_uint"),      
+            ("ekd_8303", "decode_16bit_uint"),      
+            ("ekd_8304", "decode_16bit_uint"),      
+            ("ekd_8305", "decode_16bit_uint"),      
+            ("ekd_8306", "decode_16bit_uint"),      
+        ]
+
+        return await self._read_modbus_data(
+            33536, 7, decode_instructions_charging_part_2, 'charging_data_2',
+            default_decoder="decode_16bit_uint", default_factor=1
+        )
