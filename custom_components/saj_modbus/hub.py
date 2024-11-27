@@ -186,7 +186,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.read_additional_modbus_data_2_part_1,
                 self.read_additional_modbus_data_2_part_2,
                 self.read_additional_modbus_data_3,
-		self.read_charging_modbus_data_1
+		self.read_charging_modbus_data_1,
+		self.read_charging_modbus_data_2
         ]
 
         combined_data = {**self.inverter_data}
