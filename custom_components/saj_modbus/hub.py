@@ -406,27 +406,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             Reads data for grid parameters (R, S, and T phase).
             """
             decode_instructions = [
-                ("RGridVolt", None, 0.1),  # 16433, Spannung in V
-                ("RGridCurr", "decode_16bit_int", 0.01),  # 16434, Strom in A
-                ("RGridFreq", None, 0.01),  # 16435, Frequenz in Hz
-                ("RGridDCI", "decode_16bit_int", 0.001),  # 16436, DC-Komponente in mA
-                ("RGridPowerWatt", "decode_16bit_int", 1),  # 16437, Leistung in W
-                ("RGridPowerVA", None, 1),  # 16438, Scheinleistung in VA
-                ("RGridPowerPF", "decode_16bit_int", 0.001),  # 16439, Leistungsfaktor
-                ("SGridVolt", None, 0.1),  # 16440, Spannung in V
-                ("SGridCurr", "decode_16bit_int", 0.01),  # 16441, Strom in A
-                ("SGridFreq", None, 0.01),  # 16442, Frequenz in Hz
-                ("SGridDCI", "decode_16bit_int", 0.001),  # 16443, DC-Komponente in mA
-                ("SGridPowerWatt", "decode_16bit_int", 1),  # 16444, Leistung in W
-                ("SGridPowerVA", None, 1),  # 16445, Scheinleistung in VA
-                ("SGridPowerPF", "decode_16bit_int", 0.001),  # 16446, Leistungsfaktor
-                ("TGridVolt", None, 0.1),  # 16447, Spannung in V
-                ("TGridCurr", "decode_16bit_int", 0.01),  # 16448, Strom in A
-                ("TGridFreq", None, 0.01),  # 16449, Frequenz in Hz
-                ("TGridDCI", "decode_16bit_int", 0.001),  # 16450, DC-Komponente in mA
-                ("TGridPowerWatt", "decode_16bit_int", 1),  # 16451, Leistung in W
-                ("TGridPowerVA", None, 1),  # 16452, Scheinleistung in VA
-                ("TGridPowerPF", "decode_16bit_int", 0.001),  # 16453, Leistungsfaktor
+                ("RGridVolt", None, 0.1),
+                ("RGridCurr", "decode_16bit_int", 0.01),
+                ("RGridFreq", None, 0.01),
+                ("RGridDCI", "decode_16bit_int", 0.001),
+                ("RGridPowerWatt", "decode_16bit_int", 1),
+                ("RGridPowerVA", None, 1),
+                ("RGridPowerPF", "decode_16bit_int", 0.001),
+                ("SGridVolt", None, 0.1),
+                ("SGridCurr", "decode_16bit_int", 0.01),
+                ("SGridFreq", None, 0.01),
+                ("SGridDCI", "decode_16bit_int", 0.001),
+                ("SGridPowerWatt", "decode_16bit_int", 1),
+                ("SGridPowerVA", None, 1),
+                ("SGridPowerPF", "decode_16bit_int", 0.001),
+                ("TGridVolt", None, 0.1),
+                ("TGridCurr", "decode_16bit_int", 0.01),
+                ("TGridFreq", None, 0.01),
+                ("TGridDCI", "decode_16bit_int", 0.001),
+                ("TGridPowerWatt", "decode_16bit_int", 1),
+                ("TGridPowerVA", None, 1),
+                ("TGridPowerPF", "decode_16bit_int", 0.001),
                 ]
 
 
@@ -435,4 +435,3 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 16433, 21, decode_instructions, "grid_phase_data",
                 default_decoder="decode_16bit_uint", default_factor=1
             )
-
