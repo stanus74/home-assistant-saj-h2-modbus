@@ -100,6 +100,14 @@ battery_sensors_group = SensorGroup(
     icon="mdi:battery"  
 )
 
+frequency_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfFrequency.HERTZ,  # Einheit in Hertz
+    device_class=SensorDeviceClass.FREQUENCY,  # Klassifizierung als Frequenz
+    state_class=SensorStateClass.MEASUREMENT,  # Zustand wird gemessen
+    icon="mdi:sine-wave"  # Passendes Icon für Frequenz
+)
+
+
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
     for sensor in sensors:
@@ -136,28 +144,72 @@ power_sensors = [
     {"name": "PV2 Power", "key": "pv2Power", "icon": "flash"},
     {"name": "PV3 Power", "key": "pv3Power", "icon": "flash", "enable": False},
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
+    
+    {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
+    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "icon": "flash-outline", "enable": False},
+    {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
+    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "icon": "flash-outline", "enable": False},
+    {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "icon": "flash", "enable": False},
+    {"name": "Backup Total Load Power Watt", "key": "BackupTotalLoadPowerWatt", "icon": "home-lightning-bolt", "enable": False},
+    {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "icon": "home-lightning-bolt-outline", "enable": False},
+    {"name": "R-Phase Grid Power Watt", "key": "RGridPowerWatt", "icon": "flash", "enable": False},
+    {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "icon": "flash-outline", "enable": False},
+    {"name": "S-Phase Grid Power Watt", "key": "SGridPowerWatt", "icon": "flash", "enable": False},
+    {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "icon": "flash-outline", "enable": False},
+    {"name": "T-Phase Grid Power Watt", "key": "TGridPowerWatt", "icon": "flash", "enable": False},
+    {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "icon": "flash-outline", "enable": False},
+    
+   
 ]
+
+
 
 voltage_sensors = [
     {"name": "PV1 Voltage", "key": "pv1Voltage", "icon": "sine-wave"},
     {"name": "PV2 Voltage", "key": "pv2Voltage", "icon": "sine-wave"},
     {"name": "PV3 Voltage", "key": "pv3Voltage", "icon": "sine-wave", "enable": False},
     {"name": "PV4 Voltage", "key": "pv4Voltage", "icon": "sine-wave", "enable": False},
+    
+    {"name": "R-Phase Grid Voltage", "key": "RGridVolt", "icon": "sine-wave", "enable": False},
+    {"name": "S-Phase Grid Voltage", "key": "SGridVolt", "icon": "sine-wave", "enable": False},
+    {"name": "T-Phase Grid Voltage", "key": "TGridVolt", "icon": "sine-wave", "enable": False},
+  
 ]
 
+
+frequency_sensors = [
+    
+    {"name": "R-Phase Grid Frequency", "key": "RGridFreq", "icon": "sine-wave", "enable": False},
+    {"name": "S-Phase Grid Frequency", "key": "SGridFreq", "icon": "sine-wave", "enable": False},
+    {"name": "T-Phase Grid Frequency", "key": "TGridFreq", "icon": "sine-wave", "enable": False},
+    
+]
+    
 current_sensors = [
     {"name": "PV1 Total Current", "key": "pv1TotalCurrent", "icon": "current-dc"},
     {"name": "PV2 Total Current", "key": "pv2TotalCurrent", "icon": "current-dc"},
     {"name": "PV3 Total Current", "key": "pv3TotalCurrent", "icon": "current-dc", "enable": False},
     {"name": "PV4 Total Current", "key": "pv4TotalCurrent", "icon": "current-dc", "enable": False},
+   
+    {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
+    {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
+    {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
+    
+    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
+
 ]
 
 battery_sensors = [
     {"name": "Battery Energy Percent", "key": "batEnergyPercent", "icon": "battery-charging-100", "enable": True}
 ]
 
+
+
 gfci_sensors = [
     {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False}
+
 ]
 
 temperature_sensors = [
@@ -194,6 +246,9 @@ information_sensors = [
     {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
     {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
     {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
+    {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": False},
+    {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": False},
+    {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": False},
 ]
 
 energy_sensors = [
@@ -267,6 +322,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
     **create_sensor_descriptions(gfci_sensors_group,gfci_sensors),
+    **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
    
 }
 

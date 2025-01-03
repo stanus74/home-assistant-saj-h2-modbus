@@ -13,7 +13,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 60 registers (power, energy, temperature sensors)
+- Over 120 registers (power, energy, temperature sensors, ...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
@@ -27,13 +27,11 @@ This integration should be available in the HACS default repository. Simply go t
 2. Enter the IP Address and Interval.
 
 
-## Additional Imformation
+## Additional Information
 
 The data from the SAJ H2 inverter is transmitted to the SAJ server via a WiFi interface, AIO3.
 
 The AIO3 may have port 502 open, allowing us to access the Modbus data. The IP address can be determined in the router. 
-
-**Since the Firmware Update for H2 Inverter (Version Module V1.211 , Displ. Board V1.070, Contr.Board V4.066) the conncection quality is improved. I had no connection errors since the update at 14 Nov. 2024.**
 
 There are also reports of AIO3 devices with port 502 closed. Then you need to have an RS232-wifi or -ethernet converter.
 
