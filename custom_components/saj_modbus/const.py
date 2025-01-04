@@ -194,8 +194,7 @@ current_sensors = [
     {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
-    
-    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
+        {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
 

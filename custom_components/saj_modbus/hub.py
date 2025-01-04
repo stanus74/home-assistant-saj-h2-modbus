@@ -10,7 +10,6 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.exceptions import ConnectionException, ModbusIOException
-from pymodbus.register_read_message import ReadHoldingRegistersResponse
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 
@@ -45,10 +44,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             host=self._host,
             port=self._port,
             timeout=10,
-            retries=self._max_retries,
-            retry_on_empty=True,
-            close_comm_on_error=False,
-            strict=False
+            
         )
         _LOGGER.debug(f"Created new Modbus client: AsyncModbusTcpClient {self._host}:{self._port}")
         return client
@@ -136,13 +132,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 try:
                     async with self._read_lock:
                         response = await self._client.read_holding_registers(address, count, slave=unit)
-                    if not (
-                        isinstance(response, ReadHoldingRegistersResponse)
-                        and not response.isError()
-                        and len(response.registers) == count
-                    ):
+                    if (not response) or response.isError() or len(response.registers) != count:
                         raise ModbusIOException(f"Invalid response from address {address}")
+                        
                     return response.registers
+                    
                 except (ModbusIOException, ConnectionException) as e:
                     _LOGGER.error(f"Read attempt {attempt + 1} failed at address {address}: {e}")
                     if attempt < max_retries - 1:
@@ -328,28 +322,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             incorporating the provided registers and correct skip_bytes adjustments.
             """
             decode_instructions_part_2 = [
-                ("directionPV", None),  # 16533
-                ("directionBattery", "decode_16bit_int"),  # 16534
-                ("directionGrid", "decode_16bit_int"),  # 16535
-                ("directionOutput", None),  # 16536
-                (None, "skip_bytes", 14),  # Skip to 16544 (16544 - 16536 = 8 registers or 16 bytes)
-                ("TotalLoadPower", "decode_16bit_int"),  # 16544
-                ("CT_GridPowerWatt", "decode_16bit_int"),  # 16545
-                ("CT_GridPowerVA", "decode_16bit_int"),  # 16546
-                ("CT_PVPowerWatt", "decode_16bit_int"),  # 16547
-                ("CT_PVPowerVA", "decode_16bit_int"),  # 16548
-                ("pvPower", "decode_16bit_int"),  # 16549
-                ("batteryPower", "decode_16bit_int"),  # 16550
-                ("totalgridPower", "decode_16bit_int"),  # 16551
-                ("totalgridPowerVA", "decode_16bit_int"),  # 16552
-                ("inverterPower", "decode_16bit_int"),  # 16553
-                ("TotalInvPowerVA", "decode_16bit_int"),  # 16554
-                ("BackupTotalLoadPowerWatt", "decode_16bit_uint"),  # 16555
-                ("BackupTotalLoadPowerVA", "decode_16bit_uint"),  # 16556
-                ("gridPower", "decode_16bit_int"),  # 16557
+                ("directionPV", None),  
+                ("directionBattery", "decode_16bit_int"),  
+                ("directionGrid", "decode_16bit_int"),  
+                ("directionOutput", None),  
+                (None, "skip_bytes", 14),  
+                ("TotalLoadPower", "decode_16bit_int"),  
+                ("CT_GridPowerWatt", "decode_16bit_int"),  
+                ("CT_GridPowerVA", "decode_16bit_int"),  
+                ("CT_PVPowerWatt", "decode_16bit_int"),  
+                ("CT_PVPowerVA", "decode_16bit_int"),  
+                ("pvPower", "decode_16bit_int"),  
+                ("batteryPower", "decode_16bit_int"),  
+                ("totalgridPower", "decode_16bit_int"),  
+                ("totalgridPowerVA", "decode_16bit_int"),  
+                ("inverterPower", "decode_16bit_int"),  
+                ("TotalInvPowerVA", "decode_16bit_int"),  
+                ("BackupTotalLoadPowerWatt", "decode_16bit_uint"),  
+                ("BackupTotalLoadPowerVA", "decode_16bit_uint"),  
+                ("gridPower", "decode_16bit_int"),  
             ]
 
-            # Total register count: (16557 - 16533 + 1) = 25
+            
             return await self._read_modbus_data(
                 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2',
                 default_decoder="decode_16bit_uint", default_factor=1
@@ -430,7 +424,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 ]
 
 
-            # Total register count: (16453 - 16433 + 1) = 21
+            
             return await self._read_modbus_data(
                 16433, 21, decode_instructions, "grid_phase_data",
                 default_decoder="decode_16bit_uint", default_factor=1
