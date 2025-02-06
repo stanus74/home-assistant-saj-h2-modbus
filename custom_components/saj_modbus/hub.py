@@ -131,7 +131,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             for attempt in range(max_retries):
                 try:
                     async with self._read_lock:
-                        response = await self._client.read_holding_registers(address, count, slave=unit)
+                        
+                        response = await self._client.read_holding_registers(address=address, count=count)
+                        
                     if (not response) or response.isError() or len(response.registers) != count:
                         raise ModbusIOException(f"Invalid response from address {address}")
                         
