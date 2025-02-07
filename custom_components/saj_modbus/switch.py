@@ -44,7 +44,7 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
         """Turn on charging."""
         try:
             await self._hub.set_charging(True)
-            await self.coordinator.async_request_refresh()
+            # Let the regular update interval handle the state refresh
         except Exception as e:
             _LOGGER.error(f"Failed to turn on charging: {e}")
             raise
@@ -53,7 +53,7 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
         """Turn off charging."""
         try:
             await self._hub.set_charging(False)
-            await self.coordinator.async_request_refresh()
+            # Let the regular update interval handle the state refresh
         except Exception as e:
             _LOGGER.error(f"Failed to turn off charging: {e}")
             raise
