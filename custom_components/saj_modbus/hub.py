@@ -10,8 +10,18 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+#import numpy as np
+
+
+
+from pymodbus.client.mixin import ModbusClientMixin
+    
+import struct
+
+#from pymodbus.client.registers import ReadHoldingRegistersRequest
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,9 +141,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             for attempt in range(max_retries):
                 try:
                     async with self._read_lock:
-                        
+                       
+                    
                         response = await self._client.read_holding_registers(address=address, count=count)
-                        
+
+                    
+                    
                     if (not response) or response.isError() or len(response.registers) != count:
                         raise ModbusIOException(f"Invalid response from address {address}")
                         
@@ -176,76 +189,114 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             await self.close()
             return combined_data
 
+ 
 
     async def _read_modbus_data(
-            self,
-            start_address: int,
-            count: int,
-            decode_instructions: List[tuple],
-            data_key: str,
-            default_decoder: str = "decode_16bit_uint",
-            default_factor: float = 0.01
-        ) -> Dict[str, Any]:
-            try:
-                regs = await self.try_read_registers(1, start_address, count)
-                decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
-                new_data = {}
-
-                for instruction in decode_instructions:
-                    key, method, factor = (instruction + (default_factor,))[:3]
-                    method = method or default_decoder
-
-                    if method == "skip_bytes":
-                        decoder.skip_bytes(factor)
-                        continue
-
-                    if not key:
-                        continue
-
-                    try:
-                        value = getattr(decoder, method)()
-                        if isinstance(value, bytes):
-                            value = value.decode("ascii", errors="replace").strip()
-                        new_data[key] = round(value * factor, 2) if factor != 1 else value
-                    except Exception as e:
-                        _LOGGER.error(f"Error decoding {key}: {e}")
-                        return {}
-
-                return new_data
-            except Exception as e:
-                _LOGGER.error(f"Error reading modbus data: {e}")
+        self,
+        start_address: int,
+        count: int,
+        decode_instructions: List[tuple],
+        data_key: str,
+        default_decoder: str = "decode_16bit_uint",
+        default_factor: float = 0.01
+    ) -> Dict[str, Any]:
+        try:
+            regs = await self.try_read_registers(1, start_address, count)
+            if not regs:
+                _LOGGER.error(f"Error reading modbus data: No response for {data_key}")
                 return {}
 
+            new_data = {}
+            index = 0
+
+            for instruction in decode_instructions:
+                key, method, factor = (instruction + (default_factor,))[:3]
+                method = method or default_decoder
+
+                if method == "skip_bytes":
+                    index += factor // 2  # Jedes Register ist 2 Bytes groß
+                    continue
+
+                if not key:
+                    continue
+
+                try:
+                    raw_value = regs[index]
+
+                    # Auswahl der richtigen Dekodierungsmethode
+                    if method == "decode_16bit_int":
+                        value = self._client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.INT16)
+                    elif method == "decode_16bit_uint":
+                        value = self._client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.UINT16)
+                    elif method == "decode_32bit_uint":
+                        if index + 1 < len(regs):
+                            value = self._client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
+                            index += 1  # 32-Bit-Werte belegen zwei Register
+                        else:
+                            value = 0
+                    else:
+                        value = raw_value  # Standardwert, falls keine Konvertierung notwendig ist
+
+                    new_data[key] = round(value * factor, 2) if factor != 1 else value
+                    index += 1
+
+                except Exception as e:
+                    _LOGGER.error(f"Error decoding {key}: {e}")
+                    return {}
+
+            return new_data
+
+        except Exception as e:
+            _LOGGER.error(f"Error reading modbus data: {e}")
+            return {}
 
 
     async def read_modbus_inverter_data(self) -> Dict[str, Any]:
-        """Reads basic inverter data."""
+        """Liest Basisdaten des Wechselrichters mithilfe der pymodbus 3.9 API, ohne BinaryPayloadDecoder."""
         try:
+            # Lese 29 Register ab Adresse 0x8F00
             regs = await self.try_read_registers(1, 0x8F00, 29)
-            decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
             data = {}
+            index = 0
 
-            # Basic parameters
+            # Basic parameters: devtype und subtype als 16-Bit unsigned Werte
             for key in ["devtype", "subtype"]:
-                data[key] = decoder.decode_16bit_uint()
+                value = self._client.convert_from_registers(
+                    [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+                )
+                data[key] = value
+                index += 1
 
-            # Communication version
-            data["commver"] = round(decoder.decode_16bit_uint() * 0.001, 3)
+            # Kommunikationsversion: 16-Bit unsigned, multipliziert mit 0.001 und auf 3 Dezimalstellen gerundet
+            commver = self._client.convert_from_registers(
+                [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+            )
+            data["commver"] = round(commver * 0.001, 3)
+            index += 1
 
-            # Serial number and PC
+            # Serial number und PC: Jeweils 20 Bytes (entspricht 10 Registern)
             for key in ["sn", "pc"]:
-                data[key] = decoder.decode_string(20).decode("ascii", errors="replace").strip()
+                # Hole die nächsten 10 Register
+                reg_slice = regs[index : index + 10]
+                # Jedes Register (16-Bit) in 2 Byte im Big‑Endian-Format umwandeln
+                raw_bytes = b"".join(struct.pack(">H", r) for r in reg_slice)
+                data[key] = raw_bytes.decode("ascii", errors="replace").strip()
+                index += 10
 
-            # Hardware versions
+            # Hardwareversionsnummern: Jeweils als 16-Bit unsigned, multipliziert mit 0.001
             for key in ["dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]:
-                data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
+                value = self._client.convert_from_registers(
+                    [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+                )
+                data[key] = round(value * 0.001, 3)
+                index += 1
 
-            
             return data
 
         except Exception as e:
             _LOGGER.error(f"Error reading inverter data: {e}")
             return {}
+
 
     async def read_modbus_realtime_data(self) -> Dict[str, Any]:
         """Reads real-time operating data."""
@@ -431,3 +482,75 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 16433, 21, decode_instructions, "grid_phase_data",
                 default_decoder="decode_16bit_uint", default_factor=1
             )
+            
+            
+    async def read_battery_data(self) -> Dict[str, Any]:
+        """
+        Liest Batteriedaten aus den Registern 40960 bis 41015.
+        
+        Hinweis: Es gibt einen Lückensektor zwischen Register 40995 (Bat4CycleNum) und 
+        41002 (Bat1DischarCapH), der mit 'skip_bytes' übersprungen wird.
+        """
+        decode_instructions = [
+        # Register 40960 bis 40995 (erste 36 Register)
+        ("BatNum",            "decode_16bit_uint", 1),         # 40960
+        ("BatCapcity",        "decode_16bit_uint", 1),         # 40961
+        ("Bat1FaultMSG",      "decode_16bit_uint", 1),         # 40962
+        ("Bat1WarnMSG",       "decode_16bit_uint", 1),         # 40963
+        ("Bat2FaultMSG",      "decode_16bit_uint", 1),         # 40964
+        ("Bat2WarnMSG",       "decode_16bit_uint", 1),         # 40965
+        ("Bat3FaultMSG",      "decode_16bit_uint", 1),         # 40966
+        ("Bat3WarnMSG",       "decode_16bit_uint", 1),         # 40967
+        ("Bat4FaultMSG",      "decode_16bit_uint", 1),         # 40968
+        ("Bat4WarnMSG",       "decode_16bit_uint", 1),         # 40969
+        ("BatUserCap",        "decode_16bit_uint", 1),         # 40970
+        ("BatOnline",         "decode_16bit_uint", 1),         # 40971
+        ("Bat1SOC",           "decode_16bit_uint", 0.01),      # 40972, Ratio -2 → 0.01
+        ("Bat1SOH",           "decode_16bit_uint", 0.01),      # 40973, Ratio -2
+        ("Bat1Voltage",       "decode_16bit_uint", 0.1),       # 40974, Ratio -1 → 0.1
+        ("Bat1Current",       "decode_16bit_int", 0.01),       # 40975, Int16, Ratio -2
+        ("Bat1Temperature",   "decode_16bit_int", 0.1),        # 40976, Int16, Ratio -1
+        ("Bat1CycleNum",      "decode_16bit_uint", 1),         # 40977
+        ("Bat2SOC",           "decode_16bit_uint", 0.01),      # 40978
+        ("Bat2SOH",           "decode_16bit_uint", 0.01),      # 40979
+        ("Bat2Voltage",       "decode_16bit_uint", 0.1),       # 40980
+        ("Bat2Current",       "decode_16bit_int", 0.01),       # 40981
+        ("Bat2Temperature",   "decode_16bit_int", 0.1),        # 40982
+        ("Bat2CycleNum",      "decode_16bit_uint", 1),         # 40983
+        ("Bat3SOC",           "decode_16bit_uint", 0.01),      # 40984
+        ("Bat3SOH",           "decode_16bit_uint", 0.01),      # 40985
+        ("Bat3Voltage",       "decode_16bit_uint", 0.1),       # 40986
+        ("Bat3Current",       "decode_16bit_int", 0.01),       # 40987
+        ("Bat3Temperature",   "decode_16bit_int", 0.1),        # 40988
+        ("Bat3CycleNum",      "decode_16bit_uint", 1),         # 40989
+        ("Bat4SOC",           "decode_16bit_uint", 0.01),      # 40990
+        ("Bat4SOH",           "decode_16bit_uint", 0.01),      # 40991
+        ("Bat4Voltage",       "decode_16bit_uint", 0.1),       # 40992
+        ("Bat4Current",       "decode_16bit_int", 0.01),       # 40993
+        ("Bat4Temperature",   "decode_16bit_int", 0.1),        # 40994
+        ("Bat4CycleNum",      "decode_16bit_uint", 1),         # 40995
+        
+        # --> Hier Registersprung einfügen (Register 40996 bis 41001 überspringen):
+        (None, "skip_bytes", 12),  # 6 Register * 2 Bytes = 12 Bytes
+        
+        # Register 41002 bis 41015 (nächste 14 Register)
+        ("Bat1DischarCapH",   "decode_16bit_uint", 1),         # 41002
+        ("Bat1DischarCapL",   "decode_16bit_uint", 1),         # 41003
+        ("Bat2DischarCapH",   "decode_16bit_uint", 1),         # 41004
+        ("Bat2DischarCapL",   "decode_16bit_uint", 1),         # 41005
+        ("Bat3DischarCapH",   "decode_16bit_uint", 1),         # 41006
+        ("Bat3DischarCapL",   "decode_16bit_uint", 1),         # 41007
+        ("Bat4DischarCapH",   "decode_16bit_uint", 1),         # 41008
+        ("Bat4DischarCapL",   "decode_16bit_uint", 1),         # 41009
+        ("BatProtHigh",       "decode_16bit_uint", 0.1),       # 41010, Ratio -1 → 0.1
+        ("BatProtLow",        "decode_16bit_uint", 0.1),       # 41011, Ratio -1 → 0.1
+        ("Bat_Chargevoltage", "decode_16bit_uint", 0.1),       # 41012, Ratio -1 → 0.1
+        ("Bat_DisCutOffVolt", "decode_16bit_uint", 0.1),       # 41013, Ratio -1 → 0.1
+        ("BatDisCurrLimit",   "decode_16bit_uint", 0.1),       # 41014, Ratio -1 → 0.1
+        ("BatChaCurrLimit",   "decode_16bit_uint", 0.1),       # 41015, Ratio -1 → 0.1
+        
+        ]
+
+        
+        # Insgesamt werden hier 56 Register ab 40960 ausgelesen.
+        return await self._read_modbus_data(40960, 56, decode_instructions, 'battery_data')
