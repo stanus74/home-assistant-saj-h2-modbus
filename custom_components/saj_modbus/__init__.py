@@ -9,7 +9,7 @@ from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "switch"]
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the SAJ Modbus component."""

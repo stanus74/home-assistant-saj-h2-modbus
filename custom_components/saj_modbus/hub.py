@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import struct
 from datetime import timedelta
 from typing import List, Callable, Any, Dict, Optional, Tuple
 import inspect
@@ -10,15 +11,8 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.exceptions import ConnectionException, ModbusIOException
-#import numpy as np
-
-
-
 from pymodbus.client.mixin import ModbusClientMixin
-    
-import struct
 
-#from pymodbus.client.registers import ReadHoldingRegistersRequest
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 
@@ -174,7 +168,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             await self.ensure_connection()
             if not self.inverter_data:
                 self.inverter_data.update(await self.read_modbus_inverter_data())
-            combined_data = {**self.inverter_data}
+            combined_data = {**self.inverter_data, "charging_enabled": await self.get_charging_state()}
             for method in [
                 self.read_modbus_realtime_data,
                 self.read_additional_modbus_data_1_part_1,
@@ -188,6 +182,32 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 await asyncio.sleep(0.2)
             await self.close()
             return combined_data
+
+    async def get_charging_state(self) -> bool:
+        """Get the current charging control state."""
+        try:
+            regs = await self.try_read_registers(1, 0x3647, 1)  # Register for charging control
+            return bool(regs[0])
+        except Exception as e:
+            _LOGGER.error(f"Error reading charging state: {e}")
+            return False
+
+    async def set_charging(self, enable: bool) -> None:
+        """Set the charging control state."""
+        try:
+            await self.ensure_connection()
+            value = 1 if enable else 0
+            async with self._read_lock:  # Use the same lock for writing to ensure thread safety
+                response = await self._client.write_register(0x3647, value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set charging to: {enable}")
+                else:
+                    _LOGGER.error(f"Failed to set charging state: {response}")
+        except Exception as e:
+            _LOGGER.error(f"Error setting charging state: {e}")
+            raise
+        finally:
+            await self.close()
 
  
 
