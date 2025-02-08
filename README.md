@@ -4,6 +4,11 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
+## <span style="color:red;">Important: New Feature added: "Charge battery with mains power", see under Features</span>
+
+**when you like my work, support me ;-)**
+
+
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
 Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/saj-h2-modbus.zip)
