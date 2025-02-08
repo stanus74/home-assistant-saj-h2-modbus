@@ -1,6 +1,6 @@
 {
   "name": "SAJ H2 Inverter Modbus",
-  "content_integration": true,
+  "content_in_root": false,
   "homeassistant": "2025.1.0",
   "hacs": "1.28.4",
   "render_readme": true,
