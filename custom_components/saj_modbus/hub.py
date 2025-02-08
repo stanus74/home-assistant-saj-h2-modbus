@@ -173,6 +173,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.inverter_data.update(await self.read_modbus_inverter_data())
         combined_data = {**self.inverter_data}
 
+        # Loop über alle Methoden, die Dictionary-Daten liefern
         for method in [
             self.read_modbus_realtime_data,
             self.read_additional_modbus_data_1_part_1,
@@ -181,19 +182,32 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.read_additional_modbus_data_2_part_2,
             self.read_additional_modbus_data_3,
             self.read_additional_modbus_data_4,
-            self.read_battery_data,
-            self.get_charging_state  # Hier wird der simulierte Ladevorgangsstatus abgefragt.
+            self.read_battery_data
         ]:
             result = await method()
-            # Wenn das Ergebnis ein Dictionary ist, update combined_data; andernfalls (z. B. bei get_charging_state)
-            # gehe davon aus, dass es sich um einen booleschen Wert handelt, der den Ladezustand simuliert.
-            if isinstance(result, dict):
-                combined_data.update(result)
-            else:
-                combined_data["charging_enabled"] = result
+            # Hier gehen wir davon aus, dass jede Methode ein Dictionary zurückgibt.
+            combined_data.update(result)
             await asyncio.sleep(0.2)
         
-        # Echter Schreibvorgang: Überprüfe, ob ein pending charging state vorliegt
+        # Separater Aufruf, um den aktuellen Ladezustand abzufragen.
+        charging_state = await self.get_charging_state()
+        combined_data["charging_enabled"] = charging_state
+
+        # Schreibvorgang nur ausführen, wenn ein pending charging state gesetzt ist
+        # und sich vom aktuell gelesenen Zustand unterscheidet.
+        if self._pending_charging_state is not None:
+            if self._pending_charging_state != charging_state:
+                await self._handle_pending_charging_state()
+            else:
+                _LOGGER.info("Charging state unchanged, no write required.")
+                self._pending_charging_state = None
+        
+        await self.close()
+        return combined_data
+
+
+    async def _handle_pending_charging_state(self) -> dict:
+        """Schreibt den pending charging state in Register 0x3647 und gibt ein leeres Dictionary zurück."""
         if self._pending_charging_state is not None:
             value = 1 if self._pending_charging_state else 0
             async with self._read_lock:
@@ -202,11 +216,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
                 else:
                     _LOGGER.error(f"Failed to set charging state: {response}")
-            # Nach dem Schreibvorgang wird der pending state zurückgesetzt
+            # Nach dem Schreibvorgang wird der pending state zurückgesetzt.
             self._pending_charging_state = None
-        
-        await self.close()
-        return combined_data
+        return {}
 
 
     async def get_charging_state(self) -> bool:
@@ -218,15 +230,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Error reading charging state: {e}")
             return False
 
+
     async def set_charging(self, enable: bool) -> None:
         """Set the charging control state by scheduling it for the next update cycle."""
-        # Speichere den gewünschten Zustand in einer internen Variable
         self._pending_charging_state = enable
-        # Optional: Ein sofortiges Update anfordern, damit der Schreibvorgang nicht lange warten muss
-        await self.async_request_refresh()
+        # Der Aufruf von async_request_refresh() wurde entfernt, damit der Schreibvorgang
+        # ausschließlich im regulären Update-Zyklus erfolgt.
 
-
- 
 
     async def _read_modbus_data(
         self,
