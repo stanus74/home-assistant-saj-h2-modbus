@@ -41,9 +41,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._max_retries = 2
         self._retry_delay = 1
         self._operation_timeout = 30
-        
-        # Hier wird der pending charging state initialisiert:
-        self._pending_charging_state: Optional[bool] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new optimized instance of the AsyncModbusTcpClient."""
@@ -166,48 +163,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
             raise ConnectionException(f"Read operation failed for address {address} after {max_retries} attempts")
 
-    
+
     async def _async_update_data(self) -> Dict[str, Any]:
-        await self.ensure_connection()
-        if not self.inverter_data:
-            self.inverter_data.update(await self.read_modbus_inverter_data())
-        combined_data = {**self.inverter_data}
-
-        for method in [
-            self.read_modbus_realtime_data,
-            self.read_additional_modbus_data_1_part_1,
-            self.read_additional_modbus_data_1_part_2,
-            self.read_additional_modbus_data_2_part_1,
-            self.read_additional_modbus_data_2_part_2,
-            self.read_additional_modbus_data_3,
-            self.read_additional_modbus_data_4,
-            self.read_battery_data,
-            self.get_charging_state  # Hier wird der simulierte Ladevorgangsstatus abgefragt.
-        ]:
-            result = await method()
-            # Wenn das Ergebnis ein Dictionary ist, update combined_data; andernfalls (z. B. bei get_charging_state)
-            # gehe davon aus, dass es sich um einen booleschen Wert handelt, der den Ladezustand simuliert.
-            if isinstance(result, dict):
-                combined_data.update(result)
-            else:
-                combined_data["charging_enabled"] = result
-            await asyncio.sleep(0.2)
-        
-        # Echter Schreibvorgang: Überprüfe, ob ein pending charging state vorliegt
-        if self._pending_charging_state is not None:
-            value = 1 if self._pending_charging_state else 0
-            async with self._read_lock:
-                response = await self._client.write_register(0x3647, value)
-                if response and not response.isError():
-                    _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
-                else:
-                    _LOGGER.error(f"Failed to set charging state: {response}")
-            # Nach dem Schreibvorgang wird der pending state zurückgesetzt
-            self._pending_charging_state = None
-        
-        await self.close()
-        return combined_data
-
+            await self.ensure_connection()
+            if not self.inverter_data:
+                self.inverter_data.update(await self.read_modbus_inverter_data())
+            combined_data = {**self.inverter_data, "charging_enabled": await self.get_charging_state()}
+            for method in [
+                self.read_modbus_realtime_data,
+                self.read_additional_modbus_data_1_part_1,
+                self.read_additional_modbus_data_1_part_2,
+                self.read_additional_modbus_data_2_part_1,
+                self.read_additional_modbus_data_2_part_2,
+                self.read_additional_modbus_data_3,
+                self.read_additional_modbus_data_4
+            ]:
+                combined_data.update(await method())
+                await asyncio.sleep(0.2)
+            await self.close()
+            return combined_data
 
     async def get_charging_state(self) -> bool:
         """Get the current charging control state."""
@@ -219,12 +193,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return False
 
     async def set_charging(self, enable: bool) -> None:
-        """Set the charging control state by scheduling it for the next update cycle."""
-        # Speichere den gewünschten Zustand in einer internen Variable
-        self._pending_charging_state = enable
-        # Optional: Ein sofortiges Update anfordern, damit der Schreibvorgang nicht lange warten muss
-        await self.async_request_refresh()
-
+        """Set the charging control state."""
+        try:
+            await self.ensure_connection()
+            value = 1 if enable else 0
+            async with self._read_lock:  # Use the same lock for writing to ensure thread safety
+                response = await self._client.write_register(0x3647, value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set charging to: {enable}")
+                else:
+                    _LOGGER.error(f"Failed to set charging state: {response}")
+        except Exception as e:
+            _LOGGER.error(f"Error setting charging state: {e}")
+            raise
+        finally:
+            await self.close()
 
  
 
