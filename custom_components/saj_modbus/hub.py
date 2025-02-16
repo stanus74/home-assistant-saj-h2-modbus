@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import struct
 from datetime import timedelta
 from typing import List, Callable, Any, Dict, Optional, Tuple
 import inspect
@@ -10,8 +11,11 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+from pymodbus.client.mixin import ModbusClientMixin
+
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +41,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._max_retries = 2
         self._retry_delay = 1
         self._operation_timeout = 30
+        
+        # Initialize the pending charging state:
+        self._pending_charging_state: Optional[bool] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new optimized instance of the AsyncModbusTcpClient."""
@@ -131,9 +138,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             for attempt in range(max_retries):
                 try:
                     async with self._read_lock:
-                        
+                       
+                    
                         response = await self._client.read_holding_registers(address=address, count=count)
-                        
+
+                    
+                    
                     if (not response) or response.isError() or len(response.registers) != count:
                         raise ModbusIOException(f"Invalid response from address {address}")
                         
@@ -156,96 +166,184 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
             raise ConnectionException(f"Read operation failed for address {address} after {max_retries} attempts")
 
-
+    
     async def _async_update_data(self) -> Dict[str, Any]:
-            await self.ensure_connection()
-            if not self.inverter_data:
-                self.inverter_data.update(await self.read_modbus_inverter_data())
-            combined_data = {**self.inverter_data}
-            for method in [
-                self.read_modbus_realtime_data,
-                self.read_additional_modbus_data_1_part_1,
-                self.read_additional_modbus_data_1_part_2,
-                self.read_additional_modbus_data_2_part_1,
-                self.read_additional_modbus_data_2_part_2,
-                self.read_additional_modbus_data_3,
-                self.read_additional_modbus_data_4
-            ]:
-                combined_data.update(await method())
-                await asyncio.sleep(0.2)
-            await self.close()
-            return combined_data
+        await self.ensure_connection()
+        if not self.inverter_data:
+            self.inverter_data.update(await self.read_modbus_inverter_data())
+        combined_data = {**self.inverter_data}
+
+        # Loop through all methods that provide dictionary data
+        for method in [
+            self.read_modbus_realtime_data,
+            self.read_additional_modbus_data_1_part_1,
+            self.read_additional_modbus_data_1_part_2,
+            self.read_additional_modbus_data_2_part_1,
+            self.read_additional_modbus_data_2_part_2,
+            self.read_additional_modbus_data_3,
+            self.read_additional_modbus_data_4,
+            self.read_battery_data
+        ]:
+            result = await method()
+            # Here we assume that each method returns a dictionary.
+            combined_data.update(result)
+            await asyncio.sleep(0.2)
+        
+        # Separate call to query the current charging state.
+        charging_state = await self.get_charging_state()
+        combined_data["charging_enabled"] = charging_state
+
+        # Only execute write operation when a pending charging state is set
+        # and differs from the currently read state.
+        if self._pending_charging_state is not None:
+            if self._pending_charging_state != charging_state:
+                await self._handle_pending_charging_state()
+            else:
+                _LOGGER.info("Charging state unchanged, no write required.")
+                self._pending_charging_state = None
+        
+        await self.close()
+        return combined_data
+
+
+    async def _handle_pending_charging_state(self) -> dict:
+        """Writes the pending charging state to register 0x3647 and returns an empty dictionary."""
+        if self._pending_charging_state is not None:
+            value = 1 if self._pending_charging_state else 0
+            async with self._read_lock:
+                response = await self._client.write_register(0x3647, value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
+                else:
+                    _LOGGER.error(f"Failed to set charging state: {response}")
+            # After the write operation, the pending state is reset.
+            self._pending_charging_state = None
+        return {}
+
+
+    async def get_charging_state(self) -> bool:
+        """Get the current charging control state."""
+        try:
+            regs = await self.try_read_registers(1, 0x3647, 1)  # Register for charging control
+            return bool(regs[0])
+        except Exception as e:
+            _LOGGER.error(f"Error reading charging state: {e}")
+            return False
+
+
+    async def set_charging(self, enable: bool) -> None:
+        """Set the charging control state by scheduling it for the next update cycle."""
+        self._pending_charging_state = enable
+        # The call to async_request_refresh() was removed so that the write operation
+        # occurs exclusively in the regular update cycle.
 
 
     async def _read_modbus_data(
-            self,
-            start_address: int,
-            count: int,
-            decode_instructions: List[tuple],
-            data_key: str,
-            default_decoder: str = "decode_16bit_uint",
-            default_factor: float = 0.01
-        ) -> Dict[str, Any]:
-            try:
-                regs = await self.try_read_registers(1, start_address, count)
-                decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
-                new_data = {}
-
-                for instruction in decode_instructions:
-                    key, method, factor = (instruction + (default_factor,))[:3]
-                    method = method or default_decoder
-
-                    if method == "skip_bytes":
-                        decoder.skip_bytes(factor)
-                        continue
-
-                    if not key:
-                        continue
-
-                    try:
-                        value = getattr(decoder, method)()
-                        if isinstance(value, bytes):
-                            value = value.decode("ascii", errors="replace").strip()
-                        new_data[key] = round(value * factor, 2) if factor != 1 else value
-                    except Exception as e:
-                        _LOGGER.error(f"Error decoding {key}: {e}")
-                        return {}
-
-                return new_data
-            except Exception as e:
-                _LOGGER.error(f"Error reading modbus data: {e}")
+        self,
+        start_address: int,
+        count: int,
+        decode_instructions: List[tuple],
+        data_key: str,
+        default_decoder: str = "decode_16bit_uint",
+        default_factor: float = 0.01
+    ) -> Dict[str, Any]:
+        try:
+            regs = await self.try_read_registers(1, start_address, count)
+            if not regs:
+                _LOGGER.error(f"Error reading modbus data: No response for {data_key}")
                 return {}
 
+            new_data = {}
+            index = 0
+
+            for instruction in decode_instructions:
+                key, method, factor = (instruction + (default_factor,))[:3]
+                method = method or default_decoder
+
+                if method == "skip_bytes":
+                    index += factor // 2  # Each register is 2 bytes in size
+                    continue
+
+                if not key:
+                    continue
+
+                try:
+                    raw_value = regs[index]
+
+                    # Selection of the correct decoding method
+                    if method == "decode_16bit_int":
+                        value = self._client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.INT16)
+                    elif method == "decode_16bit_uint":
+                        value = self._client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.UINT16)
+                    elif method == "decode_32bit_uint":
+                        if index + 1 < len(regs):
+                            value = self._client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
+                            index += 1  # 32-bit values occupy two registers
+                        else:
+                            value = 0
+                    else:
+                        value = raw_value  # Default value if no conversion is necessary
+
+                    new_data[key] = round(value * factor, 2) if factor != 1 else value
+                    index += 1
+
+                except Exception as e:
+                    _LOGGER.error(f"Error decoding {key}: {e}")
+                    return {}
+
+            return new_data
+
+        except Exception as e:
+            _LOGGER.error(f"Error reading modbus data: {e}")
+            return {}
 
 
     async def read_modbus_inverter_data(self) -> Dict[str, Any]:
-        """Reads basic inverter data."""
+        """Reads basic inverter data using the pymodbus 3.9 API, without BinaryPayloadDecoder."""
         try:
+            # Read 29 registers starting from address 0x8F00
             regs = await self.try_read_registers(1, 0x8F00, 29)
-            decoder = BinaryPayloadDecoder.fromRegisters(regs, byteorder=Endian.BIG)
             data = {}
+            index = 0
 
-            # Basic parameters
+            # Basic parameters: devtype and subtype as 16-bit unsigned values
             for key in ["devtype", "subtype"]:
-                data[key] = decoder.decode_16bit_uint()
+                value = self._client.convert_from_registers(
+                    [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+                )
+                data[key] = value
+                index += 1
 
-            # Communication version
-            data["commver"] = round(decoder.decode_16bit_uint() * 0.001, 3)
+            # Communication version: 16-bit unsigned, multiplied by 0.001 and rounded to 3 decimal places
+            commver = self._client.convert_from_registers(
+                [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+            )
+            data["commver"] = round(commver * 0.001, 3)
+            index += 1
 
-            # Serial number and PC
+            # Serial number and PC: 20 bytes each (equivalent to 10 registers)
             for key in ["sn", "pc"]:
-                data[key] = decoder.decode_string(20).decode("ascii", errors="replace").strip()
+                # Get the next 10 registers
+                reg_slice = regs[index : index + 10]
+                # Convert each register (16-bit) to 2 bytes in Big-Endian format
+                raw_bytes = b"".join(struct.pack(">H", r) for r in reg_slice)
+                data[key] = raw_bytes.decode("ascii", errors="replace").strip()
+                index += 10
 
-            # Hardware versions
+            # Hardware version numbers: Each as 16-bit unsigned, multiplied by 0.001
             for key in ["dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]:
-                data[key] = round(decoder.decode_16bit_uint() * 0.001, 3)
+                value = self._client.convert_from_registers(
+                    [regs[index]], ModbusClientMixin.DATATYPE.UINT16
+                )
+                data[key] = round(value * 0.001, 3)
+                index += 1
 
-            
             return data
 
         except Exception as e:
             _LOGGER.error(f"Error reading inverter data: {e}")
             return {}
+
 
     async def read_modbus_realtime_data(self) -> Dict[str, Any]:
         """Reads real-time operating data."""
@@ -383,19 +481,26 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_additional_modbus_data_3(self) -> Dict[str, Any]:
-        """Reads additional operating data (Set 3)."""
-        data_keys = [
-            "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
-            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
-            "feedin_today_energy_2", "feedin_month_energy_2", "feedin_year_energy_2", "feedin_total_energy_2",
-            "feedin_today_energy_3", "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
-            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
-            "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total",
+        
+       
+        data_keys_part_3 = [
+            "today_pv_energy2", "month_pv_energy2", "year_pv_energy2",
+            "total_pv_energy2", "today_pv_energy3", "month_pv_energy3",
+            "year_pv_energy3", "total_pv_energy3", "sell_today_energy_2",
+            "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
+            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3",
+            "sell_total_energy_3", "feedin_today_energy_2", "feedin_month_energy_2",
+            "feedin_year_energy_2", "feedin_total_energy_2", "feedin_today_energy_3",
+            "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
+            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year",
+            "sum_feed_in_total", "sum_sell_today", "sum_sell_month",
+            "sum_sell_year", "sum_sell_total"
         ]
-        decode_instructions = [(key, "decode_32bit_uint", 0.01) for key in data_keys]
-        return await self._read_modbus_data(16711, 48, decode_instructions, 'additional_data_3')
+        decode_instructions_part_3 = [(key, "decode_32bit_uint", 0.01) for key in data_keys_part_3]
         
-        
+        return await self._read_modbus_data(16695, 64, decode_instructions_part_3, 'additional_data_3')
+
+     
         
     async def read_additional_modbus_data_4(self) -> Dict[str, Any]:
             """
@@ -431,3 +536,74 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 16433, 21, decode_instructions, "grid_phase_data",
                 default_decoder="decode_16bit_uint", default_factor=1
             )
+            
+            
+    async def read_battery_data(self) -> Dict[str, Any]:
+        """
+        Reads battery data from registers 40960 to 41015.
+        
+        Note: There is a gap sector between register 40995 (Bat4CycleNum) and 
+        41002 (Bat1DischarCapH), which is skipped using 'skip_bytes'.
+        """
+        decode_instructions = [
+        # Registers 40960 to 40995 (first 36 registers)
+        ("BatNum",            "decode_16bit_uint", 1),         # 40960
+        ("BatCapcity",        "decode_16bit_uint", 1),         # 40961
+        ("Bat1FaultMSG",      "decode_16bit_uint", 1),         # 40962
+        ("Bat1WarnMSG",       "decode_16bit_uint", 1),         # 40963
+        ("Bat2FaultMSG",      "decode_16bit_uint", 1),         # 40964
+        ("Bat2WarnMSG",       "decode_16bit_uint", 1),         # 40965
+        ("Bat3FaultMSG",      "decode_16bit_uint", 1),         # 40966
+        ("Bat3WarnMSG",       "decode_16bit_uint", 1),         # 40967
+        ("Bat4FaultMSG",      "decode_16bit_uint", 1),         # 40968
+        ("Bat4WarnMSG",       "decode_16bit_uint", 1),         # 40969
+        ("BatUserCap",        "decode_16bit_uint", 1),         # 40970
+        ("BatOnline",         "decode_16bit_uint", 1),         # 40971
+        ("Bat1SOC",           "decode_16bit_uint", 0.01),      # 40972, Ratio -2 → 0.01
+        ("Bat1SOH",           "decode_16bit_uint", 0.01),      # 40973, Ratio -2
+        ("Bat1Voltage",       "decode_16bit_uint", 0.1),       # 40974, Ratio -1 → 0.1
+        ("Bat1Current",       "decode_16bit_int", 0.01),       # 40975, Int16, Ratio -2
+        ("Bat1Temperature",   "decode_16bit_int", 0.1),        # 40976, Int16, Ratio -1
+        ("Bat1CycleNum",      "decode_16bit_uint", 1),         # 40977
+        ("Bat2SOC",           "decode_16bit_uint", 0.01),      # 40978
+        ("Bat2SOH",           "decode_16bit_uint", 0.01),      # 40979
+        ("Bat2Voltage",       "decode_16bit_uint", 0.1),       # 40980
+        ("Bat2Current",       "decode_16bit_int", 0.01),       # 40981
+        ("Bat2Temperature",   "decode_16bit_int", 0.1),        # 40982
+        ("Bat2CycleNum",      "decode_16bit_uint", 1),         # 40983
+        ("Bat3SOC",           "decode_16bit_uint", 0.01),      # 40984
+        ("Bat3SOH",           "decode_16bit_uint", 0.01),      # 40985
+        ("Bat3Voltage",       "decode_16bit_uint", 0.1),       # 40986
+        ("Bat3Current",       "decode_16bit_int", 0.01),       # 40987
+        ("Bat3Temperature",   "decode_16bit_int", 0.1),        # 40988
+        ("Bat3CycleNum",      "decode_16bit_uint", 1),         # 40989
+        ("Bat4SOC",           "decode_16bit_uint", 0.01),      # 40990
+        ("Bat4SOH",           "decode_16bit_uint", 0.01),      # 40991
+        ("Bat4Voltage",       "decode_16bit_uint", 0.1),       # 40992
+        ("Bat4Current",       "decode_16bit_int", 0.01),       # 40993
+        ("Bat4Temperature",   "decode_16bit_int", 0.1),        # 40994
+        ("Bat4CycleNum",      "decode_16bit_uint", 1),         # 40995
+        
+        # --> Insert register jump here (skip registers 40996 to 41001):
+        (None, "skip_bytes", 12),  # 6 Register * 2 Bytes = 12 Bytes
+        
+        # Registers 41002 to 41015 (next 14 registers)
+        ("Bat1DischarCapH",   "decode_16bit_uint", 1),         # 41002
+        ("Bat1DischarCapL",   "decode_16bit_uint", 1),         # 41003
+        ("Bat2DischarCapH",   "decode_16bit_uint", 1),         # 41004
+        ("Bat2DischarCapL",   "decode_16bit_uint", 1),         # 41005
+        ("Bat3DischarCapH",   "decode_16bit_uint", 1),         # 41006
+        ("Bat3DischarCapL",   "decode_16bit_uint", 1),         # 41007
+        ("Bat4DischarCapH",   "decode_16bit_uint", 1),         # 41008
+        ("Bat4DischarCapL",   "decode_16bit_uint", 1),         # 41009
+        ("BatProtHigh",       "decode_16bit_uint", 0.1),       # 41010, Ratio -1 → 0.1
+        ("BatProtLow",        "decode_16bit_uint", 0.1),       # 41011, Ratio -1 → 0.1
+        ("Bat_Chargevoltage", "decode_16bit_uint", 0.1),       # 41012, Ratio -1 → 0.1
+        ("Bat_DisCutOffVolt", "decode_16bit_uint", 0.1),       # 41013, Ratio -1 → 0.1
+        ("BatDisCurrLimit",   "decode_16bit_uint", 0.1),       # 41014, Ratio -1 → 0.1
+        ("BatChaCurrLimit",   "decode_16bit_uint", 0.1),       # 41015, Ratio -1 → 0.1
+        
+        ]
+       
+        
+        return await self._read_modbus_data(40960, 56, decode_instructions, 'battery_data')

@@ -173,8 +173,17 @@ voltage_sensors = [
     {"name": "R-Phase Grid Voltage", "key": "RGridVolt", "icon": "sine-wave", "enable": False},
     {"name": "S-Phase Grid Voltage", "key": "SGridVolt", "icon": "sine-wave", "enable": False},
     {"name": "T-Phase Grid Voltage", "key": "TGridVolt", "icon": "sine-wave", "enable": False},
-  
+    
+    {"name": "Battery 1 Voltage", "key": "Bat1Voltage", "icon": "flash", "enable": True},
+    {"name": "Battery 2 Voltage", "key": "Bat2Voltage", "icon": "flash", "enable": True},
+    {"name": "Battery 3 Voltage", "key": "Bat3Voltage", "icon": "flash", "enable": True},
+    {"name": "Battery 4 Voltage", "key": "Bat4Voltage", "icon": "flash", "enable": True},
+    {"name": "Battery Voltage High Protection", "key": "BatProtHigh", "icon": "alert", "enable": True},
+    {"name": "Battery Voltage Low Warning", "key": "BatProtLow", "icon": "alert", "enable": True},
+    {"name": "Battery Charge Voltage", "key": "Bat_Chargevoltage", "icon": "battery-charging", "enable": True},
+    {"name": "Battery Discharge Cut-off Voltage", "key": "Bat_DisCutOffVolt", "icon": "battery", "enable": True},
 ]
+
 
 
 frequency_sensors = [
@@ -194,15 +203,30 @@ current_sensors = [
     {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
-        {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
-
+    
+    {"name": "Battery 1 Current", "key": "Bat1Current", "icon": "current-dc", "enable": True},
+    {"name": "Battery 2 Current", "key": "Bat2Current", "icon": "current-dc", "enable": True},
+    {"name": "Battery 3 Current", "key": "Bat3Current", "icon": "current-dc", "enable": True},
+    {"name": "Battery 4 Current", "key": "Bat4Current", "icon": "current-dc", "enable": True},
+    {"name": "Battery Discharge Current Limit", "key": "BatDisCurrLimit", "icon": "battery", "enable": True},
+    {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
 ]
 
 battery_sensors = [
-    {"name": "Battery Energy Percent", "key": "batEnergyPercent", "icon": "battery-charging-100", "enable": True}
+    {"name": "Battery Energy Percent", "key": "batEnergyPercent", "icon": "battery-charging-100", "enable": True},
+    {"name": "Battery 1 SOC", "key": "Bat1SOC", "icon": "battery", "enable": True},
+    {"name": "Battery 1 SOH", "key": "Bat1SOH", "icon": "battery", "enable": True},
+    {"name": "Battery 2 SOC", "key": "Bat2SOC", "icon": "battery", "enable": True},
+    {"name": "Battery 2 SOH", "key": "Bat2SOH", "icon": "battery", "enable": True},
+    {"name": "Battery 3 SOC", "key": "Bat3SOC", "icon": "battery", "enable": True},
+    {"name": "Battery 3 SOH", "key": "Bat3SOH", "icon": "battery", "enable": True},
+    {"name": "Battery 4 SOC", "key": "Bat4SOC", "icon": "battery", "enable": True},
+    {"name": "Battery 4 SOH", "key": "Bat4SOH", "icon": "battery", "enable": True},
 ]
+
 
 
 
@@ -216,7 +240,14 @@ temperature_sensors = [
     {"name": "Environment Temperature", "key": "AmbTemp", "icon": "thermometer-lines"},
     {"name": "Battery Temperature", "key": "BatTemp", "icon": "battery-thermometer"},
     
-]
+    {"name": "Battery 1 Temperature", "key": "Bat1Temperature", "icon": "thermometer", "enable": True},
+    {"name": "Battery 2 Temperature", "key": "Bat2Temperature", "icon": "thermometer", "enable": True},
+    {"name": "Battery 3 Temperature", "key": "Bat3Temperature", "icon": "thermometer", "enable": True},
+    {"name": "Battery 4 Temperature", "key": "Bat4Temperature", "icon": "thermometer", "enable": True},
+] 
+
+
+
 
 iso_resistance_sensors = [
     {"name": "PV1+ Isolation Resistance", "key": "iso1", "icon": "omega"},
@@ -248,7 +279,27 @@ information_sensors = [
     {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": False},
     {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": False},
     {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": False},
+    
+    {"name": "Battery Number", "key": "BatNum", "icon": "numeric", "enable": True},
+    {"name": "Battery Capacity", "key": "BatCapcity", "icon": "battery", "enable": True},
+    {"name": "Battery User Capacity", "key": "BatUserCap", "icon": "battery", "enable": True},
+    {"name": "Battery Online", "key": "BatOnline", "icon": "cloud", "enable": True},
+    {"name": "Battery 1 Cycle Count", "key": "Bat1CycleNum", "icon": "counter", "enable": True},
+    {"name": "Battery 2 Cycle Count", "key": "Bat2CycleNum", "icon": "counter", "enable": True},
+    {"name": "Battery 3 Cycle Count", "key": "Bat3CycleNum", "icon": "counter", "enable": True},
+    {"name": "Battery 4 Cycle Count", "key": "Bat4CycleNum", "icon": "counter", "enable": True},
+    
+    {"name": "Battery 1 Fault", "key": "Bat1FaultMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 1 Warning", "key": "Bat1WarnMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 2 Fault", "key": "Bat2FaultMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 2 Warning", "key": "Bat2WarnMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 3 Fault", "key": "Bat3FaultMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 3 Warning", "key": "Bat3WarnMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 4 Fault", "key": "Bat4FaultMSG", "icon": "alert", "enable": True},
+    {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": True},
 ]
+    
+
 
 energy_sensors = [
     {"name": "Power current day", "key": "todayenergy", "enable": False, "icon": "solar-power"},
@@ -307,6 +358,24 @@ energy_sensors = [
     {"name": "Backup Month Load", "key": "backup_month_load", "enable": False, "icon": "lightning-bolt"},
     {"name": "Backup Year Load", "key": "backup_year_load", "enable": False, "icon": "lightning-bolt"},
     {"name": "Backup Total Load", "key": "backup_total_load", "enable": False, "icon": "lightning-bolt"},
+
+    {"name": "Battery Pack 1 Discharge High", "key": "Bat1DischarCapH", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 1 Discharge Low", "key": "Bat1DischarCapL", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 2 Discharge High", "key": "Bat2DischarCapH", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 2 Discharge Low", "key": "Bat2DischarCapL", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 3 Discharge High", "key": "Bat3DischarCapH", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 3 Discharge Low", "key": "Bat3DischarCapL", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 4 Discharge High", "key": "Bat4DischarCapH", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 4 Discharge Low", "key": "Bat4DischarCapL", "icon": "battery", "enable": True},
+
+    {"name": "Today PV Energy 2", "key": "today_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 2", "key": "month_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 2", "key": "year_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Total PV Energy 2", "key": "total_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Today PV Energy 3", "key": "today_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 3", "key": "month_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 3", "key": "year_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Total PV Energy 3", "key": "total_pv_energy3", "enable": False, "icon": "solar-power"},
 ]
     
 
