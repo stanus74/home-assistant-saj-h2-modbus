@@ -1,4 +1,4 @@
-"""Plattform für schreibbare SAJ Modbus Number-Entitäten."""
+"""Platform for writable SAJ Modbus Number entities."""
 import logging
 import asyncio
 
@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Richte die schreibbaren Number-Entitäten für First Charge ein."""
+    """Set up the writable Number entities for First Charge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     entities = [
         SajFirstChargeDayMaskInputEntity(hub),
@@ -26,7 +26,7 @@ async def async_setup_entry(
 
 
 class SajFirstChargeDayMaskInputEntity(NumberEntity):
-    """Schreibbare Entität für den First Charge Day Mask Wert (als Bitmaske 0-127)."""
+    """Writable entity for the First Charge Day Mask value (as bitmask 0-127)."""
 
     def __init__(self, hub):
         """Initialize the number entity."""
@@ -46,14 +46,14 @@ class SajFirstChargeDayMaskInputEntity(NumberEntity):
         return self._attr_native_value
 
     async def async_update(self) -> None:
-        # Entferne den Aufruf von read_first_charge_data, um zusätzliche Anfragen zu vermeiden.
+        # Remove the call to read_first_charge_data to avoid additional requests.
         pass
 
     async def async_set_native_value(self, value: float) -> None:
-        """Setze einen neuen Day Mask Wert mit strikter Validierung."""
-        value = int(value)  # Konvertiere zu Integer
+        """Set a new Day Mask value with strict validation."""
+        value = int(value)  # Convert to Integer
         if not 0 <= value <= 127:
-            _LOGGER.error(f"Ungültiger Day Mask Wert: {value}. Wert muss zwischen 0 und 127 liegen.")
+            _LOGGER.error(f"Invalid Day Mask value: {value}. Value must be between 0 and 127.")
             return
             
         self._attr_native_value = value
@@ -62,7 +62,7 @@ class SajFirstChargeDayMaskInputEntity(NumberEntity):
 
 
 class SajFirstChargePowerPercentInputEntity(NumberEntity):
-    """Schreibbare Entität für den First Charge Power Percent Wert (in %)."""
+    """Writable entity for the First Charge Power Percent value (in %)."""
 
     def __init__(self, hub):
         """Initialize the number entity."""
@@ -82,14 +82,14 @@ class SajFirstChargePowerPercentInputEntity(NumberEntity):
         return self._attr_native_value
 
     async def async_update(self) -> None:
-        # Entferne den Aufruf von read_first_charge_data, um zusätzliche Anfragen zu vermeiden.
+        # Remove the call to read_first_charge_data to avoid additional requests.
         pass
 
     async def async_set_native_value(self, value: float) -> None:
-        """Setze einen neuen Prozentwert mit strikter Validierung."""
-        value = int(value)  # Konvertiere zu Integer
+        """Set a new percentage value with strict validation."""
+        value = int(value)  # Convert to Integer
         if not 0 <= value <= 25:
-            _LOGGER.error(f"Ungültiger Prozentwert: {value}. Wert muss zwischen 0 und 25 liegen.")
+            _LOGGER.error(f"Invalid percentage value: {value}. Value must be between 0 and 25.")
             return
             
         self._attr_native_value = value
