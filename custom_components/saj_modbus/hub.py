@@ -42,7 +42,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._retry_delay = 1
         self._operation_timeout = 30
         
-        # Hier wird der pending charging state initialisiert:
+        # Initialize the pending charging state:
         self._pending_charging_state: Optional[bool] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
@@ -173,7 +173,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.inverter_data.update(await self.read_modbus_inverter_data())
         combined_data = {**self.inverter_data}
 
-        # Loop über alle Methoden, die Dictionary-Daten liefern
+        # Loop through all methods that provide dictionary data
         for method in [
             self.read_modbus_realtime_data,
             self.read_additional_modbus_data_1_part_1,
@@ -185,16 +185,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.read_battery_data
         ]:
             result = await method()
-            # Hier gehen wir davon aus, dass jede Methode ein Dictionary zurückgibt.
+            # Here we assume that each method returns a dictionary.
             combined_data.update(result)
             await asyncio.sleep(0.2)
         
-        # Separater Aufruf, um den aktuellen Ladezustand abzufragen.
+        # Separate call to query the current charging state.
         charging_state = await self.get_charging_state()
         combined_data["charging_enabled"] = charging_state
 
-        # Schreibvorgang nur ausführen, wenn ein pending charging state gesetzt ist
-        # und sich vom aktuell gelesenen Zustand unterscheidet.
+        # Only execute write operation when a pending charging state is set
+        # and differs from the currently read state.
         if self._pending_charging_state is not None:
             if self._pending_charging_state != charging_state:
                 await self._handle_pending_charging_state()
@@ -207,7 +207,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def _handle_pending_charging_state(self) -> dict:
-        """Schreibt den pending charging state in Register 0x3647 und gibt ein leeres Dictionary zurück."""
+        """Writes the pending charging state to register 0x3647 and returns an empty dictionary."""
         if self._pending_charging_state is not None:
             value = 1 if self._pending_charging_state else 0
             async with self._read_lock:
@@ -216,7 +216,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
                 else:
                     _LOGGER.error(f"Failed to set charging state: {response}")
-            # Nach dem Schreibvorgang wird der pending state zurückgesetzt.
+            # After the write operation, the pending state is reset.
             self._pending_charging_state = None
         return {}
 
@@ -234,8 +234,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def set_charging(self, enable: bool) -> None:
         """Set the charging control state by scheduling it for the next update cycle."""
         self._pending_charging_state = enable
-        # Der Aufruf von async_request_refresh() wurde entfernt, damit der Schreibvorgang
-        # ausschließlich im regulären Update-Zyklus erfolgt.
+        # The call to async_request_refresh() was removed so that the write operation
+        # occurs exclusively in the regular update cycle.
 
 
     async def _read_modbus_data(
@@ -261,7 +261,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 method = method or default_decoder
 
                 if method == "skip_bytes":
-                    index += factor // 2  # Jedes Register ist 2 Bytes groß
+                    index += factor // 2  # Each register is 2 bytes in size
                     continue
 
                 if not key:
@@ -270,7 +270,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 try:
                     raw_value = regs[index]
 
-                    # Auswahl der richtigen Dekodierungsmethode
+                    # Selection of the correct decoding method
                     if method == "decode_16bit_int":
                         value = self._client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.INT16)
                     elif method == "decode_16bit_uint":
@@ -278,11 +278,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     elif method == "decode_32bit_uint":
                         if index + 1 < len(regs):
                             value = self._client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
-                            index += 1  # 32-Bit-Werte belegen zwei Register
+                            index += 1  # 32-bit values occupy two registers
                         else:
                             value = 0
                     else:
-                        value = raw_value  # Standardwert, falls keine Konvertierung notwendig ist
+                        value = raw_value  # Default value if no conversion is necessary
 
                     new_data[key] = round(value * factor, 2) if factor != 1 else value
                     index += 1
@@ -299,14 +299,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_modbus_inverter_data(self) -> Dict[str, Any]:
-        """Liest Basisdaten des Wechselrichters mithilfe der pymodbus 3.9 API, ohne BinaryPayloadDecoder."""
+        """Reads basic inverter data using the pymodbus 3.9 API, without BinaryPayloadDecoder."""
         try:
-            # Lese 29 Register ab Adresse 0x8F00
+            # Read 29 registers starting from address 0x8F00
             regs = await self.try_read_registers(1, 0x8F00, 29)
             data = {}
             index = 0
 
-            # Basic parameters: devtype und subtype als 16-Bit unsigned Werte
+            # Basic parameters: devtype and subtype as 16-bit unsigned values
             for key in ["devtype", "subtype"]:
                 value = self._client.convert_from_registers(
                     [regs[index]], ModbusClientMixin.DATATYPE.UINT16
@@ -314,23 +314,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 data[key] = value
                 index += 1
 
-            # Kommunikationsversion: 16-Bit unsigned, multipliziert mit 0.001 und auf 3 Dezimalstellen gerundet
+            # Communication version: 16-bit unsigned, multiplied by 0.001 and rounded to 3 decimal places
             commver = self._client.convert_from_registers(
                 [regs[index]], ModbusClientMixin.DATATYPE.UINT16
             )
             data["commver"] = round(commver * 0.001, 3)
             index += 1
 
-            # Serial number und PC: Jeweils 20 Bytes (entspricht 10 Registern)
+            # Serial number and PC: 20 bytes each (equivalent to 10 registers)
             for key in ["sn", "pc"]:
-                # Hole die nächsten 10 Register
+                # Get the next 10 registers
                 reg_slice = regs[index : index + 10]
-                # Jedes Register (16-Bit) in 2 Byte im Big‑Endian-Format umwandeln
+                # Convert each register (16-bit) to 2 bytes in Big-Endian format
                 raw_bytes = b"".join(struct.pack(">H", r) for r in reg_slice)
                 data[key] = raw_bytes.decode("ascii", errors="replace").strip()
                 index += 10
 
-            # Hardwareversionsnummern: Jeweils als 16-Bit unsigned, multipliziert mit 0.001
+            # Hardware version numbers: Each as 16-bit unsigned, multiplied by 0.001
             for key in ["dv", "mcv", "scv", "disphwversion", "ctrlhwversion", "powerhwversion"]:
                 value = self._client.convert_from_registers(
                     [regs[index]], ModbusClientMixin.DATATYPE.UINT16
@@ -540,13 +540,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
     async def read_battery_data(self) -> Dict[str, Any]:
         """
-        Liest Batteriedaten aus den Registern 40960 bis 41015.
+        Reads battery data from registers 40960 to 41015.
         
-        Hinweis: Es gibt einen Lückensektor zwischen Register 40995 (Bat4CycleNum) und 
-        41002 (Bat1DischarCapH), der mit 'skip_bytes' übersprungen wird.
+        Note: There is a gap sector between register 40995 (Bat4CycleNum) and 
+        41002 (Bat1DischarCapH), which is skipped using 'skip_bytes'.
         """
         decode_instructions = [
-        # Register 40960 bis 40995 (erste 36 Register)
+        # Registers 40960 to 40995 (first 36 registers)
         ("BatNum",            "decode_16bit_uint", 1),         # 40960
         ("BatCapcity",        "decode_16bit_uint", 1),         # 40961
         ("Bat1FaultMSG",      "decode_16bit_uint", 1),         # 40962
@@ -584,10 +584,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         ("Bat4Temperature",   "decode_16bit_int", 0.1),        # 40994
         ("Bat4CycleNum",      "decode_16bit_uint", 1),         # 40995
         
-        # --> Hier Registersprung einfügen (Register 40996 bis 41001 überspringen):
+        # --> Insert register jump here (skip registers 40996 to 41001):
         (None, "skip_bytes", 12),  # 6 Register * 2 Bytes = 12 Bytes
         
-        # Register 41002 bis 41015 (nächste 14 Register)
+        # Registers 41002 to 41015 (next 14 registers)
         ("Bat1DischarCapH",   "decode_16bit_uint", 1),         # 41002
         ("Bat1DischarCapL",   "decode_16bit_uint", 1),         # 41003
         ("Bat2DischarCapH",   "decode_16bit_uint", 1),         # 41004
@@ -604,7 +604,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         ("BatChaCurrLimit",   "decode_16bit_uint", 0.1),       # 41015, Ratio -1 → 0.1
         
         ]
-
+       
         
-        # Insgesamt werden hier 56 Register ab 40960 ausgelesen.
         return await self._read_modbus_data(40960, 56, decode_instructions, 'battery_data')
