@@ -44,6 +44,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         # Initialize the pending charging state:
         self._pending_charging_state: Optional[bool] = None
+        
+         # Neue Pending-Variablen für First Charge:
+        self._pending_first_charge_start: Optional[str] = None  # Erwartet im Format "HH:MM"
+        self._pending_first_charge_end: Optional[str] = None    # Erwartet im Format "HH:MM"
+        self._pending_first_charge_day_mask: Optional[int] = None
+        self._pending_first_charge_power_percent: Optional[int] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new optimized instance of the AsyncModbusTcpClient."""
@@ -135,6 +141,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             base_delay: float = 2.0
         ) -> List[int]:
             """Reads Modbus registers with optimized error handling."""
+            
+            # Sicherstellen, dass ein Client vorhanden ist
+            #if self._client is None:
+            #    await self.ensure_connection()
+            
             for attempt in range(max_retries):
                 try:
                     async with self._read_lock:
@@ -182,7 +193,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.read_additional_modbus_data_2_part_2,
             self.read_additional_modbus_data_3,
             self.read_additional_modbus_data_4,
-            self.read_battery_data
+            self.read_battery_data,
+            self.read_first_charge_data,
+            
         ]:
             result = await method()
             # Here we assume that each method returns a dictionary.
@@ -198,12 +211,123 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if self._pending_charging_state is not None:
             if self._pending_charging_state != charging_state:
                 await self._handle_pending_charging_state()
+                charging_state = await self.get_charging_state()
+                combined_data["charging_enabled"] = charging_state
             else:
                 _LOGGER.info("Charging state unchanged, no write required.")
                 self._pending_charging_state = None
         
+        
+        # Falls neue First-Charge-Werte vorliegen, diese schreiben
+        if (self._pending_first_charge_start is not None or
+            self._pending_first_charge_end is not None or
+            self._pending_first_charge_day_mask is not None or
+            self._pending_first_charge_power_percent is not None):
+            _LOGGER.info(
+                "Writing First Charge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
+                self._pending_first_charge_start,
+                self._pending_first_charge_end,
+                self._pending_first_charge_day_mask,
+                self._pending_first_charge_power_percent
+            )
+            await self._handle_pending_first_charge_settings()
+            # Direkt nach dem Schreiben wird im nächsten Zyklus ausgelesen.
+
+        
+        
+        
+        
         await self.close()
         return combined_data
+        
+        
+        
+
+    async def _handle_pending_first_charge_settings(self) -> None:
+        """Schreibt die pending First-Charge-Werte in die Register 0x3606, 0x3607 und 0x3608."""
+        async with self._read_lock:
+            # Register 0x3606: Start Time (High Byte = Stunde, Low Byte = Minute)
+            if self._pending_first_charge_start is not None:
+                try:
+                    hour, minute = map(int, self._pending_first_charge_start.split(":"))
+                    value = (hour << 8) | minute
+                    response = await self._client.write_register(0x3606, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set first charge start time: {self._pending_first_charge_start}")
+                    else:
+                        _LOGGER.error(f"Failed to write first charge start time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing first charge start time: {e}")
+                finally:
+                    self._pending_first_charge_start = None
+
+            # Register 0x3607: End Time (High Byte = Stunde, Low Byte = Minute)
+            if self._pending_first_charge_end is not None:
+                try:
+                    hour, minute = map(int, self._pending_first_charge_end.split(":"))
+                    value = (hour << 8) | minute
+                    response = await self._client.write_register(0x3607, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set first charge end time: {self._pending_first_charge_end}")
+                    else:
+                        _LOGGER.error(f"Failed to write first charge end time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing first charge end time: {e}")
+                finally:
+                    self._pending_first_charge_end = None
+
+            # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
+            if self._pending_first_charge_day_mask is not None or self._pending_first_charge_power_percent is not None:
+                try:
+                    # Zuerst den aktuellen Registerwert für 0x3608 auslesen
+                    response = await self._client.read_holding_registers(address=0x3608, count=1)
+                    if not response or response.isError() or len(response.registers) < 1:
+                        current_value = 0
+                    else:
+                        current_value = response.registers[0]
+                    current_day_mask = (current_value >> 8) & 0xFF
+                    current_power_percent = current_value & 0xFF
+
+                    # Fehlende Teile mit den Pending-Werten ergänzen (falls vorhanden)
+                    day_mask = self._pending_first_charge_day_mask if self._pending_first_charge_day_mask is not None else current_day_mask
+                    power_percent = self._pending_first_charge_power_percent if self._pending_first_charge_power_percent is not None else current_power_percent
+
+                    value = (day_mask << 8) | power_percent
+                    response = await self._client.write_register(0x3608, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set first charge power time: day_mask={day_mask}, power_percent={power_percent}")
+                    else:
+                        _LOGGER.error(f"Failed to write first charge power time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing first charge power time: {e}")
+                finally:
+                    self._pending_first_charge_day_mask = None
+                    self._pending_first_charge_power_percent = None
+
+
+
+
+
+    # Setter-Methoden, die von HA bei Änderung der Sensoren aufgerufen werden:
+    async def set_first_charge_start(self, time_str: str) -> None:
+        """Setzt den neuen Startzeitpunkt (Format 'HH:MM') für First Charge."""
+        self._pending_first_charge_start = time_str
+
+    async def set_first_charge_end(self, time_str: str) -> None:
+        """Setzt den neuen Endzeitpunkt (Format 'HH:MM') für First Charge."""
+        self._pending_first_charge_end = time_str
+
+    async def set_first_charge_day_mask(self, day_mask: int) -> None:
+        """Setzt den neuen Day Mask Wert für First Charge."""
+        self._pending_first_charge_day_mask = day_mask
+
+    async def set_first_charge_power_percent(self, power_percent: int) -> None:
+        """Setzt den neuen Power Percent Wert für First Charge."""
+        self._pending_first_charge_power_percent = power_percent
+
+    
+    
+    # ende charing time
 
 
     async def _handle_pending_charging_state(self) -> dict:
@@ -607,3 +731,50 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
        
         
         return await self._read_modbus_data(40960, 56, decode_instructions, 'battery_data')
+
+
+
+    async def read_first_charge_data(self) -> Dict[str, Any]:
+        """Liest die First Charge Register aus:
+        
+        - Register 0x3606: start_time (High-Byte: Stunde, Low-Byte: Minute)
+        - Register 0x3607: end_time (High-Byte: Stunde, Low-Byte: Minute)
+        - Register 0x3608: power_time (High-Byte: Tag (als Bitmaske), Low-Byte: Leistung in %)
+        """
+        try:
+            # Adressangabe in Hexadezimal (0x3606 entspricht 13830 dezimal)
+            regs = await self.try_read_registers(1, 0x3606, 3)
+            if not regs or len(regs) < 3:
+                _LOGGER.error("Nicht genügend Daten für First Charge Register empfangen.")
+                return {}
+
+            # Startzeit aus Register 0x3606
+            start_value = regs[0]
+            start_hour = (start_value >> 8) & 0xFF
+            start_minute = start_value & 0xFF
+            start_time = f"{start_hour:02d}:{start_minute:02d}"
+
+            # Endzeit aus Register 0x3607
+            end_value = regs[1]
+            end_hour = (end_value >> 8) & 0xFF
+            end_minute = end_value & 0xFF
+            end_time = f"{end_hour:02d}:{end_minute:02d}"
+
+            # Power Time aus Register 0x3608
+            power_value = regs[2]
+            day_mask = (power_value >> 8) & 0xFF  # z.B. 0b0100 entspricht Mittwoch
+            power_percent = power_value & 0xFF    # z.B. 1 entspricht 1% der Standardleistung
+
+            return {
+                "first_charge_start_time": start_time,
+                "first_charge_end_time": end_time,
+                "first_charge_day_mask": day_mask,
+                "first_charge_power_percent": power_percent,
+            }
+        except Exception as e:
+            _LOGGER.error(f"Fehler beim Auslesen der First Charge Daten: {e}", exc_info=True)
+            return {}
+
+
+
+
