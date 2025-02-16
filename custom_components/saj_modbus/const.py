@@ -367,6 +367,15 @@ energy_sensors = [
     {"name": "Battery Pack 3 Discharge Low", "key": "Bat3DischarCapL", "icon": "battery", "enable": True},
     {"name": "Battery Pack 4 Discharge High", "key": "Bat4DischarCapH", "icon": "battery", "enable": True},
     {"name": "Battery Pack 4 Discharge Low", "key": "Bat4DischarCapL", "icon": "battery", "enable": True},
+
+    {"name": "Today PV Energy 2", "key": "today_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 2", "key": "month_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 2", "key": "year_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Total PV Energy 2", "key": "total_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Today PV Energy 3", "key": "today_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 3", "key": "month_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 3", "key": "year_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Total PV Energy 3", "key": "total_pv_energy3", "enable": False, "icon": "solar-power"},
 ]
     
 

@@ -481,19 +481,26 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_additional_modbus_data_3(self) -> Dict[str, Any]:
-        """Reads additional operating data (Set 3)."""
-        data_keys = [
-            "sell_today_energy_2", "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
-            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3", "sell_total_energy_3",
-            "feedin_today_energy_2", "feedin_month_energy_2", "feedin_year_energy_2", "feedin_total_energy_2",
-            "feedin_today_energy_3", "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
-            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year", "sum_feed_in_total",
-            "sum_sell_today", "sum_sell_month", "sum_sell_year", "sum_sell_total",
+        
+       
+        data_keys_part_3 = [
+            "today_pv_energy2", "month_pv_energy2", "year_pv_energy2",
+            "total_pv_energy2", "today_pv_energy3", "month_pv_energy3",
+            "year_pv_energy3", "total_pv_energy3", "sell_today_energy_2",
+            "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
+            "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3",
+            "sell_total_energy_3", "feedin_today_energy_2", "feedin_month_energy_2",
+            "feedin_year_energy_2", "feedin_total_energy_2", "feedin_today_energy_3",
+            "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
+            "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year",
+            "sum_feed_in_total", "sum_sell_today", "sum_sell_month",
+            "sum_sell_year", "sum_sell_total"
         ]
-        decode_instructions = [(key, "decode_32bit_uint", 0.01) for key in data_keys]
-        return await self._read_modbus_data(16711, 48, decode_instructions, 'additional_data_3')
+        decode_instructions_part_3 = [(key, "decode_32bit_uint", 0.01) for key in data_keys_part_3]
         
-        
+        return await self._read_modbus_data(16695, 64, decode_instructions_part_3, 'additional_data_3')
+
+     
         
     async def read_additional_modbus_data_4(self) -> Dict[str, Any]:
             """
