@@ -748,17 +748,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.error("Nicht genügend Daten für First Charge Register empfangen.")
                 return {}
 
-            # Startzeit aus Register 0x3606
-            start_value = regs[0]
-            start_hour = (start_value >> 8) & 0xFF
-            start_minute = start_value & 0xFF
-            start_time = f"{start_hour:02d}:{start_minute:02d}"
+            def decode_time(value: int) -> str:
+                """Dekodiert einen Zeitwert aus einem Register (High-Byte: Stunde, Low-Byte: Minute)"""
+                return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
 
-            # Endzeit aus Register 0x3607
-            end_value = regs[1]
-            end_hour = (end_value >> 8) & 0xFF
-            end_minute = end_value & 0xFF
-            end_time = f"{end_hour:02d}:{end_minute:02d}"
+            start_time = decode_time(regs[0])  # Startzeit aus Register 0x3606
+            end_time = decode_time(regs[1])    # Endzeit aus Register 0x3607
 
             # Power Time aus Register 0x3608
             power_value = regs[2]
@@ -774,7 +769,3 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as e:
             _LOGGER.error(f"Fehler beim Auslesen der First Charge Daten: {e}", exc_info=True)
             return {}
-
-
-
-
