@@ -45,9 +45,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Initialize the pending charging state:
         self._pending_charging_state: Optional[bool] = None
         
-         # Neue Pending-Variablen für First Charge:
-        self._pending_first_charge_start: Optional[str] = None  # Erwartet im Format "HH:MM"
-        self._pending_first_charge_end: Optional[str] = None    # Erwartet im Format "HH:MM"
+         # New pending variables for First Charge:
+        self._pending_first_charge_start: Optional[str] = None  # Expected in format "HH:MM"
+        self._pending_first_charge_end: Optional[str] = None    # Expected in format "HH:MM"
         self._pending_first_charge_day_mask: Optional[int] = None
         self._pending_first_charge_power_percent: Optional[int] = None
 
@@ -142,7 +142,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         ) -> List[int]:
             """Reads Modbus registers with optimized error handling."""
             
-            # Sicherstellen, dass ein Client vorhanden ist
+            # Ensure a client is available
             #if self._client is None:
             #    await self.ensure_connection()
             
@@ -218,7 +218,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_charging_state = None
         
         
-        # Falls neue First-Charge-Werte vorliegen, diese schreiben
+        # If new First-Charge values are present, write them
         if (self._pending_first_charge_start is not None or
             self._pending_first_charge_end is not None or
             self._pending_first_charge_day_mask is not None or
@@ -231,7 +231,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_first_charge_power_percent
             )
             await self._handle_pending_first_charge_settings()
-            # Direkt nach dem Schreiben wird im nächsten Zyklus ausgelesen.
+            # Directly after writing, it will be read in the next cycle.
 
         
         
@@ -244,9 +244,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
 
     async def _handle_pending_first_charge_settings(self) -> None:
-        """Schreibt die pending First-Charge-Werte in die Register 0x3606, 0x3607 und 0x3608."""
+        """Writes the pending First-Charge values to registers 0x3606, 0x3607, and 0x3608."""
         async with self._read_lock:
-            # Register 0x3606: Start Time (High Byte = Stunde, Low Byte = Minute)
+            # Register 0x3606: Start Time (High Byte = Hour, Low Byte = Minute)
             if self._pending_first_charge_start is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_start.split(":"))
@@ -261,7 +261,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 finally:
                     self._pending_first_charge_start = None
 
-            # Register 0x3607: End Time (High Byte = Stunde, Low Byte = Minute)
+            # Register 0x3607: End Time (High Byte = Hour, Low Byte = Minute)
             if self._pending_first_charge_end is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_end.split(":"))
@@ -279,7 +279,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
             if self._pending_first_charge_day_mask is not None or self._pending_first_charge_power_percent is not None:
                 try:
-                    # Zuerst den aktuellen Registerwert für 0x3608 auslesen
+                    # First read the current register value for 0x3608
                     response = await self._client.read_holding_registers(address=0x3608, count=1)
                     if not response or response.isError() or len(response.registers) < 1:
                         current_value = 0
@@ -288,7 +288,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     current_day_mask = (current_value >> 8) & 0xFF
                     current_power_percent = current_value & 0xFF
 
-                    # Fehlende Teile mit den Pending-Werten ergänzen (falls vorhanden)
+                    # Supplement missing parts with the pending values (if available)
                     day_mask = self._pending_first_charge_day_mask if self._pending_first_charge_day_mask is not None else current_day_mask
                     power_percent = self._pending_first_charge_power_percent if self._pending_first_charge_power_percent is not None else current_power_percent
 
@@ -310,19 +310,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # Setter-Methoden, die von HA bei Änderung der Sensoren aufgerufen werden:
     async def set_first_charge_start(self, time_str: str) -> None:
-        """Setzt den neuen Startzeitpunkt (Format 'HH:MM') für First Charge."""
+        """Sets the new start time (format 'HH:MM') for First Charge."""
         self._pending_first_charge_start = time_str
 
     async def set_first_charge_end(self, time_str: str) -> None:
-        """Setzt den neuen Endzeitpunkt (Format 'HH:MM') für First Charge."""
+        """Sets the new end time (format 'HH:MM') for First Charge."""
         self._pending_first_charge_end = time_str
 
     async def set_first_charge_day_mask(self, day_mask: int) -> None:
-        """Setzt den neuen Day Mask Wert für First Charge."""
+        """Sets the new Day Mask value for First Charge."""
         self._pending_first_charge_day_mask = day_mask
 
     async def set_first_charge_power_percent(self, power_percent: int) -> None:
-        """Setzt den neuen Power Percent Wert für First Charge."""
+        """Sets the new Power Percent value for First Charge."""
         self._pending_first_charge_power_percent = power_percent
 
     
@@ -735,30 +735,30 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
 
     async def read_first_charge_data(self) -> Dict[str, Any]:
-        """Liest die First Charge Register aus:
+        """Reads the First Charge registers:
         
-        - Register 0x3606: start_time (High-Byte: Stunde, Low-Byte: Minute)
-        - Register 0x3607: end_time (High-Byte: Stunde, Low-Byte: Minute)
-        - Register 0x3608: power_time (High-Byte: Tag (als Bitmaske), Low-Byte: Leistung in %)
+        - Register 0x3606: start_time (High Byte: Hour, Low Byte: Minute)
+        - Register 0x3607: end_time (High Byte: Hour, Low Byte: Minute)
+        - Register 0x3608: power_time (High Byte: Day (as bitmask), Low Byte: Power in %)
         """
         try:
-            # Adressangabe in Hexadezimal (0x3606 entspricht 13830 dezimal)
+            # Address in hexadecimal (0x3606 corresponds to 13830 decimal)
             regs = await self.try_read_registers(1, 0x3606, 3)
             if not regs or len(regs) < 3:
-                _LOGGER.error("Nicht genügend Daten für First Charge Register empfangen.")
+                _LOGGER.error("Not enough data received for First Charge registers.")
                 return {}
 
             def decode_time(value: int) -> str:
-                """Dekodiert einen Zeitwert aus einem Register (High-Byte: Stunde, Low-Byte: Minute)"""
+                """Decodes a time value from a register (High Byte: Hour, Low Byte: Minute)"""
                 return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
 
-            start_time = decode_time(regs[0])  # Startzeit aus Register 0x3606
-            end_time = decode_time(regs[1])    # Endzeit aus Register 0x3607
+            start_time = decode_time(regs[0])  # Start time from register 0x3606
+            end_time = decode_time(regs[1])    # End time from register 0x3607
 
-            # Power Time aus Register 0x3608
+            # Power Time from register 0x3608
             power_value = regs[2]
-            day_mask = (power_value >> 8) & 0xFF  # z.B. 0b0100 entspricht Mittwoch
-            power_percent = power_value & 0xFF    # z.B. 1 entspricht 1% der Standardleistung
+            day_mask = (power_value >> 8) & 0xFF  # e.g., 0b0100 corresponds to Wednesday
+            power_percent = power_value & 0xFF    # e.g., 1 corresponds to 1% of standard power
 
             return {
                 "first_charge_start_time": start_time,
@@ -767,5 +767,5 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 "first_charge_power_percent": power_percent,
             }
         except Exception as e:
-            _LOGGER.error(f"Fehler beim Auslesen der First Charge Daten: {e}", exc_info=True)
+            _LOGGER.error(f"Error reading First Charge data: {e}", exc_info=True)
             return {}
