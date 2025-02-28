@@ -42,21 +42,40 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on charging."""
+        if self.is_on:
+            _LOGGER.debug("Charging is already on; no update requested.")
+            return
         try:
             await self._hub.set_charging(True)
-            # Let the regular update interval handle the state refresh
+            await self._hub.async_request_refresh()
         except Exception as e:
             _LOGGER.error(f"Failed to turn on charging: {e}")
             raise
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn off charging."""
+        if not self.is_on:
+            _LOGGER.debug("Charging is already off; no update requested.")
+            return
         try:
             await self._hub.set_charging(False)
-            # Let the regular update interval handle the state refresh
+            await self._hub.async_request_refresh()
         except Exception as e:
             _LOGGER.error(f"Failed to turn off charging: {e}")
             raise
+
+    async def _update_state(self) -> None:
+        """Manually update the switch state by querying the hub."""
+        try:
+            # Direkter Zugriff auf den aktuellen Ladezustand
+            current_state = await self._hub.get_charging_state()
+            _LOGGER.debug(f"Read charging state: {current_state}")
+            # Aktualisiere die Hub-Daten direkt
+            self._hub.data["charging_enabled"] = current_state
+            # Benachrichtige Home Assistant über die Änderung
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"Failed to update switch state: {e}")
 
     @property
     def available(self) -> bool:
