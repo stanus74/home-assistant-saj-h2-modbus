@@ -67,12 +67,12 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
     async def _update_state(self) -> None:
         """Manually update the switch state by querying the hub."""
         try:
-            # Direkter Zugriff auf den aktuellen Ladezustand
+            # Direct access to the current charging state
             current_state = await self._hub.get_charging_state()
             _LOGGER.debug(f"Read charging state: {current_state}")
-            # Aktualisiere die Hub-Daten direkt
+            # Update the hub data directly
             self._hub.data["charging_enabled"] = current_state
-            # Benachrichtige Home Assistant über die Änderung
+            # Notify Home Assistant of the change
             self.async_write_ha_state()
         except Exception as e:
             _LOGGER.error(f"Failed to update switch state: {e}")
