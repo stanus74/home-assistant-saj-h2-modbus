@@ -1,4 +1,4 @@
-"""Plattform für schreibbare SAJ Modbus Uhrzeit-Entitäten."""
+"""Platform for writable SAJ Modbus time entities."""
 import datetime
 import re
 import logging
@@ -17,7 +17,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Richte die schreibbaren Uhrzeit-Entitäten für First Charge ein."""
+    """Set up the writable time entities for First Charge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     entities = [
         SajFirstChargeStartTimeTextEntity(hub),

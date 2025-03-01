@@ -40,7 +40,7 @@ This integration should be available in the HACS default repository. Simply go t
 
 ![](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2")
 
-- the first 4 sensors show Charging Times
+- the first 4 sensors show Charging Times, Days and Power (in percent)
 - Day Mask is a bit mask (Monday - Sunday is 127, bit number 1 + 2 + 4 + 8 +16 +32 + 64)
 - Entities with (Input) and (Time) are writable
 
