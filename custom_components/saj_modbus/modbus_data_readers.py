@@ -1,24 +1,29 @@
 import asyncio
 import logging
 import struct
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TypeAlias
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 from .modbus_utils import try_read_registers
 
+# Type aliases to make function signatures more compact
+ModbusClient: TypeAlias = AsyncModbusTcpClient
+Lock: TypeAlias = asyncio.Lock
+DataDict: TypeAlias = Dict[str, Any]
+
 _LOGGER = logging.getLogger(__name__)
 
 async def _read_modbus_data(
-    client: AsyncModbusTcpClient,
-    read_lock: asyncio.Lock,
+    client: ModbusClient,
+    read_lock: Lock,
     start_address: int,
     count: int,
     decode_instructions: List[tuple],
     data_key: str,
     default_decoder: str = "decode_16bit_uint",
     default_factor: float = 0.01
-) -> Dict[str, Any]:
+) -> DataDict:
     """Helper function to read and decode Modbus data."""
     try:
         regs = await try_read_registers(client, read_lock, 1, start_address, count)
@@ -69,7 +74,7 @@ async def _read_modbus_data(
         _LOGGER.error(f"Error reading modbus data: {e}")
         return {}
 
-async def read_modbus_inverter_data(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_modbus_inverter_data(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads basic inverter data using the pymodbus 3.9 API, without BinaryPayloadDecoder."""
     try:
         regs = await try_read_registers(client, read_lock, 1, 0x8F00, 29)
@@ -111,7 +116,7 @@ async def read_modbus_inverter_data(client: AsyncModbusTcpClient, read_lock: asy
         _LOGGER.error(f"Error reading inverter data: {e}")
         return {}
 
-async def read_modbus_realtime_data(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_modbus_realtime_data(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads real-time operating data."""
     decode_instructions = [
         ("mpvmode", None), ("faultMsg0", "decode_32bit_uint"), ("faultMsg1", "decode_32bit_uint"),
@@ -139,7 +144,7 @@ async def read_modbus_realtime_data(client: AsyncModbusTcpClient, read_lock: asy
         
     return data
 
-async def read_additional_modbus_data_1_part_1(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_1_part_1(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 1), up to sensor pv4Power."""
     decode_instructions_part_1 = [
         ("BatTemp", "decode_16bit_int", 0.1), ("batEnergyPercent", None), (None, "skip_bytes", 2),
@@ -151,7 +156,7 @@ async def read_additional_modbus_data_1_part_1(client: AsyncModbusTcpClient, rea
 
     return await _read_modbus_data(client, read_lock, 16494, 15, decode_instructions_part_1, 'additional_data_1_part_1', "decode_16bit_uint", 0.01)
 
-async def read_additional_modbus_data_1_part_2(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_1_part_2(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 1)."""
     decode_instructions_part_2 = [
         ("directionPV", None), ("directionBattery", "decode_16bit_int"), ("directionGrid", "decode_16bit_int"),
@@ -167,7 +172,7 @@ async def read_additional_modbus_data_1_part_2(client: AsyncModbusTcpClient, rea
     
     return await _read_modbus_data(client, read_lock, 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2', "decode_16bit_uint", 1)
 
-async def read_additional_modbus_data_2_part_1(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_2_part_1(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 2)."""
     data_keys_part_1 = [
         "todayenergy", "monthenergy", "yearenergy", "totalenergy",
@@ -179,7 +184,7 @@ async def read_additional_modbus_data_2_part_1(client: AsyncModbusTcpClient, rea
 
     return await _read_modbus_data(client, read_lock, 16575, 32, decode_instructions_part_1, 'additional_data_2_part_1')
 
-async def read_additional_modbus_data_2_part_2(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_2_part_2(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 2)."""
     data_keys_part_2 = [
         "total_today_load", "total_month_load", "total_year_load", "total_total_load",
@@ -191,7 +196,7 @@ async def read_additional_modbus_data_2_part_2(client: AsyncModbusTcpClient, rea
 
     return await _read_modbus_data(client, read_lock, 16607, 32, decode_instructions_part_2, 'additional_data_2_part_2')
 
-async def read_additional_modbus_data_3(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_3(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads additional operating data (Set 3)."""
     data_keys_part_3 = [
         "today_pv_energy2", "month_pv_energy2", "year_pv_energy2",
@@ -210,7 +215,7 @@ async def read_additional_modbus_data_3(client: AsyncModbusTcpClient, read_lock:
     
     return await _read_modbus_data(client, read_lock, 16695, 64, decode_instructions_part_3, 'additional_data_3')
 
-async def read_additional_modbus_data_4(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_additional_modbus_data_4(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads data for grid parameters (R, S, and T phase)."""
     decode_instructions = [
         ("RGridVolt", None, 0.1), ("RGridCurr", "decode_16bit_int", 0.01), ("RGridFreq", None, 0.01),
@@ -226,7 +231,7 @@ async def read_additional_modbus_data_4(client: AsyncModbusTcpClient, read_lock:
     
     return await _read_modbus_data(client, read_lock, 16433, 21, decode_instructions, "grid_phase_data", "decode_16bit_uint", 1)
 
-async def read_battery_data(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_battery_data(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads battery data from registers 40960 to 41015."""
     decode_instructions = [
         ("BatNum", None, 1), ("BatCapcity", None, 1), ("Bat1FaultMSG", None, 1), ("Bat1WarnMSG", None, 1),
@@ -247,7 +252,7 @@ async def read_battery_data(client: AsyncModbusTcpClient, read_lock: asyncio.Loc
     
     return await _read_modbus_data(client, read_lock, 40960, 56, decode_instructions, 'battery_data')
 
-async def read_first_charge_data(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
+async def read_first_charge_data(client: ModbusClient, read_lock: Lock) -> DataDict:
     """Reads the First Charge registers using the generic read_modbus_data function."""
     decode_instructions = [
         ("first_charge_start_time_raw", "decode_16bit_uint", 1),
