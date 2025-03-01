@@ -90,7 +90,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _async_update_data(self) -> Dict[str, Any]:
         self._client = await ensure_connection(self._client, self._host, self._port)
         if not self.inverter_data:
-            self.inverter_data.update(await read_modbus_inverter_data(self._client, self._read_lock))
+            self.inverter_data.update(await read_modbus_inverter_data(self._client))
         combined_data = {**self.inverter_data}
 
         # Loop through all methods that provide dictionary data
@@ -105,7 +105,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             read_battery_data,
             read_first_charge_data,
         ]:
-            result = await method(self._client, self._read_lock)
+            result = await method(self._client)
             combined_data.update(result)
             await asyncio.sleep(0.2)
         
@@ -257,5 +257,3 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_charging_state = enable
         # The call to async_request_refresh() was removed so that the write operation
         # occurs exclusively in the regular update cycle.
-
-
