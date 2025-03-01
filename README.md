@@ -33,14 +33,33 @@ This integration should be available in the HACS default repository. Simply go t
 2. Enter the IP Address and Interval.
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 
+
+
+## New since Version 1.8
+### Setup Charing Time and Power
+
+![](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2")
+
+- the first 4 sensors show Charging Times
+- Day Mask is a bit mask (Monday - Sunday is 127, bit number 1 + 2 + 4 + 8 +16 +32 + 64)
+- Entities with (Input) and (Time) are writable
+
+**The values are written via Modbus at the set interval, e.g. 60s**
+
+The charging power in watts is specified as a percentage. e.g. 10% of 8000 watts of the maximum charging power of the inverter you are using. 
+
+**Important:** The charging power is limited in the integration to a maximum of 25% (it is also recommended not to charge with more)
+
+
+
 ## Additional Information
 
 The data from the SAJ H2 inverter is transmitted to the SAJ server via a WiFi interface, AIO3.
 
 The AIO3 may have port 502 open, allowing us to access the Modbus data. The IP address can be determined in the router. 
 
-There are also reports of AIO3 devices with port 502 closed. Then you need to have an RS232-wifi or -ethernet converter.
+There are also reports of **AIO3 devices with port 502 closed**. Then you need to have an RS232-wifi or -ethernet converter.
 
-OR reset the AIO3 and reconfigure it, **important**: it must be given a new IP address. Then check with a port scanner if port 502 is open
+OR reset the AIO3 and reconfigure it, **important**: it must be given **a new IP address**. Then check with a port scanner if port 502 is open
 
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/stanus74)
