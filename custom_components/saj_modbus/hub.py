@@ -49,9 +49,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Initialize the pending charging state:
         self._pending_charging_state: Optional[bool] = None
         
-        # New pending variables for First Charge:
-        self._pending_first_charge_start: Optional[str] = None  # Expected in format "HH:MM"
-        self._pending_first_charge_end: Optional[str] = None    # Expected in format "HH:MM"
+         # Neue Pending-Variablen für First Charge:
+        self._pending_first_charge_start: Optional[str] = None  # Erwartet im Format "HH:MM"
+        self._pending_first_charge_end: Optional[str] = None    # Erwartet im Format "HH:MM"
         self._pending_first_charge_day_mask: Optional[int] = None
         self._pending_first_charge_power_percent: Optional[int] = None
 
@@ -138,9 +138,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return combined_data
 
     async def _handle_pending_first_charge_settings(self) -> None:
-        """Writes the pending First-Charge values to registers 0x3606, 0x3607, and 0x3608."""
+        """Schreibt die pending First-Charge-Werte in die Register 0x3606, 0x3607 und 0x3608."""
         async with self._read_lock:
-            # Register 0x3606: Start Time (High Byte = Hour, Low Byte = Minute)
+            # Register 0x3606: Start Time (High Byte = Stunde, Low Byte = Minute)
             if self._pending_first_charge_start is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_start.split(":"))
@@ -155,7 +155,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 finally:
                     self._pending_first_charge_start = None
 
-            # Register 0x3607: End Time (High Byte = Hour, Low Byte = Minute)
+            # Register 0x3607: End Time (High Byte = Stunde, Low Byte = Minute)
             if self._pending_first_charge_end is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_end.split(":"))
@@ -173,7 +173,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
             if self._pending_first_charge_day_mask is not None or self._pending_first_charge_power_percent is not None:
                 try:
-                    # First read the current register value for 0x3608
+                    # Zuerst den aktuellen Registerwert für 0x3608 auslesen
                     response = await self._client.read_holding_registers(address=0x3608, count=1)
                     if not response or response.isError() or len(response.registers) < 1:
                         current_value = 0
@@ -182,7 +182,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     current_day_mask = (current_value >> 8) & 0xFF
                     current_power_percent = current_value & 0xFF
 
-                    # Supplement missing parts with the pending values (if available)
+                    # Fehlende Teile mit den Pending-Werten ergänzen (falls vorhanden)
                     day_mask = self._pending_first_charge_day_mask if self._pending_first_charge_day_mask is not None else current_day_mask
                     power_percent = self._pending_first_charge_power_percent if self._pending_first_charge_power_percent is not None else current_power_percent
 
@@ -198,22 +198,31 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     self._pending_first_charge_day_mask = None
                     self._pending_first_charge_power_percent = None
 
-    # Setter methods called by HA when sensors change:
+
+
+
+
+    # Setter-Methoden, die von HA bei Änderung der Sensoren aufgerufen werden:
     async def set_first_charge_start(self, time_str: str) -> None:
-        """Sets the new start time (format 'HH:MM') for First Charge."""
+        """Setzt den neuen Startzeitpunkt (Format 'HH:MM') für First Charge."""
         self._pending_first_charge_start = time_str
 
     async def set_first_charge_end(self, time_str: str) -> None:
-        """Sets the new end time (format 'HH:MM') for First Charge."""
+        """Setzt den neuen Endzeitpunkt (Format 'HH:MM') für First Charge."""
         self._pending_first_charge_end = time_str
 
     async def set_first_charge_day_mask(self, day_mask: int) -> None:
-        """Sets the new Day Mask value for First Charge."""
+        """Setzt den neuen Day Mask Wert für First Charge."""
         self._pending_first_charge_day_mask = day_mask
 
     async def set_first_charge_power_percent(self, power_percent: int) -> None:
-        """Sets the new Power Percent value for First Charge."""
+        """Setzt den neuen Power Percent Wert für First Charge."""
         self._pending_first_charge_power_percent = power_percent
+
+    
+    
+    # ende charing time
+
 
     async def _handle_pending_charging_state(self) -> dict:
         """Writes the pending charging state to register 0x3647 and returns an empty dictionary."""
