@@ -5,9 +5,11 @@ from typing import Dict, Any, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pymodbus.client import AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException, ModbusIOException
+
+#from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 from .modbus_utils import safe_close, close, ensure_connection, try_read_registers
+
 from .modbus_data_readers import (
     read_modbus_inverter_data,
     read_modbus_realtime_data,
@@ -20,7 +22,8 @@ from .modbus_data_readers import (
     read_battery_data,
     read_first_charge_data,
 )
-from .const import DEVICE_STATUSSES, FAULT_MESSAGES
+
+#from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 
 _LOGGER = logging.getLogger(__name__)
 
