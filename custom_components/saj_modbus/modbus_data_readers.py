@@ -248,30 +248,26 @@ async def read_battery_data(client: AsyncModbusTcpClient, read_lock: asyncio.Loc
     return await _read_modbus_data(client, read_lock, 40960, 56, decode_instructions, 'battery_data')
 
 async def read_first_charge_data(client: AsyncModbusTcpClient, read_lock: asyncio.Lock) -> Dict[str, Any]:
-    """Reads the First Charge registers."""
-    try:
-        regs = await try_read_registers(client, read_lock, 1, 0x3606, 3)
-        if not regs or len(regs) < 3:
-            _LOGGER.error("Not enough data received for First Charge registers.")
+    """Reads the First Charge registers using the generic read_modbus_data function."""
+    decode_instructions = [
+        ("first_charge_start_time_raw", "decode_16bit_uint", 1),
+        ("first_charge_end_time_raw", "decode_16bit_uint", 1),
+        ("power_time_raw", "decode_16bit_uint", 1),
+    ]
+
+    data = await _read_modbus_data(client, read_lock, 0x3606, 3, decode_instructions, "first_charge_data", "decode_16bit_uint", 1)
+
+    if data:
+        try:
+            def decode_time(value: int) -> str:
+                return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
+            data["first_charge_start_time"] = decode_time(data.pop("first_charge_start_time_raw"))
+            data["first_charge_end_time"] = decode_time(data.pop("first_charge_end_time_raw"))
+            power_value = data.pop("power_time_raw")
+            data["first_charge_day_mask"] = (power_value >> 8) & 0xFF
+            data["first_charge_power_percent"] = power_value & 0xFF
+        except Exception as e:
+            _LOGGER.error(f"Error processing First Charge data: {e}")
             return {}
 
-        def decode_time(value: int) -> str:
-            """Decodes a time value from a register (High-Byte: Hour, Low-Byte: Minute)."""
-            return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
-
-        start_time = decode_time(regs[0])  # Start time from register 0x3606
-        end_time = decode_time(regs[1])    # End time from register 0x3607
-
-        power_value = regs[2]
-        day_mask = (power_value >> 8) & 0xFF
-        power_percent = power_value & 0xFF
-
-        return {
-            "first_charge_start_time": start_time,
-            "first_charge_end_time": end_time,
-            "first_charge_day_mask": day_mask,
-            "first_charge_power_percent": power_percent,
-        }
-    except Exception as e:
-        _LOGGER.error(f"Error reading First Charge data: {e}", exc_info=True)
-        return {}
+    return data

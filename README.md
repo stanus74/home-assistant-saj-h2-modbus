@@ -36,7 +36,7 @@ This integration should be available in the HACS default repository. Simply go t
 
 
 ## New since Version 1.8
-### Setup Charing Time and Power
+### Setup Charging Time and Power
 
 ![](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2")
 
