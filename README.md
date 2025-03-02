@@ -52,7 +52,7 @@ This integration should be available in the HACS default repository. Simply go t
 
 ---
 
-### Switch Between Inverter Modes
+### Switch between Inverter Modes
 
 ![Mode Switch](images/saj_h2_modbus/switch.png "Home Assistant SAJ H2 Mode Switch")
 
