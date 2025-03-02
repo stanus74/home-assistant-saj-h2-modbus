@@ -20,7 +20,6 @@ from .modbus_data_readers import (
     read_first_charge_data,
 )
 
-
 _LOGGER = logging.getLogger(__name__)
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
