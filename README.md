@@ -50,7 +50,7 @@ This integration should be available in the HACS default repository. Simply go t
 
 **Note**: The integration limits charging power to a maximum of 25%.
 
----
+
 
 ### Switch between Inverter Modes
 
@@ -58,7 +58,6 @@ This integration should be available in the HACS default repository. Simply go t
 
 - **Feature**: Use the switch to toggle between "Time-of-Use (Charging)" and "Self-Consumption" modes.
 
----
 
 ## Additional Information
 
