@@ -108,6 +108,14 @@ frequency_sensors_group = SensorGroup(
 )
 
 
+# Neue Gruppe für Zeit- bzw. Scheduling-Daten
+schedule_sensors_group = SensorGroup(
+    unit_of_measurement=None,
+    icon="mdi:clock-outline",
+    device_class=None,
+    state_class=None,
+)
+
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
     for sensor in sensors:
@@ -118,16 +126,17 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
         
         
         enable = sensor.get("enable", True)
+        native_unit = sensor.get("unit_of_measurement", group.unit_of_measurement)
         
         descriptions[sensor["key"]] = SajModbusSensorEntityDescription(
             name=sensor["name"],
             key=sensor["key"],
-            native_unit_of_measurement=group.unit_of_measurement,
+            native_unit_of_measurement=native_unit,
             icon=icon,
             device_class=group.device_class,
             state_class=group.state_class,
             entity_registry_enabled_default=enable,
-            force_update=group.force_update  # force_update von der Gruppe übernehmen
+            force_update=group.force_update
         )
     return descriptions
 
@@ -379,6 +388,32 @@ energy_sensors = [
 ]
     
 
+# Neue Sensoren für "First Charge" definieren:
+first_charge_sensors = [
+    {
+        "name": "First Charge Start Time",
+        "key": "first_charge_start_time",
+        "icon": "clock-outline",
+    },
+    {
+        "name": "First Charge End Time",
+        "key": "first_charge_end_time",
+        "icon": "clock-outline",
+    },
+    {
+        "name": "First Charge Day Mask",
+        "key": "first_charge_day_mask",
+        "icon": "calendar",
+    },
+    {
+        "name": "First Charge Power Percent",
+        "key": "first_charge_power_percent",
+        "icon": "flash",
+        "unit_of_measurement": "%"  # Hier Überschreibung der Einheit
+    },
+]
+
+
 
 SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
@@ -391,6 +426,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
     **create_sensor_descriptions(gfci_sensors_group,gfci_sensors),
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
+    **create_sensor_descriptions(schedule_sensors_group, first_charge_sensors),
    
 }
 
