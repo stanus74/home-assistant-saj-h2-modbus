@@ -5,6 +5,7 @@ import inspect
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
+
 _LOGGER = logging.getLogger(__name__)
 
 async def safe_close(client: Optional[AsyncModbusTcpClient]) -> bool:
