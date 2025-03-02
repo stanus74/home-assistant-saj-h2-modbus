@@ -51,6 +51,10 @@ The charging power in watts is specified as a percentage. e.g. 10% of 8000 watts
 **Important:** The charging power is limited in the integration to a maximum of 25% (it is also recommended not to charge with more)
 
 
+![](images/saj_h2_modbus/switch.png)
+
+### With the Switch you can change the Inverter Working Mode "Time-of-Use (Charging) / Self-Consumption Mode"
+
 
 ## Additional Information
 
