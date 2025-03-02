@@ -32,7 +32,7 @@ This integration should be available in the HACS default repository. Simply go t
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 4. Set charing values in Home Assistant , see below
 
-
+---
 
 ## New Features Since Version 1.8
 
@@ -50,6 +50,15 @@ This integration should be available in the HACS default repository. Simply go t
 
 **Note**: The integration limits charging power to a maximum of 25%.
 
+---
+
+### Switch Between Inverter Modes
+
+![Mode Switch](images/saj_h2_modbus/switch.png "Home Assistant SAJ H2 Mode Switch")
+
+- **Feature**: Use the switch to toggle between "Time-of-Use (Charging)" and "Self-Consumption" modes.
+
+---
 
 ## Additional Information
 
