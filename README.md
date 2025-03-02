@@ -4,10 +4,7 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-## <span style="color:red;">Important: New Feature added: "Charge battery with mains power", see under Features</span>
-
-**when you like my work, support me ;-)**
-
+## <span style="color:red;">New Feature added: "Charge battery with mains power", see under Features</span>
 
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
@@ -22,8 +19,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
-- **New Feature:** Ability to switch the working mode between **Self-Consumption** and **Time-of-use-Mode** (to charge the battery with grid power) > see Configuration 3.
-- Configure Charging Time and Power
+- **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-use-Mode** (to charge the battery with grid power) 
 
 ## Installation
 
@@ -34,6 +30,7 @@ This integration should be available in the HACS default repository. Simply go t
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval.
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
+4. Set charing values in Home Assistant , see below
 
 
 
