@@ -35,26 +35,21 @@ This integration should be available in the HACS default repository. Simply go t
 
 
 
-## New since Version 1.8
-### Setup Charging Time and Power
+## New Features Since Version 1.8
 
-![](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2")
+### Configure Charging Time and Power
 
-- the first 4 sensors show Charging Times, Days and Power (in percent)
-- Day Mask is a bit mask (Monday - Sunday is 127, bit number 1 + 2 + 4 + 8 +16 +32 + 64)
-- Entities with (Input) and (Time) are writable
+![Charging Settings](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2 Charging Settings")
 
-**The values are written via Modbus at the set interval, e.g. 60s**
+- **What’s New**: The first four sensors display Charging Time, Days, and Power (as a percentage).
+- **Day Mask**: This is a bitmask to select charging days (e.g., Monday to Sunday = 127, calculated as 1 + 2 + 4 + 8 + 16 + 32 + 64).
+- **Editable Registers**: Entities labeled "(Input)" and "(Time)" can be modified.
 
-The charging power in watts is specified as a percentage. e.g. 10% of 8000 watts of the maximum charging power of the inverter you are using. 
+**How It Works**: Values are written to the inverter via Modbus at the configured interval (e.g., every 60 seconds).
 
-**Important:** The charging power is limited in the integration to a maximum of 25% (it is also recommended not to charge with more)
+**Charging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts.
 
-
-![](images/saj_h2_modbus/switch.png)
-
-### With the Switch you can change the Inverter Working Mode "Time-of-Use (Charging) / Self-Consumption Mode"
-
+**Note**: The integration limits charging power to a maximum of 25%. For optimal performance, it’s recommended not to exceed this limit.
 
 ## Additional Information
 
