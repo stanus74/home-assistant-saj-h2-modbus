@@ -18,10 +18,12 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 170 registers (power, energy, temperature sensors, ...)
+- Over 190 registers (power, energy, temperature sensors, battery ...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
+
 - **New Feature:** Ability to switch the working mode between **Self-Consumption** and **Time-of-use-Mode** (to charge the battery with grid power) > see Configuration 3.
+- Configure Charging Time and Power
 
 ## Installation
 
@@ -49,7 +51,8 @@ This integration should be available in the HACS default repository. Simply go t
 
 **Charging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts.
 
-**Note**: The integration limits charging power to a maximum of 25%. For optimal performance, it’s recommended not to exceed this limit.
+**Note**: The integration limits charging power to a maximum of 25%.
+
 
 ## Additional Information
 
