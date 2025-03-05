@@ -7,7 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 
 from .const import DOMAIN
-from .hub import SAJModbusHub  # 🔹 Richtig importiert
+from .hub import SAJModbusHub  
 
 _LOGGER = logging.getLogger(__name__)
 
