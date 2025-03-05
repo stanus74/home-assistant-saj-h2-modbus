@@ -8,56 +8,7 @@ from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 _LOGGER = logging.getLogger(__name__)
 
-async def safe_close(client: Optional[AsyncModbusTcpClient]) -> bool:
-    """Safely closes the Modbus connection."""
-    if not client:
-        return True
 
-    try:
-        if client.connected:
-            close = getattr(client, "close", None)
-            if close:
-                await close() if inspect.iscoroutinefunction(close) else close()
-            transport = getattr(client, "transport", None)
-            if transport:
-                transport.close()
-            await asyncio.sleep(0.2)
-            return not client.connected
-        return True
-    except Exception as e:
-        _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
-        return False
-    finally:
-        client = None
-
-async def close(client: Optional[AsyncModbusTcpClient], closing_flag: bool, connection_lock: asyncio.Lock) -> None:
-    """Closes the Modbus connection with improved resource management."""
-    if closing_flag:
-        return
-
-    closing_flag = True
-    try:
-        async with asyncio.timeout(5.0):
-            async with connection_lock:
-                await safe_close(client)
-    except (asyncio.TimeoutError, Exception) as e:
-        _LOGGER.warning(f"Error during close: {e}", exc_info=True)
-    finally:
-        closing_flag = False
-
-async def ensure_connection(client: Optional[AsyncModbusTcpClient], host: str, port: int) -> AsyncModbusTcpClient:
-    """Ensure the Modbus connection is established and stable."""
-    if client and client.connected:
-        return client
-
-    client = client or AsyncModbusTcpClient(host=host, port=port, timeout=10)
-    try:
-        await asyncio.wait_for(client.connect(), timeout=10)
-        _LOGGER.info("Successfully connected to Modbus server.")
-        return client
-    except Exception as e:
-        _LOGGER.warning(f"Error during connection attempt: {e}", exc_info=True)
-        raise ConnectionException("Failed to connect to Modbus server.") from e
 
 async def try_read_registers(
     client: AsyncModbusTcpClient,
