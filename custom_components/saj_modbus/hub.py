@@ -9,7 +9,7 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 from . import modbus_readers
-from .modbus_utils import try_read_registers
+from .modbus_utils import try_read_registers, ensure_connection, safe_close, close as modbus_close
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,69 +68,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.update_interval = timedelta(seconds=scan_interval)
 
                 if connection_changed:
-                    await self._safe_close()
+                    if self._client:
+                        await safe_close(self._client)
                     self._client = self._create_client()
-                    await self.ensure_connection()
+                    await ensure_connection(self._client, self._host, self._port)
             finally:
                 self.updating_settings = False
-
-    async def _safe_close(self) -> bool:
-        """Safely closes the Modbus connection."""
-        if not self._client:
-                return True
-
-        try:
-                if self._client.connected:
-                        close = getattr(self._client, "close", None)
-                        if close:
-                                await close() if inspect.iscoroutinefunction(close) else close()
-                        transport = getattr(self._client, "transport", None)
-                        if transport:
-                                transport.close()
-                        await asyncio.sleep(0.2)
-                        return not self._client.connected
-                return True
-        except Exception as e:
-                _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
-                return False
-        finally:
-                self._client = None
-
-
-    async def close(self) -> None:
-        """Closes the Modbus connection with improved resource management."""
-        if self._closing:
-                return
-
-        self._closing = True
-        try:
-                async with asyncio.timeout(5.0):
-                        async with self._connection_lock:
-                                await self._safe_close()
-        except (asyncio.TimeoutError, Exception) as e:
-                _LOGGER.warning(f"Error during close: {e}", exc_info=True)
-        finally:
-                self._closing = False
-
-
-    async def ensure_connection(self) -> None:
-            """Ensure the Modbus connection is established and stable."""
-            if self._client and self._client.connected:
-                return
-
-            self._client = self._client or self._create_client()
-            try:
-                await asyncio.wait_for(self._client.connect(), timeout=10)
-                _LOGGER.info("Successfully connected to Modbus server.")
-            except Exception as e:
-                _LOGGER.warning(f"Error during connection attempt: {e}", exc_info=True)
-                raise ConnectionException("Failed to connect to Modbus server.") from e
-
 
 
     
     async def _async_update_data(self) -> Dict[str, Any]:
-        await self.ensure_connection()
+        if self._client is None:
+            self._client = self._create_client()
+        await ensure_connection(self._client, self._host, self._port)
         if not self.inverter_data:
             self.inverter_data.update(await modbus_readers.read_modbus_inverter_data(self._client))
         combined_data = {**self.inverter_data}
@@ -185,7 +135,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             await self._handle_pending_first_charge_settings()
             # After writing, the next cycle is read out.
 
-        await self.close()
+        if self._client:
+            await modbus_close(self._client)
         return combined_data
         
     async def _handle_pending_first_charge_settings(self) -> None:

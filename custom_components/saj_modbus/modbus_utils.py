@@ -9,6 +9,50 @@ from pymodbus.exceptions import ConnectionException, ModbusIOException
 _LOGGER = logging.getLogger(__name__)
 
 
+async def safe_close(client: AsyncModbusTcpClient) -> bool:
+    """Safely closes the Modbus connection."""
+    if not client:
+        return True
+
+    try:
+        if client.connected:
+            close = getattr(client, "close", None)
+            if close:
+                await close() if inspect.iscoroutinefunction(close) else close()
+            transport = getattr(client, "transport", None)
+            if transport:
+                transport.close()
+            await asyncio.sleep(0.2)
+            return not client.connected
+        return True
+    except Exception as e:
+        _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
+        return False
+
+
+async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int) -> bool:
+    """Ensure the Modbus connection is established and stable."""
+    if client and client.connected:
+        return True
+
+    try:
+        await asyncio.wait_for(client.connect(), timeout=10)
+        _LOGGER.info("Successfully connected to Modbus server.")
+        return True
+    except Exception as e:
+        _LOGGER.warning(f"Error during connection attempt: {e}", exc_info=True)
+        return False
+
+
+async def close(client: AsyncModbusTcpClient) -> None:
+    """Closes the Modbus connection with improved resource management."""
+    try:
+        async with asyncio.timeout(5.0):
+            await safe_close(client)
+    except (asyncio.TimeoutError, Exception) as e:
+        _LOGGER.warning(f"Error during close: {e}", exc_info=True)
+
+
 
 async def try_read_registers(
     client: AsyncModbusTcpClient,
