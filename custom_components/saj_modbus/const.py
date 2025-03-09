@@ -368,14 +368,10 @@ energy_sensors = [
     {"name": "Backup Year Load", "key": "backup_year_load", "enable": False, "icon": "lightning-bolt"},
     {"name": "Backup Total Load", "key": "backup_total_load", "enable": False, "icon": "lightning-bolt"},
 
-    {"name": "Battery Pack 1 Discharge High", "key": "Bat1DischarCapH", "icon": "battery", "enable": True},
-    {"name": "Battery Pack 1 Discharge Low", "key": "Bat1DischarCapL", "icon": "battery", "enable": True},
-    {"name": "Battery Pack 2 Discharge High", "key": "Bat2DischarCapH", "icon": "battery", "enable": False},
-    {"name": "Battery Pack 2 Discharge Low", "key": "Bat2DischarCapL", "icon": "battery", "enable": False},
-    {"name": "Battery Pack 3 Discharge High", "key": "Bat3DischarCapH", "icon": "battery", "enable": False},
-    {"name": "Battery Pack 3 Discharge Low", "key": "Bat3DischarCapL", "icon": "battery", "enable": False},
-    {"name": "Battery Pack 4 Discharge High", "key": "Bat4DischarCapH", "icon": "battery", "enable": False},
-    {"name": "Battery Pack 4 Discharge Low", "key": "Bat4DischarCapL", "icon": "battery", "enable": False},
+    {"name": "Battery Pack 1 Discharge", "key": "Bat1DischarCap", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 2 Discharge", "key": "Bat2DischarCap", "icon": "battery", "enable": False},
+    {"name": "Battery Pack 3 Discharge", "key": "Bat3DischarCap", "icon": "battery", "enable": False},
+    {"name": "Battery Pack 4 Discharge", "key": "Bat4DischarCap", "icon": "battery", "enable": False},
 
     {"name": "Today PV Energy 2", "key": "today_pv_energy2", "enable": False, "icon": "solar-power"},
     {"name": "Month PV Energy 2", "key": "month_pv_energy2", "enable": False, "icon": "solar-power"},
