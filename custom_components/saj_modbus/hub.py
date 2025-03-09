@@ -117,6 +117,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_additional_modbus_data_2_part_2,
                 modbus_readers.read_additional_modbus_data_3,
                 modbus_readers.read_additional_modbus_data_4,
+                modbus_readers.read_charging_modbus_data_1,
+                modbus_readers.read_charging_modbus_data_2,
                 modbus_readers.read_battery_data,
                 modbus_readers.read_first_charge_data,
             ]
