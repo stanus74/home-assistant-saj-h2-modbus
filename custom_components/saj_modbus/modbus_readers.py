@@ -246,8 +246,7 @@ async def read_battery_data(client: ModbusClient) -> DataDict:
         ("Bat3Current", "16i"), ("Bat3Temperature", "16i", 0.1), ("Bat3CycleNum", None, 1),
         ("Bat4SOC", None), ("Bat4SOH", None), ("Bat4Voltage", None, 0.1), ("Bat4Current", "16i"),
         ("Bat4Temperature", "16i", 0.1), ("Bat4CycleNum", None, 1), (None, "skip_bytes", 12),
-        ("Bat1DischarCapH", None, 1), ("Bat1DischarCapL", None, 1), ("Bat2DischarCapH", None, 1), ("Bat2DischarCapL", None, 1),
-        ("Bat3DischarCapH", None, 1), ("Bat3DischarCapL", None, 1), ("Bat4DischarCapH", None, 1), ("Bat4DischarCapL", None, 1),
+        ("Bat1DischarCap", "32u", 1), ("Bat2DischarCap", "32u", 1), ("Bat3DischarCap", "32u", 1), ("Bat4DischarCap", "32u", 1),
         ("BatProtHigh", None, 0.1), ("BatProtLow", None, 0.1), ("Bat_Chargevoltage", None, 0.1), ("Bat_DisCutOffVolt", None, 0.1),
         ("BatDisCurrLimit", None, 0.1), ("BatChaCurrLimit", None, 0.1),
     ]
