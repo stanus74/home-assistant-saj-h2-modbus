@@ -233,6 +233,38 @@ async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
     
     return await _read_modbus_data(client, 16433, 21, decode_instructions, "grid_phase_data", default_factor=0.001)
 
+async def read_charging_modbus_data_1(self) -> Dict[str, Any]:
+    """Reads charging-related data (Set 1)."""
+    decode_instructions = [
+        ("PassiveChargeEnable", "16u"),      
+        ("PassiveGridChargePower", "16u", 0.001),               
+        ("PassiveGridDischargePower", "16u", 0.001),               
+        ("PassiveBatChargePower", "16u", 0.001),               
+        ("PassBatDisChargePower", "16u", 0.001),               
+        (None, "skip_bytes", 18),                  
+        ("BatOnGridDisDepth", "16u"),               
+        ("BatOffGridDisDepth", "16u"),               
+        ("BatChargeDepth", "16u"),               
+        (None, "skip_bytes", 12),                  
+        ("BatChargePower", "16u", 0.001),               
+        ("BatDischargePower", "16u", 0.001),               
+        ("GridChargePower", "16u", 0.001),               
+        ("GridDischargePower", "16u", 0.001),               
+    ]
+
+    return await _read_modbus_data(client, 13878, 27, decode_instructions, "charging_data_1", default_factor=1)
+
+async def read_charging_modbus_data_2(self) -> Dict[str, Any]:
+    """Reads charging-related data (Set 2)."""
+    decode_instructions_charging_part_2 = [
+        ("undoc8300appmode", "16u"),      
+        (None, "skip_bytes", 2),                  
+        ("undoc8302chargepower", "16u"),      
+        ("undoc8303chargepower", "16u"),      
+    ]
+
+    return await _read_modbus_data(client, 33536, 4, decode_instructions, "charging_data_2", default_factor=1)
+
 async def read_battery_data(client: ModbusClient) -> DataDict:
     """Reads battery data from registers 40960 to 41015."""
     decode_instructions = [

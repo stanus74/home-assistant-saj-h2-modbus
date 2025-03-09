@@ -107,7 +107,6 @@ frequency_sensors_group = SensorGroup(
     icon="mdi:sine-wave"  # Passendes Icon für Frequenz
 )
 
-
 # Neue Gruppe für Zeit- bzw. Scheduling-Daten
 schedule_sensors_group = SensorGroup(
     unit_of_measurement=None,
@@ -306,6 +305,23 @@ information_sensors = [
     {"name": "Battery 3 Warning", "key": "Bat3WarnMSG", "icon": "alert", "enable": True},
     {"name": "Battery 4 Fault", "key": "Bat4FaultMSG", "icon": "alert", "enable": True},
     {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": True},
+
+    {"name": "Passive Charge Enable", "key": "PassiveChargeEnable", "icon": "information-outline", "enable": False},
+    {"name": "Passive GridChargePower", "key": "PassiveGridChargePower", "icon": "information-outline", "enable": False},
+    {"name": "Passive GridDisChargePower", "key": "PassiveGridDischargePower", "icon": "information-outline", "enable": False},
+    {"name": "Passive BatteryChargePower", "key": "PassiveBatChargePower", "icon": "information-outline", "enable": False},
+    {"name": "Passive BatteryDisChargePower", "key": "PassiveBatDisChargePower", "icon": "information-outline", "enable": False},
+    {"name": "Battery OnGridDisDepth", "key": "BatOnGridDisDepth", "icon": "information-outline", "enable": False},
+    {"name": "Battery OffGridDisChargeDepth", "key": "BatOffGridDisDepth", "icon": "information-outline", "enable": False},
+    {"name": "Battery ChargeDepth", "key": "BatChargeDepth", "icon": "information-outline", "enable": False},
+    {"name": "Battery Charge Power Limit", "key": "BatChargePower", "icon": "information-outline", "enable": False},
+    {"name": "Battery Discharge Power Limit", "key": "BatDischargePower", "icon": "information-outline", "enable": False},
+    {"name": "Grid max Charge Power", "key": "GridChargePower", "icon": "information-outline", "enable": False},
+    {"name": "Grid max Discharge Power", "key": "GridDischargePower", "icon": "information-outline", "enable": False},
+    {"name": "Undoc 8300 AppMode", "key": "undoc8300appmode", "icon": "information-outline", "enable": False},
+    {"name": "Undoc 8302 ChargePower", "key": "undoc8302chargepower", "icon": "information-outline", "enable": False},
+    {"name": "Undoc 8303 ChargePower", "key": "undoc8303chargepower", "icon": "information-outline", "enable": False},
+
 ]
     
 
