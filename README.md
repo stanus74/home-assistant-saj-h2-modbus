@@ -58,8 +58,7 @@ This integration should be available in the HACS default repository. Simply go t
 
 - **Feature**: Use the switch to toggle between "Time-of-Use (Charging)" and "Self-Consumption" modes.
 
-**Important** The status and mode will be updateded after 1 intervall
-
+<span style="color:red;">**Important** The status and mode will be updated after 1 interval</span>
 
 ## Additional Information
 
