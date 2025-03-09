@@ -1,23 +1,20 @@
 import asyncio
 import logging
+import inspect
 from datetime import timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional, List
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pymodbus.client import AsyncModbusTcpClient
-from .modbus_utils import safe_close, close, ensure_connection, try_read_registers
+from pymodbus.exceptions import ConnectionException, ModbusIOException
 
-from .modbus_data_readers import (
-    read_modbus_inverter_data,
-    read_modbus_realtime_data,
-    read_additional_modbus_data_1_part_1,
-    read_additional_modbus_data_1_part_2,
-    read_additional_modbus_data_2_part_1,
-    read_additional_modbus_data_2_part_2,
-    read_additional_modbus_data_3,
-    read_additional_modbus_data_4,
-    read_battery_data,
-    read_first_charge_data,
+from . import modbus_readers
+from .modbus_utils import (
+    try_read_registers,
+    ensure_connection,
+    safe_close,
+    close as modbus_close,
+    ReconnectionNeededError
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,34 +35,34 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
         self.inverter_data: Dict[str, Any] = {}
+        
         self._closing = False
         self._reconnecting = False
         self._max_retries = 2
         self._retry_delay = 1
         self._operation_timeout = 30
         
-        # Initialize the pending charging state:
+        # Pending charging state
         self._pending_charging_state: Optional[bool] = None
         
-         # Neue Pending-Variablen für First Charge:
-        self._pending_first_charge_start: Optional[str] = None  # Erwartet im Format "HH:MM"
-        self._pending_first_charge_end: Optional[str] = None    # Erwartet im Format "HH:MM"
+        # Pending First Charge variables (Format "HH:MM" or int)
+        self._pending_first_charge_start: Optional[str] = None
+        self._pending_first_charge_end: Optional[str] = None
         self._pending_first_charge_day_mask: Optional[int] = None
         self._pending_first_charge_power_percent: Optional[int] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
-        """Creates a new optimized instance of the AsyncModbusTcpClient."""
+        """Creates a new instance of AsyncModbusTcpClient."""
         client = AsyncModbusTcpClient(
             host=self._host,
             port=self._port,
             timeout=10,
-            
         )
         _LOGGER.debug(f"Created new Modbus client: AsyncModbusTcpClient {self._host}:{self._port}")
         return client
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
-        """Updates the connection settings with improved synchronization."""
+        """Updates the connection parameters with improved synchronization."""
         async with self._connection_lock:
             self.updating_settings = True
             try:
@@ -75,70 +72,112 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.update_interval = timedelta(seconds=scan_interval)
 
                 if connection_changed:
-                    await safe_close(self._client)
+                    if self._client:
+                        await safe_close(self._client)
                     self._client = self._create_client()
-                    self._client = await ensure_connection(self._client, self._host, self._port)
+                    await ensure_connection(self._client, self._host, self._port)
             finally:
                 self.updating_settings = False
 
+    async def reconnect_client(self) -> bool:
+        """Closes the current client and creates a new one to restore the connection."""
+        async with self._connection_lock:
+            _LOGGER.info("Reconnecting Modbus client...")
+            if self._client:
+                await safe_close(self._client)
+            self._client = self._create_client()
+            connected = await ensure_connection(self._client, self._host, self._port)
+            if connected:
+                _LOGGER.info("Reconnection successful.")
+            else:
+                _LOGGER.error("Reconnection failed.")
+            return connected
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        self._client = await ensure_connection(self._client, self._host, self._port)
-        if not self.inverter_data:
-            self.inverter_data.update(await read_modbus_inverter_data(self._client))
-        combined_data = {**self.inverter_data}
+        # Create the client if it doesn't exist yet, and ensure the connection is established.
+        if self._client is None:
+            self._client = self._create_client()
+        if not await ensure_connection(self._client, self._host, self._port):
+            _LOGGER.error("Connection could not be established.")
+            return {}
 
-        # Loop through all methods that provide dictionary data
-        for method in [
-            read_modbus_realtime_data,
-            read_additional_modbus_data_1_part_1,
-            read_additional_modbus_data_1_part_2,
-            read_additional_modbus_data_2_part_1,
-            read_additional_modbus_data_2_part_2,
-            read_additional_modbus_data_3,
-            read_additional_modbus_data_4,
-            read_battery_data,
-            read_first_charge_data,
-        ]:
-            result = await method(self._client)
-            combined_data.update(result)
-            await asyncio.sleep(0.2)
-        
-        # Separate call to query the current charging state
-        charging_state = await self.get_charging_state()
-        combined_data["charging_enabled"] = charging_state
+        try:
+            # Initial reading of inverter data (one-time)
+            if not self.inverter_data:
+                self.inverter_data.update(await modbus_readers.read_modbus_inverter_data(self._client))
+            
+            combined_data = {**self.inverter_data}
 
-        # Handle pending charging state
-        if self._pending_charging_state is not None:
-            if self._pending_charging_state != charging_state:
-                await self._handle_pending_charging_state()
-                charging_state = await self.get_charging_state()
-                combined_data["charging_enabled"] = charging_state
-            else:
-                _LOGGER.info("Charging state unchanged, no write required.")
-                self._pending_charging_state = None
+            # List of all methods that provide additional data
+            reader_methods = [
+                modbus_readers.read_modbus_realtime_data,
+                modbus_readers.read_additional_modbus_data_1_part_1,
+                modbus_readers.read_additional_modbus_data_1_part_2,
+                modbus_readers.read_additional_modbus_data_2_part_1,
+                modbus_readers.read_additional_modbus_data_2_part_2,
+                modbus_readers.read_additional_modbus_data_3,
+                modbus_readers.read_additional_modbus_data_4,
+                modbus_readers.read_battery_data,
+                modbus_readers.read_first_charge_data,
+            ]
+            
+            # Iterate over all reader methods
+            for method in reader_methods:
+                try:
+                    result = await method(self._client)
+                    combined_data.update(result)
+                except ReconnectionNeededError as e:
+                    _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
+                    if await self.reconnect_client():
+                        # Try again after successful reconnection
+                        result = await method(self._client)
+                        combined_data.update(result)
+                    else:
+                        _LOGGER.error("Reconnection failed during update cycle.")
+                await asyncio.sleep(0.2)
+            
+            # Query the current charging status
+            charging_state = await self.get_charging_state()
+            combined_data["charging_enabled"] = charging_state
 
-        # Handle pending first charge settings
-        if (self._pending_first_charge_start is not None or
-            self._pending_first_charge_end is not None or
-            self._pending_first_charge_day_mask is not None or
-            self._pending_first_charge_power_percent is not None):
-            _LOGGER.info(
-                "Writing First Charge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
-                self._pending_first_charge_start,
-                self._pending_first_charge_end,
-                self._pending_first_charge_day_mask,
-                self._pending_first_charge_power_percent
-            )
-            await self._handle_pending_first_charge_settings()
+            # Handle pending charging status update
+            if self._pending_charging_state is not None:
+                if self._pending_charging_state != charging_state:
+                    await self._handle_pending_charging_state()
+                    charging_state = await self.get_charging_state()
+                    combined_data["charging_enabled"] = charging_state
+                else:
+                    _LOGGER.info("Charging state unchanged, no write required.")
+                    self._pending_charging_state = None
 
-        await close(self._client, self._closing, self._connection_lock)
-        return combined_data
+            # Handle pending First Charge settings
+            if (self._pending_first_charge_start is not None or
+                self._pending_first_charge_end is not None or
+                self._pending_first_charge_day_mask is not None or
+                self._pending_first_charge_power_percent is not None):
+                _LOGGER.info(
+                    "Writing First Charge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
+                    self._pending_first_charge_start,
+                    self._pending_first_charge_end,
+                    self._pending_first_charge_day_mask,
+                    self._pending_first_charge_power_percent
+                )
+                await self._handle_pending_first_charge_settings()
+                # The new values will be read again in the next cycle.
+
+            # Close connection after the update cycle
+            if self._client:
+                await modbus_close(self._client)
+            return combined_data
+
+        except Exception as e:
+            _LOGGER.error(f"Unexpected error during update: {e}")
+            return {}
 
     async def _handle_pending_first_charge_settings(self) -> None:
-        """Schreibt die pending First-Charge-Werte in die Register 0x3606, 0x3607 und 0x3608."""
+        """Writes the pending First Charge settings to the corresponding registers."""
         async with self._read_lock:
-            # Register 0x3606: Start Time (High Byte = Stunde, Low Byte = Minute)
+            # Register 0x3606: Start time (High Byte = Hour, Low Byte = Minute)
             if self._pending_first_charge_start is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_start.split(":"))
@@ -153,7 +192,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 finally:
                     self._pending_first_charge_start = None
 
-            # Register 0x3607: End Time (High Byte = Stunde, Low Byte = Minute)
+            # Register 0x3607: End time (High Byte = Hour, Low Byte = Minute)
             if self._pending_first_charge_end is not None:
                 try:
                     hour, minute = map(int, self._pending_first_charge_end.split(":"))
@@ -171,7 +210,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
             if self._pending_first_charge_day_mask is not None or self._pending_first_charge_power_percent is not None:
                 try:
-                    # Zuerst den aktuellen Registerwert für 0x3608 auslesen
                     response = await self._client.read_holding_registers(address=0x3608, count=1)
                     if not response or response.isError() or len(response.registers) < 1:
                         current_value = 0
@@ -180,7 +218,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     current_day_mask = (current_value >> 8) & 0xFF
                     current_power_percent = current_value & 0xFF
 
-                    # Fehlende Teile mit den Pending-Werten ergänzen (falls vorhanden)
                     day_mask = self._pending_first_charge_day_mask if self._pending_first_charge_day_mask is not None else current_day_mask
                     power_percent = self._pending_first_charge_power_percent if self._pending_first_charge_power_percent is not None else current_power_percent
 
@@ -195,35 +232,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 finally:
                     self._pending_first_charge_day_mask = None
                     self._pending_first_charge_power_percent = None
-
-
-
-
-
-    # Setter-Methoden, die von HA bei Änderung der Sensoren aufgerufen werden:
+                    
+                    
+                    
+    # Setter methods that are called by HA when the sensors change:
     async def set_first_charge_start(self, time_str: str) -> None:
-        """Setzt den neuen Startzeitpunkt (Format 'HH:MM') für First Charge."""
+        """Sets the new start time (format 'HH:MM') for First Charge."""
         self._pending_first_charge_start = time_str
 
     async def set_first_charge_end(self, time_str: str) -> None:
-        """Setzt den neuen Endzeitpunkt (Format 'HH:MM') für First Charge."""
+        """Sets the new end time (format 'HH:MM') for First Charge."""
         self._pending_first_charge_end = time_str
 
     async def set_first_charge_day_mask(self, day_mask: int) -> None:
-        """Setzt den neuen Day Mask Wert für First Charge."""
+        """Sets the new Day Mask value for First Charge."""
         self._pending_first_charge_day_mask = day_mask
 
     async def set_first_charge_power_percent(self, power_percent: int) -> None:
-        """Setzt den neuen Power Percent Wert für First Charge."""
+        """Sets the new Power Percent value for First Charge."""
         self._pending_first_charge_power_percent = power_percent
 
-    
-    
-    # ende charing time
-
-
     async def _handle_pending_charging_state(self) -> dict:
-        """Writes the pending charging state to register 0x3647 and returns an empty dictionary."""
+        """Writes the pending charging status to register 0x3647."""
         if self._pending_charging_state is not None:
             value = 1 if self._pending_charging_state else 0
             async with self._read_lock:
@@ -232,13 +262,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
                 else:
                     _LOGGER.error(f"Failed to set charging state: {response}")
-            # After the write operation, the pending state is reset.
             self._pending_charging_state = None
         return {}
 
-
     async def get_charging_state(self) -> bool:
-        """Get the current charging control state."""
+        """Reads the current charging status."""
         try:
             regs = await try_read_registers(self._client, self._read_lock, 1, 0x3647, 1)
             return bool(regs[0])
@@ -246,9 +274,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Error reading charging state: {e}")
             return False
 
-
     async def set_charging(self, enable: bool) -> None:
-        """Set the charging control state by scheduling it for the next update cycle."""
+        """Plans a change of the charging status for the next update cycle."""
         self._pending_charging_state = enable
-        # The call to async_request_refresh() was removed so that the write operation
-        # occurs exclusively in the regular update cycle.
