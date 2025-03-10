@@ -75,26 +75,26 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return SAJModbusOptionsFlowHandler(config_entry)
 
 
-class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
+class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
     """Handle an options flow for SAJ Modbus."""
-
-    def __init__(self, config_entry):
-        """Initialize the options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
             try:
-                # Get the hub from the saved data
-                hub = self.hass.data[DOMAIN].get(self.config_entry.entry_id, {}).get("hub")
+                # Get the hub from the saved data with robust default handling
+                hub = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {}).get("hub")
 
                 if hub is None:
                     _LOGGER.error(f"Hub not found for entry_id: {self.config_entry.entry_id}")
                     return self.async_abort(reason="hub_not_found")
 
                 # Update the hub configuration
-                await hub.update_connection_settings(user_input[CONF_HOST], user_input[CONF_PORT], user_input[CONF_SCAN_INTERVAL])
+                await hub.update_connection_settings(
+                    user_input[CONF_HOST],
+                    user_input[CONF_PORT],
+                    user_input[CONF_SCAN_INTERVAL]
+                )
 
                 # Save the new options in the configuration entry
                 self.hass.config_entries.async_update_entry(
@@ -107,7 +107,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.error(f"Error updating SAJ Modbus configuration: {str(e)}")
                 return self.async_abort(reason="update_failed")
 
-        # Show the options form
+        # Show the options form with defaults from config entry
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
