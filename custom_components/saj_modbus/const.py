@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    UnitOfReactivePower,  # Ersetze den Import für die veraltete Konstante
+    UnitOfReactivePower,  # Replace the import for the deprecated constant
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -33,7 +33,7 @@ class SensorGroup:
     icon: str = ""  # Optional
     device_class: Optional[str] = None  
     state_class: Optional[str] = None  
-    force_update: bool = False  # Neues Attribut für die Gruppe
+    force_update: bool = False  # New attribute for the group
     
 @dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
@@ -45,7 +45,7 @@ power_sensors_group = SensorGroup(
     device_class=SensorDeviceClass.POWER,
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:solar-power",
-    force_update=True  # force_update für die gesamte Gruppe aktivieren
+    force_update=True  # enable force_update for the entire group
 
 )
 
@@ -101,14 +101,14 @@ battery_sensors_group = SensorGroup(
 )
 
 frequency_sensors_group = SensorGroup(
-    unit_of_measurement=UnitOfFrequency.HERTZ,  # Einheit in Hertz
-    device_class=SensorDeviceClass.FREQUENCY,  # Klassifizierung als Frequenz
-    state_class=SensorStateClass.MEASUREMENT,  # Zustand wird gemessen
-    icon="mdi:sine-wave"  # Passendes Icon für Frequenz
+    unit_of_measurement=UnitOfFrequency.HERTZ,  # Unit in Hertz
+    device_class=SensorDeviceClass.FREQUENCY,  # Classification as frequency
+    state_class=SensorStateClass.MEASUREMENT,  # State is measured
+    icon="mdi:sine-wave"  # Suitable icon for frequency
 )
 
 
-# Neue Gruppe für Zeit- bzw. Scheduling-Daten
+# New group for time and scheduling data
 schedule_sensors_group = SensorGroup(
     unit_of_measurement=None,
     icon="mdi:clock-outline",
@@ -409,7 +409,7 @@ first_charge_sensors = [
         "name": "First Charge Power Percent",
         "key": "first_charge_power_percent",
         "icon": "flash",
-        "unit_of_measurement": "%"  # Hier Überschreibung der Einheit
+        "unit_of_measurement": "%"  # Override of the unit here
     },
 ]
 
