@@ -1,0 +1,27 @@
+name: "Lint Format"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ruff:
+    name: "Ruff Lint & Format"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout the repository"
+        uses: "actions/checkout@v4"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: "Install Ruff"
+        run: python3 -m pip install --upgrade ruff
+
+      - name: "Lint Code"  # Prüft den Code auf Fehler und Stilprobleme
+        run: python3 -m ruff check .
+
+      - name: "Format Code"  # Formatiert den Code automatisch
+        run: python3 -m ruff format .
