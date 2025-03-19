@@ -7,6 +7,11 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTER
 from .hub import SAJModbusHub
 from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
 
+import homeassistant.helpers.config_validation as cv
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema("saj_modbus")
+
+
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "switch", "number", "text"]
