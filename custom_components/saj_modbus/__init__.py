@@ -9,7 +9,7 @@ from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
 
 import homeassistant.helpers.config_validation as cv
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema("saj_modbus")
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 _LOGGER = logging.getLogger(__name__)
