@@ -1,14 +1,17 @@
 """The SAJ Modbus Integration."""
 import logging
+import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.helpers.typing import ConfigType
 
 from .hub import SAJModbusHub
 from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+# This integration is config entry only, so we use the helper
+CONFIG_SCHEMA = vol.Schema({DOMAIN: cv.config_entry_only_schema()}, extra=vol.ALLOW_EXTRA)
 
 
 _LOGGER = logging.getLogger(__name__)
