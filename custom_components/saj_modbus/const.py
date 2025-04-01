@@ -81,12 +81,7 @@ information_sensors_group = SensorGroup(
     icon="mdi:information-outline"  
 )
 
-gfci_sensors_group = SensorGroup(
-    unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
-    device_class=SensorDeviceClass.CURRENT,
-    state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:current-dc"
-)
+# gfci_sensors_group wurde entfernt und in current_sensors_group integriert
 
 iso_resistance_sensors_group = SensorGroup(
     unit_of_measurement="kΩ",  
@@ -212,9 +207,10 @@ current_sensors = [
     {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
-    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
-    {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
-    {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False, "unit_of_measurement": UnitOfElectricCurrent.MILLIAMPERE},
+    {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False, "unit_of_measurement": UnitOfElectricCurrent.MILLIAMPERE},
+    {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False, "unit_of_measurement": UnitOfElectricCurrent.MILLIAMPERE},
+    {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False, "unit_of_measurement": UnitOfElectricCurrent.MILLIAMPERE},
     
     {"name": "Battery 1 Current", "key": "Bat1Current", "icon": "current-dc", "enable": True},
     {"name": "Battery 2 Current", "key": "Bat2Current", "icon": "current-dc", "enable": False},
@@ -239,10 +235,7 @@ battery_sensors = [
 
 
 
-gfci_sensors = [
-    {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False}
-
-]
+# gfci_sensors wurde in current_sensors integriert
 
 temperature_sensors = [
     {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
@@ -424,7 +417,6 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(information_sensors_group, information_sensors),
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
-    **create_sensor_descriptions(gfci_sensors_group,gfci_sensors),
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, first_charge_sensors),
    

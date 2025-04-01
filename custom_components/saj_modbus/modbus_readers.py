@@ -229,7 +229,7 @@ async def read_additional_modbus_data_3_2(client: ModbusClient) -> DataDict:
     decode_instructions_part_3_2 = [(key, "32u", 0.01) for key in data_keys_part_3_2]
     
     try:
-        return await _read_modbus_data(client, 16695 + 30, 34, decode_instructions_part_3_2, 'additional_data_3_2')
+        return await _read_modbus_data(client, 16725, 34, decode_instructions_part_3_2, 'additional_data_3_2')
     except Exception as e:
         _LOGGER.warning(f"Error reading additional data 3 (second part): {e}. This may be normal if your device doesn't support these registers.")
         # Füge leere Werte für die fehlenden Schlüssel hinzu
