@@ -199,13 +199,26 @@ async def read_additional_modbus_data_2_part_2(client: ModbusClient) -> DataDict
     return await _read_modbus_data(client, 16607, 32, decode_instructions_part_2, 'additional_data_2_part_2')
 
 async def read_additional_modbus_data_3(client: ModbusClient) -> DataDict:
-    """Reads additional operating data (Set 3)."""
+    """Reads additional operating data (Set 3) - first part."""
     data_keys_part_3 = [
         "today_pv_energy2", "month_pv_energy2", "year_pv_energy2",
         "total_pv_energy2", "today_pv_energy3", "month_pv_energy3",
         "year_pv_energy3", "total_pv_energy3", "sell_today_energy_2",
         "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
-        "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3",
+        "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3"
+    ]
+    decode_instructions_part_3 = [(key, "32u", 0.01) for key in data_keys_part_3]
+    
+    try:
+        return await _read_modbus_data(client, 16695, 30, decode_instructions_part_3, 'additional_data_3')
+    except Exception as e:
+        _LOGGER.warning(f"Error reading additional data 3 (first part): {e}. This may be normal if your device doesn't support these registers.")
+        # Füge leere Werte für die fehlenden Schlüssel hinzu
+        return {key: 0 for key in data_keys_part_3}
+    
+async def read_additional_modbus_data_3_2(client: ModbusClient) -> DataDict:
+    """Reads additional operating data (Set 3) - second part."""
+    data_keys_part_3_2 = [
         "sell_total_energy_3", "feedin_today_energy_2", "feedin_month_energy_2",
         "feedin_year_energy_2", "feedin_total_energy_2", "feedin_today_energy_3",
         "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
@@ -213,21 +226,26 @@ async def read_additional_modbus_data_3(client: ModbusClient) -> DataDict:
         "sum_feed_in_total", "sum_sell_today", "sum_sell_month",
         "sum_sell_year", "sum_sell_total"
     ]
-    decode_instructions_part_3 = [(key, "32u", 0.01) for key in data_keys_part_3]
+    decode_instructions_part_3_2 = [(key, "32u", 0.01) for key in data_keys_part_3_2]
     
-    return await _read_modbus_data(client, 16695, 64, decode_instructions_part_3, 'additional_data_3')
+    try:
+        return await _read_modbus_data(client, 16695 + 30, 34, decode_instructions_part_3_2, 'additional_data_3_2')
+    except Exception as e:
+        _LOGGER.warning(f"Error reading additional data 3 (second part): {e}. This may be normal if your device doesn't support these registers.")
+        # Füge leere Werte für die fehlenden Schlüssel hinzu
+        return {key: 0 for key in data_keys_part_3_2}
 
 async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
     """Reads data for grid parameters (R, S, and T phase)."""
     decode_instructions = [
         ("RGridVolt", None, 0.1), ("RGridCurr", "16i", 0.01), ("RGridFreq", None, 0.01),
-        ("RGridDCI", "16i"), ("RGridPowerWatt", "16i", 1),
+        ("RGridDCI", "16i",1), ("RGridPowerWatt", "16i", 1),
         ("RGridPowerVA", None, 1), ("RGridPowerPF", "16i"),
         ("SGridVolt", None, 0.1), ("SGridCurr", "16i", 0.01), ("SGridFreq", None, 0.01),
-        ("SGridDCI", "16i"), ("SGridPowerWatt", "16i", 1),
+        ("SGridDCI", "16i",1), ("SGridPowerWatt", "16i", 1),
         ("SGridPowerVA", None, 1), ("SGridPowerPF", "16i"),
         ("TGridVolt", None, 0.1), ("TGridCurr", "16i", 0.01), ("TGridFreq", None, 0.01),
-        ("TGridDCI", "16i"), ("TGridPowerWatt", "16i", 1),
+        ("TGridDCI", "16i",1), ("TGridPowerWatt", "16i", 1),
         ("TGridPowerVA", None, 1), ("TGridPowerPF", "16i"),
     ]
     

@@ -72,10 +72,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.update_interval = timedelta(seconds=scan_interval)
 
                 if connection_changed:
+                    _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
                     if self._client:
                         await safe_close(self._client)
                     self._client = self._create_client()
-                    await ensure_connection(self._client, self._host, self._port)
+                    connected = await ensure_connection(self._client, self._host, self._port, max_retries=3)
+                    if not connected:
+                        _LOGGER.error(f"Failed to connect to new address {host}:{port}")
+                else:
+                    _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
             finally:
                 self.updating_settings = False
 
@@ -83,22 +88,37 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Closes the current client and creates a new one to restore the connection."""
         async with self._connection_lock:
             _LOGGER.info("Reconnecting Modbus client...")
-            if self._client:
-                await safe_close(self._client)
-            self._client = self._create_client()
-            connected = await ensure_connection(self._client, self._host, self._port)
-            if connected:
-                _LOGGER.info("Reconnection successful.")
-            else:
-                _LOGGER.error("Reconnection failed.")
-            return connected
+            if self._reconnecting:
+                _LOGGER.debug("Reconnection already in progress, waiting...")
+                return False
+                
+            try:
+                self._reconnecting = True
+                if self._client:
+                    await safe_close(self._client)
+                
+                # Kurze Pause vor dem Neuverbinden
+                await asyncio.sleep(1)
+                
+                self._client = self._create_client()
+                connected = await ensure_connection(self._client, self._host, self._port, max_retries=3)
+                
+                if connected:
+                    _LOGGER.info("Reconnection successful.")
+                else:
+                    _LOGGER.error("Reconnection failed after multiple attempts.")
+                return connected
+            finally:
+                self._reconnecting = False
 
     async def _async_update_data(self) -> Dict[str, Any]:
         # Create the client if it doesn't exist yet, and ensure the connection is established.
         if self._client is None:
             self._client = self._create_client()
-        if not await ensure_connection(self._client, self._host, self._port):
-            _LOGGER.error("Connection could not be established.")
+        
+        # Versuche, die Verbindung herzustellen, mit mehreren Wiederholungsversuchen
+        if not await ensure_connection(self._client, self._host, self._port, max_retries=3):
+            _LOGGER.error("Connection could not be established after multiple attempts.")
             return {}
 
         try:
@@ -116,6 +136,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_additional_modbus_data_2_part_1,
                 modbus_readers.read_additional_modbus_data_2_part_2,
                 modbus_readers.read_additional_modbus_data_3,
+                modbus_readers.read_additional_modbus_data_3_2,  # Neue Methode für den zweiten Teil der Daten
                 modbus_readers.read_additional_modbus_data_4,
                 modbus_readers.read_battery_data,
                 modbus_readers.read_first_charge_data,
@@ -130,25 +151,35 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
                     if await self.reconnect_client():
                         # Try again after successful reconnection
-                        result = await method(self._client)
-                        combined_data.update(result)
+                        try:
+                            result = await method(self._client)
+                            combined_data.update(result)
+                        except Exception as inner_e:
+                            _LOGGER.error(f"Error after reconnection in {method.__name__}: {inner_e}")
                     else:
                         _LOGGER.error("Reconnection failed during update cycle.")
-                await asyncio.sleep(0.2)
+                except Exception as e:
+                    _LOGGER.error(f"Error in {method.__name__}: {e}")
+                
+                # Kurze Pause zwischen den Lesevorgängen
+                await asyncio.sleep(0.5)
             
             # Query the current charging status
-            charging_state = await self.get_charging_state()
-            combined_data["charging_enabled"] = charging_state
+            try:
+                charging_state = await self.get_charging_state()
+                combined_data["charging_enabled"] = charging_state
 
-            # Handle pending charging status update
-            if self._pending_charging_state is not None:
-                if self._pending_charging_state != charging_state:
-                    await self._handle_pending_charging_state()
-                    charging_state = await self.get_charging_state()
-                    combined_data["charging_enabled"] = charging_state
-                else:
-                    _LOGGER.info("Charging state unchanged, no write required.")
-                    self._pending_charging_state = None
+                # Handle pending charging status update
+                if self._pending_charging_state is not None:
+                    if self._pending_charging_state != charging_state:
+                        await self._handle_pending_charging_state()
+                        charging_state = await self.get_charging_state()
+                        combined_data["charging_enabled"] = charging_state
+                    else:
+                        _LOGGER.info("Charging state unchanged, no write required.")
+                        self._pending_charging_state = None
+            except Exception as e:
+                _LOGGER.error(f"Error handling charging state: {e}")
 
             # Handle pending First Charge settings
             if (self._pending_first_charge_start is not None or
@@ -165,9 +196,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 await self._handle_pending_first_charge_settings()
                 # The new values will be read again in the next cycle.
 
-            # Close connection after the update cycle
+             # Close connection after the update cycle
             if self._client:
                 await modbus_close(self._client)
+            
+                
             return combined_data
 
         except Exception as e:

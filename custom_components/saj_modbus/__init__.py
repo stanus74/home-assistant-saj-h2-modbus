@@ -46,8 +46,18 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hub = hass.data[DOMAIN][entry.entry_id]["hub"]
         if hasattr(hub, "_client") and hub._client:
-            from .modbus_utils import close as modbus_close
-            await modbus_close(hub._client)
+            try:
+                # Markiere den Hub als im Schließprozess
+                hub._closing = True
+                
+                # Warte auf den nächsten Update-Zyklus oder schließe direkt
+                from .modbus_utils import close as modbus_close
+                await modbus_close(hub._client)
+                
+                _LOGGER.info("SAJ Modbus connection closed successfully")
+            except Exception as e:
+                _LOGGER.error(f"Error closing SAJ Modbus connection: {e}")
+                
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
 
@@ -58,6 +68,7 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
     """Helper function to create the SAJ Modbus hub."""
     try:
+        # Erstelle den Hub
         hub = SAJModbusHub(
             hass,
             entry.data[CONF_NAME],
@@ -65,7 +76,13 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
             entry.data[CONF_PORT],
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         )
+        
+        # Führe den ersten Refresh durch - dieser wird bereits versuchen,
+        # eine Verbindung herzustellen und Daten abzurufen
         await hub.async_config_entry_first_refresh()
+        
+        # Wenn wir hier ankommen, war der erste Refresh erfolgreich
+        # oder hat zumindest keine Ausnahme ausgelöst
         return hub
     except Exception as e:
         _LOGGER.error(f"Failed to set up SAJ Modbus hub: {e}")
