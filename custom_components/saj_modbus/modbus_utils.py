@@ -35,22 +35,28 @@ async def safe_close(client: AsyncModbusTcpClient) -> bool:
         _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
         return False
 
-async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int) -> bool:
+async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int, max_retries: int = 3) -> bool:
     """Ensures that the Modbus connection is established and stable."""
     if client and client.connected:
         return True
 
-    try:
-        await asyncio.wait_for(client.connect(), timeout=10)
-        if client.connected:
-            _LOGGER.info("Successfully connected to Modbus server.")
-            return True
-        else:
-            _LOGGER.warning("Client not connected after connect attempt.")
-            return False
-    except Exception as e:
-        _LOGGER.warning(f"Error during connection attempt: {e}", exc_info=True)
-        return False
+    for attempt in range(max_retries):
+        try:
+            _LOGGER.debug(f"Connection attempt {attempt + 1}/{max_retries} to {host}:{port}")
+            await asyncio.wait_for(client.connect(), timeout=10)
+            if client.connected:
+                _LOGGER.info("Successfully connected to Modbus server.")
+                return True
+            else:
+                _LOGGER.warning("Client not connected after connect attempt.")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+        except Exception as e:
+            _LOGGER.warning(f"Error during connection attempt {attempt + 1}: {e}", exc_info=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+    
+    return False
 
 async def close(client: AsyncModbusTcpClient) -> None:
     """Closes the Modbus connection with improved resource management."""
@@ -71,23 +77,48 @@ async def try_read_registers(
     base_delay: float = 2.0
 ) -> List[int]:
     """Reads Modbus registers with optimized error handling."""
+    # Überprüfe zuerst, ob der Client verbunden ist
+    if not client or not client.connected:
+        _LOGGER.error(f"Client not connected before attempting to read registers from address {address}")
+        raise ReconnectionNeededError("Client not connected, reconnection needed before reading")
+    
     for attempt in range(max_retries):
         try:
+            _LOGGER.debug(f"Reading registers attempt {attempt + 1}/{max_retries} from address {address}, count {count}")
+            
             async with read_lock:
                 response = await client.read_holding_registers(address=address, count=count)
             
-            if (not response) or response.isError() or len(response.registers) != count:
-                raise ModbusIOException(f"Invalid response from address {address}")
-                
-            return response.registers
+            # Überprüfe die Antwort auf Fehler
+            if not response:
+                _LOGGER.error(f"No response received from address {address}")
+            elif response.isError():
+                error_msg = getattr(response, 'message', str(response))
+                _LOGGER.error(f"Error response from address {address}: {error_msg}")
+            elif len(response.registers) != count:
+                _LOGGER.error(f"Incomplete response from address {address}: expected {count} registers, got {len(response.registers)}")
+            else:
+                # Erfolgreiche Antwort
+                return response.registers
             
-        except (ModbusIOException, ConnectionException) as e:
-            _LOGGER.error(f"Read attempt {attempt + 1} failed at address {address}: {e}")
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2 ** attempt), 10.0)
-                await asyncio.sleep(delay)
-                # Instead of creating a new client here, an exception is thrown
-                # that can be caught in the hub and the reconnection logic can be centrally controlled.
-                raise ReconnectionNeededError("Reconnection needed due to read failure.")
-    _LOGGER.error(f"Failed to read registers from unit {unit}, address {address} after {max_retries} attempts")
-    raise ConnectionException(f"Read operation failed for address {address} after {max_retries} attempts")
+        except ConnectionException as e:
+            _LOGGER.error(f"Connection error during read attempt {attempt + 1} at address {address}: {e}")
+        except ModbusIOException as e:
+            _LOGGER.error(f"Modbus IO error during read attempt {attempt + 1} at address {address}: {e}")
+        except Exception as e:
+            _LOGGER.error(f"Unexpected error during read attempt {attempt + 1} at address {address}: {e}")
+        
+        # Wenn wir hier ankommen, ist der Versuch fehlgeschlagen
+        if attempt < max_retries - 1:
+            # Warte vor dem nächsten Versuch
+            delay = min(base_delay * (2 ** attempt), 10.0)
+            _LOGGER.info(f"Waiting {delay:.1f}s before retry {attempt + 2}/{max_retries}")
+            await asyncio.sleep(delay)
+        else:
+            # Letzter Versuch fehlgeschlagen, fordere eine Neuverbindung an
+            _LOGGER.warning(f"All {max_retries} read attempts failed for address {address}, requesting reconnection")
+            raise ReconnectionNeededError(f"Reconnection needed after {max_retries} failed read attempts at address {address}")
+    
+    # Dieser Code sollte nie erreicht werden, da wir entweder Register zurückgeben oder eine Exception werfen
+    _LOGGER.error(f"Unexpected code path in try_read_registers for address {address}")
+    raise ConnectionException(f"Unexpected error reading from address {address}")

@@ -63,6 +63,14 @@ current_sensors_group = SensorGroup(
     icon="mdi:current-dc",  
 )
 
+# Neue Gruppe für Sensoren mit Milliampere als Einheit
+milliampere_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:current-dc",  
+)
+
 temperature_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfTemperature.CELSIUS,
     device_class=SensorDeviceClass.TEMPERATURE,
@@ -81,12 +89,7 @@ information_sensors_group = SensorGroup(
     icon="mdi:information-outline"  
 )
 
-gfci_sensors_group = SensorGroup(
-    unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
-    device_class=SensorDeviceClass.CURRENT,
-    state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:current-dc"
-)
+# gfci_sensors_group wurde entfernt und in current_sensors_group integriert
 
 iso_resistance_sensors_group = SensorGroup(
     unit_of_measurement="kΩ",  
@@ -212,9 +215,6 @@ current_sensors = [
     {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
-    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
-    {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
-    {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
     
     {"name": "Battery 1 Current", "key": "Bat1Current", "icon": "current-dc", "enable": True},
     {"name": "Battery 2 Current", "key": "Bat2Current", "icon": "current-dc", "enable": False},
@@ -222,6 +222,14 @@ current_sensors = [
     {"name": "Battery 4 Current", "key": "Bat4Current", "icon": "current-dc", "enable": False},
     {"name": "Battery Discharge Current Limit", "key": "BatDisCurrLimit", "icon": "battery", "enable": True},
     {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
+]
+
+# Sensoren mit Milliampere als Einheit
+milliampere_sensors = [
+    {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
+    {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False},
 ]
 
 battery_sensors = [
@@ -239,10 +247,7 @@ battery_sensors = [
 
 
 
-gfci_sensors = [
-    {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False}
-
-]
+# gfci_sensors wurde in current_sensors integriert
 
 temperature_sensors = [
     {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
@@ -419,12 +424,12 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
     **create_sensor_descriptions(voltage_sensors_group, voltage_sensors),
     **create_sensor_descriptions(current_sensors_group, current_sensors),
+    **create_sensor_descriptions(milliampere_sensors_group, milliampere_sensors),
     **create_sensor_descriptions(temperature_sensors_group, temperature_sensors),
     **create_sensor_descriptions(energy_sensors_group, energy_sensors),
     **create_sensor_descriptions(information_sensors_group, information_sensors),
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
-    **create_sensor_descriptions(gfci_sensors_group,gfci_sensors),
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, first_charge_sensors),
    
