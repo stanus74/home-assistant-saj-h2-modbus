@@ -97,7 +97,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 if self._client:
                     await safe_close(self._client)
                 
-                # Kurze Pause vor dem Neuverbinden
+                # Short pause before reconnecting
                 await asyncio.sleep(1)
                 
                 self._client = self._create_client()
@@ -116,7 +116,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if self._client is None:
             self._client = self._create_client()
         
-        # Versuche, die Verbindung herzustellen, mit mehreren Wiederholungsversuchen
+        # Try to establish the connection with multiple retry attempts
         if not await ensure_connection(self._client, self._host, self._port, max_retries=3):
             _LOGGER.error("Connection could not be established after multiple attempts.")
             return {}
@@ -136,7 +136,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_additional_modbus_data_2_part_1,
                 modbus_readers.read_additional_modbus_data_2_part_2,
                 modbus_readers.read_additional_modbus_data_3,
-                modbus_readers.read_additional_modbus_data_3_2,  # Neue Methode für den zweiten Teil der Daten
+                modbus_readers.read_additional_modbus_data_3_2,  # New method for the second part of the data
                 modbus_readers.read_additional_modbus_data_4,
                 modbus_readers.read_battery_data,
                 modbus_readers.read_first_charge_data,
@@ -161,7 +161,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 except Exception as e:
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
                 
-                # Kurze Pause zwischen den Lesevorgängen
+                # Short pause between read operations
                 await asyncio.sleep(0.5)
             
             # Query the current charging status
