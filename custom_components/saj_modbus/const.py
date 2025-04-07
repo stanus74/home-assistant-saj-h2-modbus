@@ -418,6 +418,25 @@ first_charge_sensors = [
     },
 ]
 
+# Anti-Reflux Sensoren definieren:
+anti_reflux_sensors = [
+    {
+        "name": "Anti-Reflux Power Limit",
+        "key": "AntiRefluxPowerLimit",
+        "icon": "flash-outline",
+    },
+    {
+        "name": "Anti-Reflux Current Limit",
+        "key": "AntiRefluxCurrentLimit",
+        "icon": "current-dc",
+    },
+    {
+        "name": "Anti-Reflux Current Mode",
+        "key": "AntiRefluxCurrentmode",
+        "icon": "cog-outline",
+    },
+]
+
 
 
 SENSOR_TYPES = {
@@ -432,7 +451,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, first_charge_sensors),
-   
+    **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
 }
 
 

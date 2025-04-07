@@ -9,7 +9,11 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up SAJ number entities."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
-    async_add_entities([SajFirstChargeDayMaskInputEntity(hub), SajFirstChargePowerPercentInputEntity(hub)])
+    async_add_entities([
+        SajFirstChargeDayMaskInputEntity(hub), 
+        SajFirstChargePowerPercentInputEntity(hub),
+        SajExportLimitInputEntity(hub)
+    ])
 
 class SajNumberEntity(NumberEntity):
     """Base class for SAJ writable number entities."""
@@ -57,3 +61,18 @@ class SajFirstChargePowerPercentInputEntity(SajNumberEntity):
         self._attr_native_value = val
         await self._hub.set_first_charge_power_percent(val)
         self.async_write_ha_state()  # Für Logbuch
+
+class SajExportLimitInputEntity(SajNumberEntity):
+    """Entity for Export Limit (0-1000 )."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Export Limit (Input)", "saj_export_limit_input", 0, 1000, 100, 0)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 1000:
+            _LOGGER.error(f"Invalid export limit: {val}")
+            return
+        _LOGGER.debug(f"Setting export limit to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_export_limit(val)
+        self.async_write_ha_state()

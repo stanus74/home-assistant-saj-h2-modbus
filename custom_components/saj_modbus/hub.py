@@ -50,6 +50,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_first_charge_end: Optional[str] = None
         self._pending_first_charge_day_mask: Optional[int] = None
         self._pending_first_charge_power_percent: Optional[int] = None
+        
+        # Pending Export Limit variable
+        self._pending_export_limit: Optional[int] = None
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new instance of AsyncModbusTcpClient."""
@@ -140,6 +143,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_additional_modbus_data_4,
                 modbus_readers.read_battery_data,
                 modbus_readers.read_first_charge_data,
+                modbus_readers.read_anti_reflux_data,  # New method for Anti-Reflux data
             ]
             
             # Iterate over all reader methods
@@ -195,6 +199,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 )
                 await self._handle_pending_first_charge_settings()
                 # The new values will be read again in the next cycle.
+                
+            # Handle pending Export Limit setting
+            if self._pending_export_limit is not None:
+                _LOGGER.info(f"Writing Export Limit value: {self._pending_export_limit}")
+                await self._handle_pending_export_limit()
+                # The new value will be read again in the next cycle.
 
              # Close connection after the update cycle
             if self._client:
@@ -310,3 +320,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def set_charging(self, enable: bool) -> None:
         """Plans a change of the charging status for the next update cycle."""
         self._pending_charging_state = enable
+        
+    async def set_export_limit(self, limit: int) -> None:
+        """Sets the new export limit value."""
+        self._pending_export_limit = limit
+        
+    async def _handle_pending_export_limit(self) -> None:
+        """Writes the pending export limit to register 0x365A."""
+        if self._pending_export_limit is not None:
+            try:
+                async with self._read_lock:
+                    response = await self._client.write_register(0x365A, self._pending_export_limit)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set export limit to: {self._pending_export_limit}")
+                    else:
+                        _LOGGER.error(f"Failed to write export limit: {response}")
+            except Exception as e:
+                _LOGGER.error(f"Error writing export limit: {e}")
+            finally:
+                self._pending_export_limit = None
