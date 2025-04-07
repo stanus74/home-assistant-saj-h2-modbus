@@ -311,10 +311,10 @@ async def read_anti_reflux_data(client: ModbusClient) -> DataDict:
         if "AntiRefluxCurrentmode_raw" in data:
             mode_value = data.pop("AntiRefluxCurrentmode_raw")
             mode_text = {
-                0: "Not open anti-reflux",
-                1: "Total power mode",
-                2: "Phase current mode",
-                3: "Phase power mode"
+                0: "0: Not open anti-reflux",
+                1: "1: Total power mode",
+                2: "2: Phase current mode",
+                3: "3: Phase power mode"
             }.get(mode_value, f"Unknown mode ({mode_value})")
             
             data["AntiRefluxCurrentmode"] = mode_text
