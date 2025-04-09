@@ -50,6 +50,7 @@ This release adds support for setting the max export power to the public grid.
 - **SAJ Anti-Reflux Current Mode** (`365CH`)
 
 Perfect for zero export or dynamic grid feed-in limitation.
+
 ---
 
 
