@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from typing import List, Optional
-import inspect
+from typing import List
+
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
@@ -17,27 +17,26 @@ async def safe_close(client: AsyncModbusTcpClient) -> bool:
         return True
 
     try:
-        if client.connected:
-            close_method = getattr(client, "close", None)
-            if close_method:
-                if inspect.iscoroutinefunction(close_method):
-                    await close_method()
-                else:
-                    close_method()
-            transport = getattr(client, "transport", None)
-            if transport:
-                transport.close()
-            await asyncio.sleep(0.2)
-            # Optional: Check status again
-            return not client.connected
-        return True
+        close_method = getattr(client, "close", None)
+        if client.connected and callable(close_method):
+            if asyncio.iscoroutinefunction(close_method):
+                await close_method()
+            else:
+                close_method()
+
+        transport = getattr(client, "transport", None)
+        if transport and hasattr(transport, "is_closing") and not transport.is_closing():
+            transport.close()
+
+        await asyncio.sleep(0.2)
+        return not client.connected
     except Exception as e:
-        _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
+        _LOGGER.warning(f"Error during safe close: {type(e).__name__}: {e}", exc_info=True)
         return False
 
 async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int, max_retries: int = 3) -> bool:
     """Ensures that the Modbus connection is established and stable."""
-    if client and client.connected:
+    if client and client.connected and getattr(client, "transport", None):
         return True
 
     for attempt in range(max_retries):
@@ -49,23 +48,22 @@ async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int, 
                 return True
             else:
                 _LOGGER.warning("Client not connected after connect attempt.")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
         except Exception as e:
-            _LOGGER.warning(f"Error during connection attempt {attempt + 1}: {e}", exc_info=True)
-            if attempt < max_retries - 1:
-                await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
-    
+            _LOGGER.warning(f"Error during connection attempt {attempt + 1}: {type(e).__name__}: {e}", exc_info=True)
+
+        if attempt < max_retries - 1:
+            await asyncio.sleep(min(2 * (attempt + 1), 10.0))
+
     return False
 
 async def close(client: AsyncModbusTcpClient) -> None:
     """Closes the Modbus connection with improved resource management."""
     try:
-        
         async with asyncio.timeout(5.0):
             await safe_close(client)
-    except (asyncio.TimeoutError, Exception) as e:
-        _LOGGER.warning(f"Error during close: {e}", exc_info=True)
+    except Exception as e:
+        _LOGGER.warning(f"Error during close: {type(e).__name__}: {e}", exc_info=True)
+
 
 async def try_read_registers(
     client: AsyncModbusTcpClient,

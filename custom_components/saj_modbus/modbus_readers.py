@@ -295,3 +295,31 @@ async def read_first_charge_data(client: ModbusClient) -> DataDict:
             return {}
 
     return data
+
+async def read_anti_reflux_data(client: ModbusClient) -> DataDict:
+    """Reads the Anti-Reflux registers using the generic read_modbus_data function."""
+    decode_instructions = [
+        ("AntiRefluxPowerLimit", "16u", 1),
+        ("AntiRefluxCurrentLimit", "16u", 1),
+        ("AntiRefluxCurrentmode_raw", "16u", 1),
+    ]
+
+    try:
+        data = await _read_modbus_data(client, 0x365A, 3, decode_instructions, "anti_reflux_data", default_factor=1)
+        
+        # Umwandlung des AntiRefluxCurrentmode-Werts in Text
+        if "AntiRefluxCurrentmode_raw" in data:
+            mode_value = data.pop("AntiRefluxCurrentmode_raw")
+            mode_text = {
+                0: "0: Not open anti-reflux",
+                1: "1: Total power mode",
+                2: "2: Phase current mode",
+                3: "3: Phase power mode"
+            }.get(mode_value, f"Unknown mode ({mode_value})")
+            
+            data["AntiRefluxCurrentmode"] = mode_text
+        
+        return data
+    except Exception as e:
+        _LOGGER.error(f"Error reading Anti-Reflux data: {e}")
+        return {}

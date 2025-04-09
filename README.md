@@ -34,7 +34,25 @@ This integration should be available in the HACS default repository. Simply go t
 
 ---
 
-## New Features Since Version 1.8
+## New Features Since Version 1.9
+
+### 🚀 New Feature: Export Limit Control
+
+This release adds support for setting the max export power to the public grid.
+
+#### 🆕 New Input Entity:
+- **SAJ Export Limit (Input)**
+  Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
+
+#### 🆕 New Sensors:
+- **SAJ Anti-Reflux Power Limit** (`365AH`) – changable with Export Limit (Input)
+- **SAJ Anti-Reflux Current Limit** (`365BH`)
+- **SAJ Anti-Reflux Current Mode** (`365CH`)
+
+Perfect for zero export or dynamic grid feed-in limitation.
+
+---
+
 
 ### Configure Charging Time and Power
 
