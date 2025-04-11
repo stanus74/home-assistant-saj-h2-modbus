@@ -166,7 +166,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
                 
                 # Short pause between read operations
-                await asyncio.sleep(0.5)
+                #await asyncio.sleep(2)
             
             # Query the current charging status
             try:
