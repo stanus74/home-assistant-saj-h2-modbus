@@ -13,7 +13,7 @@ from .modbus_utils import (
     try_read_registers,
     ensure_connection,
     safe_close,
-    close as modbus_close,
+    close_connection as modbus_close,
     ReconnectionNeededError
 )
 
