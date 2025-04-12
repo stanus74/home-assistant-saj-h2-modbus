@@ -12,39 +12,6 @@ Lock: TypeAlias = asyncio.Lock
 
 _LOGGER = logging.getLogger(__name__)
 
-class ModbusRateLimiter:
-    """Rate limiting for Modbus requests"""
-    def __init__(self, min_interval: float = 1.0):
-        self.min_interval = min_interval
-        self.last_request = 0.0
-        self._lock = asyncio.Lock()
-    
-    async def acquire(self):
-        async with self._lock:
-            now = asyncio.get_event_loop().time()
-            if self.last_request > 0:
-                elapsed = now - self.last_request
-                if elapsed < self.min_interval:
-                    await asyncio.sleep(self.min_interval - elapsed)
-            self.last_request = asyncio.get_event_loop().time()
-
-# Globale Rate-Limiter Instanz
-_RATE_LIMITER = ModbusRateLimiter(min_interval=1.0)
-
-async def is_connection_alive(client: ModbusClient) -> bool:
-    """Prüft ob die Verbindung tatsächlich noch aktiv ist."""
-    if not client or not client.connected:
-        return False
-    
-    try:
-        # Versuche einen einzelnen Register zu lesen als "Heartbeat"
-        async with asyncio.timeout(5):
-            response = await client.read_holding_registers(address=0x8F00, count=1, slave=1)
-            return response and not response.isError()
-    except Exception as e:
-        _LOGGER.debug(f"Connection check failed: {e}")
-        return False
-
 class ReconnectionNeededError(Exception):
     """Special exception that signals that a reconnection is required."""
     pass
@@ -104,12 +71,8 @@ async def ensure_connection(
         True if connected, False otherwise.
     """
     if client and client.connected:
-        # Zusätzliche Verbindungsprüfung
-        if await is_connection_alive(client):
-            return True
-        else:
-            _LOGGER.warning("Connection appeared active but failed health check")
-    
+        return True
+
     if not client:
         _LOGGER.error("ensure_connection called with an invalid client instance.")
         return False
@@ -122,13 +85,6 @@ async def ensure_connection(
 
             if client.connected:
                 _LOGGER.info(f"Successfully connected to Modbus server {host}:{port}.")
-                # Warte kurz nach Verbindungsaufbau
-                await asyncio.sleep(1)
-                # Prüfe ob Verbindung wirklich steht
-                if not await is_connection_alive(client):
-                    _LOGGER.warning("Connection appeared successful but failed health check")
-                    return False
-                _LOGGER.info("Connection verified with health check")
                 return True
             else:
                 # This case might occur if connect() returns without error but doesn't set connected flag
@@ -220,13 +176,6 @@ async def try_read_registers(
         ModbusIOException: For certain communication errors not handled by retries.
     """
     # --- Initial Connection Check ---
-    # Prüfe Verbindung
-    #if not await is_connection_alive(client):
-    #    raise ReconnectionNeededError("Connection check failed")
-    
-    # Rate Limiting
-    await _RATE_LIMITER.acquire()
-    
     if not client or not client.connected:
         _LOGGER.error(f"Read failed: Client not connected before attempting to read {count} registers from address {address}, unit {unit}.")
         raise ReconnectionNeededError("Client not connected, reconnection needed before reading")
@@ -292,3 +241,4 @@ async def try_read_registers(
     # --- Should Not Be Reached ---
     # This path implies the loop finished without returning or raising, which shouldn't happen.
     assert False, f"Unexpected code path reached in try_read_registers for address {address}, unit {unit}"
+
