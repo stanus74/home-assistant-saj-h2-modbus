@@ -1,9 +1,14 @@
 import asyncio
 import logging
-from typing import List
+from typing import List, Optional, TypeAlias
+import inspect
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+
+# --- Type Aliases ---
+ModbusClient: TypeAlias = AsyncModbusTcpClient
+Lock: TypeAlias = asyncio.Lock
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -11,112 +16,132 @@ class ReconnectionNeededError(Exception):
     """Special exception that signals that a reconnection is required."""
     pass
 
-async def safe_close(client: AsyncModbusTcpClient) -> bool:
-    """Safely closes the Modbus connection."""
+# --- Utility Functions ---
+
+def _validate_response(response, address: int, unit: int, count: int) -> Optional[Exception]:
+    if not response:
+        return ModbusIOException("No response received")
+    if response.isError():
+        msg = getattr(response, 'message', str(response))
+        return ModbusIOException(f"Modbus Error Response: {msg}")
+    if not hasattr(response, 'registers') or response.registers is None:
+        return ModbusIOException("Invalid response object received")
+    if len(response.registers) != count:
+        return ModbusIOException(f"Incomplete response: expected {count}, got {len(response.registers)}")
+    return None
+
+async def _delay_retry(attempt: int, max_retries: int, factor: float = 2.0, cap: float = 10.0):
+    if attempt < max_retries - 1:
+        delay = min(factor * (attempt + 1), cap)
+        _LOGGER.info(f"Waiting {delay:.1f}s before retry {attempt + 2}/{max_retries}")
+        await asyncio.sleep(delay)
+
+# --- Core Functions ---
+
+async def safe_close(client: Optional[ModbusClient]) -> None:
     if not client:
-        return True
+        _LOGGER.debug("safe_close called with no client instance.")
+        return
+
+    if not client.connected:
+        _LOGGER.debug("safe_close called but client was not connected.")
+        return
 
     try:
+        _LOGGER.debug("Attempting to safely close Modbus connection.")
         close_method = getattr(client, "close", None)
-        if client.connected and callable(close_method):
-            if asyncio.iscoroutinefunction(close_method):
-                await close_method()
-            else:
-                close_method()
-
-        transport = getattr(client, "transport", None)
-        if transport and hasattr(transport, "is_closing") and not transport.is_closing():
-            transport.close()
-
-        await asyncio.sleep(0.2)
-        return not client.connected
+        if close_method:
+            await close_method() if inspect.iscoroutinefunction(close_method) else close_method()
+            _LOGGER.debug("Close method called.")
+        else:
+            _LOGGER.warning("Client object has no 'close' method.")
     except Exception as e:
-        _LOGGER.warning(f"Error during safe close: {type(e).__name__}: {e}", exc_info=True)
-        return False
+        _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
 
-async def ensure_connection(client: AsyncModbusTcpClient, host: str, port: int, max_retries: int = 3) -> bool:
-    """Ensures that the Modbus connection is established and stable."""
-    if client and client.connected and getattr(client, "transport", None):
+async def ensure_connection(
+    client: ModbusClient,
+    host: str,
+    port: int,
+    max_retries: int = 3,
+    timeout_seconds: float = 10.0
+) -> bool:
+    if client and client.connected:
         return True
+
+    if not client:
+        _LOGGER.error("ensure_connection called with an invalid client instance.")
+        return False
 
     for attempt in range(max_retries):
         try:
             _LOGGER.debug(f"Connection attempt {attempt + 1}/{max_retries} to {host}:{port}")
-            await asyncio.wait_for(client.connect(), timeout=10)
+            await asyncio.wait_for(client.connect(), timeout=timeout_seconds)
+
             if client.connected:
-                _LOGGER.info("Successfully connected to Modbus server.")
+                _LOGGER.info(f"Successfully connected to Modbus server {host}:{port}.")
                 return True
             else:
-                _LOGGER.warning("Client not connected after connect attempt.")
-        except Exception as e:
-            _LOGGER.warning(f"Error during connection attempt {attempt + 1}: {type(e).__name__}: {e}", exc_info=True)
+                _LOGGER.warning(f"Connect attempt {attempt + 1} finished, but client is not marked as connected.")
+        except (asyncio.TimeoutError, ConnectionRefusedError, Exception) as e:
+            _LOGGER.warning(f"Error during connection attempt {attempt + 1} to {host}:{port}: {e}", exc_info=True)
 
-        if attempt < max_retries - 1:
-            await asyncio.sleep(min(2 * (attempt + 1), 10.0))
+        await _delay_retry(attempt, max_retries)
 
+    _LOGGER.error(f"Failed to connect to Modbus server {host}:{port} after {max_retries} attempts.")
     return False
 
-async def close(client: AsyncModbusTcpClient) -> None:
-    """Closes the Modbus connection with improved resource management."""
-    try:
-        async with asyncio.timeout(5.0):
-            await safe_close(client)
-    except Exception as e:
-        _LOGGER.warning(f"Error during close: {type(e).__name__}: {e}", exc_info=True)
+async def close_connection(
+    client: Optional[ModbusClient],
+    timeout_seconds: float = 5.0
+) -> None:
+    if not client:
+        _LOGGER.debug("close_connection called with no client instance.")
+        return
 
+    try:
+        _LOGGER.debug(f"Closing connection with {timeout_seconds}s timeout.")
+        async with asyncio.timeout(timeout_seconds):
+            await safe_close(client)
+        _LOGGER.debug("Connection close process finished.")
+    except asyncio.TimeoutError:
+        _LOGGER.warning(f"Closing connection timed out after {timeout_seconds}s.")
+    except Exception as e:
+        _LOGGER.warning(f"Error during close_connection: {e}", exc_info=True)
 
 async def try_read_registers(
-    client: AsyncModbusTcpClient,
-    read_lock: asyncio.Lock,
+    client: ModbusClient,
+    read_lock: Lock,
     unit: int,
     address: int,
     count: int,
     max_retries: int = 3,
-    base_delay: float = 2.0
+    base_delay: float = 2.0,
+    max_delay: float = 10.0
 ) -> List[int]:
-    """Reads Modbus registers with optimized error handling."""
-    # Überprüfe zuerst, ob der Client verbunden ist
     if not client or not client.connected:
-        _LOGGER.error(f"Client not connected before attempting to read registers from address {address}")
+        _LOGGER.error(f"Read failed: Client not connected before attempting to read {count} registers from address {address}, unit {unit}.")
         raise ReconnectionNeededError("Client not connected, reconnection needed before reading")
-    
+
+    last_exception: Optional[Exception] = None
     for attempt in range(max_retries):
         try:
-            _LOGGER.debug(f"Reading registers attempt {attempt + 1}/{max_retries} from address {address}, count {count}")
-            
+            _LOGGER.debug(f"Read attempt {attempt + 1}/{max_retries}: Reading {count} registers from address {address}, unit {unit}")
             async with read_lock:
-                response = await client.read_holding_registers(address=address, count=count)
-            
-            # Überprüfe die Antwort auf Fehler
-            if not response:
-                _LOGGER.error(f"No response received from address {address}")
-            elif response.isError():
-                error_msg = getattr(response, 'message', str(response))
-                _LOGGER.error(f"Error response from address {address}: {error_msg}")
-            elif len(response.registers) != count:
-                _LOGGER.error(f"Incomplete response from address {address}: expected {count} registers, got {len(response.registers)}")
+                response = await client.read_holding_registers(address=address, count=count, slave=unit)
+
+            err = _validate_response(response, address, unit, count)
+            if err:
+                _LOGGER.warning(f"Read attempt {attempt + 1} failed: {err}")
+                last_exception = err
             else:
-                # Erfolgreiche Antwort
+                _LOGGER.debug(f"Read attempt {attempt + 1} successful for address {address}, unit {unit}.")
                 return response.registers
-            
-        except ConnectionException as e:
-            _LOGGER.error(f"Connection error during read attempt {attempt + 1} at address {address}: {e}")
-        except ModbusIOException as e:
-            _LOGGER.error(f"Modbus IO error during read attempt {attempt + 1} at address {address}: {e}")
-        except Exception as e:
-            _LOGGER.error(f"Unexpected error during read attempt {attempt + 1} at address {address}: {e}")
-        
-        # Wenn wir hier ankommen, ist der Versuch fehlgeschlagen
-        if attempt < max_retries - 1:
-            # Warte vor dem nächsten Versuch
-            delay = min(base_delay * (2 ** attempt), 10.0)
-            _LOGGER.info(f"Waiting {delay:.1f}s before retry {attempt + 2}/{max_retries}")
-            await asyncio.sleep(delay)
-        else:
-            # Letzter Versuch fehlgeschlagen, fordere eine Neuverbindung an
-            _LOGGER.warning(f"All {max_retries} read attempts failed for address {address}, requesting reconnection")
-            raise ReconnectionNeededError(f"Reconnection needed after {max_retries} failed read attempts at address {address}")
-    
-    # Dieser Code sollte nie erreicht werden, da wir entweder Register zurückgeben oder eine Exception werfen
-    _LOGGER.error(f"Unexpected code path in try_read_registers for address {address}")
-    raise ConnectionException(f"Unexpected error reading from address {address}")
+
+        except (ConnectionException, ModbusIOException, Exception) as e:
+            _LOGGER.warning(f"Read attempt {attempt + 1} for address {address}, unit {unit}: {type(e).__name__}: {e}", exc_info=True)
+            last_exception = e
+
+        await _delay_retry(attempt, max_retries, base_delay, max_delay)
+
+    _LOGGER.error(f"All {max_retries} read attempts failed for address {address}, unit {unit}. Last error: {last_exception}")
+    raise ReconnectionNeededError(f"Reconnection needed after {max_retries} failed read attempts at address {address}, unit {unit}. Last error: {last_exception}") from last_exception

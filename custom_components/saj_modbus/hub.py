@@ -13,7 +13,7 @@ from .modbus_utils import (
     try_read_registers,
     ensure_connection,
     safe_close,
-    close as modbus_close,
+    close_connection as modbus_close,
     ReconnectionNeededError
 )
 
@@ -166,7 +166,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
                 
                 # Short pause between read operations
-                await asyncio.sleep(0.5)
+                #await asyncio.sleep(2)
             
             # Query the current charging status
             try:
