@@ -17,11 +17,13 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the writable time entities for First Charge."""
+    """Set up the writable time entities for First Charge and Discharge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     entities = [
         SajFirstChargeStartTimeTextEntity(hub),
         SajFirstChargeEndTimeTextEntity(hub),
+        SajDischargeStartTimeTextEntity(hub),
+        SajDischargeEndTimeTextEntity(hub),
     ]
     async_add_entities(entities)
 
@@ -89,5 +91,72 @@ class SajFirstChargeEndTimeTextEntity(TextEntity):
             return
 
         await self._hub.set_first_charge_end(value)
+        self._attr_native_value = value
+        self.async_write_ha_state()
+
+class SajDischargeStartTimeTextEntity(TextEntity):
+    """Schreibbare Uhrzeit-Entität für den Discharge Start Time (Format HH:MM)."""
+
+    def __init__(self, hub):
+        """Initialisiere die Entität."""
+        self._hub = hub
+        self._attr_name = "SAJ Discharge Start Time (Time)"
+        self._attr_unique_id = "saj_discharge_start_time_time"
+        self._attr_native_value = "00:00"
+        # Regex, das HH:MM erzwingt: Stunden von 00 bis 23, Minuten von 00 bis 59
+        self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
+        self._attr_mode = "text"
+
+    async def async_update(self) -> None:
+        """Update wird hier nicht genutzt, um zusätzliche Modbus-Anfragen zu vermeiden."""
+        pass
+
+    async def async_set_value(self, value) -> None:
+        """Setze einen neuen Startzeitwert für Entladung (Format 'HH:MM')."""
+        # Falls value ein datetime.time-Objekt ist, konvertiere es
+        if isinstance(value, datetime.time):
+            value = value.strftime("%H:%M")
+        
+        if not isinstance(value, str) or not re.match(self._attr_pattern, value):
+            _LOGGER.error(
+                "Ungültiges Zeitformat für Discharge Start Time: %s. Erwartet HH:MM", value
+            )
+            return
+
+        # Aktiviere Entladung, wenn eine gültige Zeit gesetzt wird
+        await self._hub.set_discharging(True)
+        self._attr_native_value = value
+        self.async_write_ha_state()
+
+class SajDischargeEndTimeTextEntity(TextEntity):
+    """Schreibbare Uhrzeit-Entität für den Discharge End Time (Format HH:MM)."""
+
+    def __init__(self, hub):
+        """Initialisiere die Entität."""
+        self._hub = hub
+        self._attr_name = "SAJ Discharge End Time (Time)"
+        self._attr_unique_id = "saj_discharge_end_time_time"
+        self._attr_native_value = "00:00"
+        self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
+        self._attr_mode = "text"
+
+    async def async_update(self) -> None:
+        """Update wird hier nicht genutzt, um zusätzliche Modbus-Anfragen zu vermeiden."""
+        pass
+
+    async def async_set_value(self, value) -> None:
+        """Setze einen neuen Endzeitwert für Entladung (Format 'HH:MM')."""
+        # Falls value ein datetime.time-Objekt ist, konvertiere es
+        if isinstance(value, datetime.time):
+            value = value.strftime("%H:%M")
+        
+        if not isinstance(value, str) or not re.match(self._attr_pattern, value):
+            _LOGGER.error(
+                "Ungültiges Zeitformat für Discharge End Time: %s. Erwartet HH:MM", value
+            )
+            return
+
+        # Aktiviere Entladung, wenn eine gültige Zeit gesetzt wird
+        await self._hub.set_discharging(True)
         self._attr_native_value = value
         self.async_write_ha_state()

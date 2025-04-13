@@ -12,6 +12,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([
         SajFirstChargeDayMaskInputEntity(hub), 
         SajFirstChargePowerPercentInputEntity(hub),
+        SajDischargeDayMaskInputEntity(hub),
+        SajDischargePowerPercentInputEntity(hub),
         SajExportLimitInputEntity(hub)
     ])
 
@@ -47,6 +49,18 @@ class SajFirstChargeDayMaskInputEntity(SajNumberEntity):
         await self._hub.set_first_charge_day_mask(val)
         self.async_write_ha_state()
 
+class SajDischargeDayMaskInputEntity(SajNumberEntity):
+    """Entity for Discharge Day Mask (0-127)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Discharge Day Mask (Input)", "saj_discharge_day_mask_input", 0, 127, 1, 127)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 127: _LOGGER.error(f"Invalid Day Mask: {val}"); return
+        self._attr_native_value = val
+        await self._hub.set_discharging(val > 0)  # Aktiviere Entladung wenn Maske > 0
+        self.async_write_ha_state()
+
 class SajFirstChargePowerPercentInputEntity(SajNumberEntity):
     """Entity for First Charge Power Percent (0-25)."""
     def __init__(self, hub):
@@ -61,6 +75,21 @@ class SajFirstChargePowerPercentInputEntity(SajNumberEntity):
         self._attr_native_value = val
         await self._hub.set_first_charge_power_percent(val)
         self.async_write_ha_state()  # Für Logbuch
+
+class SajDischargePowerPercentInputEntity(SajNumberEntity):
+    """Entity for Discharge Power Percent (0-25)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Discharge Power Percent (Input)", "saj_discharge_power_percent_input", 0, 25, 1, 5)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 25:
+            _LOGGER.error(f"Invalid percent: {val}")
+            return
+        _LOGGER.debug(f"Setting discharge power percent to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_discharging(val > 0)  # Aktiviere Entladung wenn Wert > 0
+        self.async_write_ha_state()
 
 class SajExportLimitInputEntity(SajNumberEntity):
     """Entity for Export Limit (0-1000 )."""

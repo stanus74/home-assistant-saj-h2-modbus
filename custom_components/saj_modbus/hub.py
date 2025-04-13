@@ -42,8 +42,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._retry_delay = 1
         self._operation_timeout = 30
         
-        # Pending charging state
+        # Pending charging and discharging state
         self._pending_charging_state: Optional[bool] = None
+        self._pending_discharging_state: Optional[bool] = None
         
         # Pending First Charge variables (Format "HH:MM" or int)
         self._pending_first_charge_start: Optional[str] = None
@@ -166,12 +167,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
                 
                 # Short pause between read operations
-                #await asyncio.sleep(2)
+                await asyncio.sleep(0.5)
             
-            # Query the current charging status
+            # Query the current charging and discharging status
             try:
+                # Lese den aktuellen Zustand des Charge-Schalters
                 charging_state = await self.get_charging_state()
                 combined_data["charging_enabled"] = charging_state
+                
+                # Lese den aktuellen Zustand des Discharge-Schalters
+                discharging_state = await self.get_discharging_state()
+                combined_data["discharging_enabled"] = discharging_state
 
                 # Handle pending charging status update
                 if self._pending_charging_state is not None:
@@ -182,8 +188,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     else:
                         _LOGGER.info("Charging state unchanged, no write required.")
                         self._pending_charging_state = None
+                        
+                # Handle pending discharging status update
+                if self._pending_discharging_state is not None:
+                    if self._pending_discharging_state != discharging_state:
+                        await self._handle_pending_discharging_state()
+                        discharging_state = await self.get_discharging_state()
+                        combined_data["discharging_enabled"] = discharging_state
+                    else:
+                        _LOGGER.info("Discharging state unchanged, no write required.")
+                        self._pending_discharging_state = None
             except Exception as e:
-                _LOGGER.error(f"Error handling charging state: {e}")
+                _LOGGER.error(f"Error handling charging/discharging state: {e}")
 
             # Handle pending First Charge settings
             if (self._pending_first_charge_start is not None or
@@ -298,28 +314,90 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _handle_pending_charging_state(self) -> dict:
         """Writes the pending charging status to register 0x3647."""
         if self._pending_charging_state is not None:
-            value = 1 if self._pending_charging_state else 0
+            # Prüfe den Status des anderen Schalters (Discharging)
+            discharging_state = await self.get_discharging_state()
+            
+            # Setze Wert für Register 0x3647 nur auf 0, wenn beide Schalter aus sind
+            value = 1 if self._pending_charging_state or discharging_state else 0
+            
             async with self._read_lock:
+                # Schreibe in Register 0x3647
+                _LOGGER.debug(f"Schreibe Charging-Status in Register 0x3647: {value} (Charging={self._pending_charging_state}, Discharging={discharging_state})")
                 response = await self._client.write_register(0x3647, value)
                 if response and not response.isError():
-                    _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state}")
+                    _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state} (Register 0x3647={value})")
                 else:
                     _LOGGER.error(f"Failed to set charging state: {response}")
+                
+                # Schreibe in Register 0x3604 den Wert 1 (wenn aktiviert) oder 0 (wenn deaktiviert)
+                reg_value = 1 if self._pending_charging_state else 0
+                _LOGGER.debug(f"Schreibe Charging-Status in Register 0x3604: {reg_value}")
+                response = await self._client.write_register(0x3604, reg_value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set register 0x3604 to {reg_value}")
+                else:
+                    _LOGGER.error(f"Failed to set register 0x3604: {response}")
+            
             self._pending_charging_state = None
+        return {}
+        
+    async def _handle_pending_discharging_state(self) -> dict:
+        """Writes the pending discharging status to register 0x3647."""
+        if self._pending_discharging_state is not None:
+            # Prüfe den Status des anderen Schalters (Charging)
+            charging_state = await self.get_charging_state()
+            
+            # Setze Wert für Register 0x3647 nur auf 0, wenn beide Schalter aus sind
+            value = 1 if self._pending_discharging_state or charging_state else 0
+            
+            async with self._read_lock:
+                # Schreibe in Register 0x3647 (gleiches Register wie für Charging)
+                _LOGGER.debug(f"Schreibe Discharging-Status in Register 0x3647: {value} (Discharging={self._pending_discharging_state}, Charging={charging_state})")
+                response = await self._client.write_register(0x3647, value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set discharging to: {self._pending_discharging_state} (Register 0x3647={value})")
+                else:
+                    _LOGGER.error(f"Failed to set discharging state: {response}")
+                
+                # Schreibe in Register 0x3605 den Wert 1 (wenn aktiviert) oder 0 (wenn deaktiviert)
+                reg_value = 1 if self._pending_discharging_state else 0
+                _LOGGER.debug(f"Schreibe Discharging-Status in Register 0x3605: {reg_value}")
+                response = await self._client.write_register(0x3605, reg_value)
+                if response and not response.isError():
+                    _LOGGER.info(f"Successfully set register 0x3605 to {reg_value}")
+                else:
+                    _LOGGER.error(f"Failed to set register 0x3605: {response}")
+            
+            self._pending_discharging_state = None
         return {}
 
     async def get_charging_state(self) -> bool:
-        """Reads the current charging status."""
+        """Reads the current charging status from register 0x3604."""
         try:
-            regs = await try_read_registers(self._client, self._read_lock, 1, 0x3647, 1)
+            regs = await try_read_registers(self._client, self._read_lock, 1, 0x3604, 1)
+            _LOGGER.debug(f"Charging state from register 0x3604: {bool(regs[0])}")
             return bool(regs[0])
         except Exception as e:
             _LOGGER.error(f"Error reading charging state: {e}")
             return False
 
+    async def get_discharging_state(self) -> bool:
+        """Reads the current discharging status from register 0x3605."""
+        try:
+            regs = await try_read_registers(self._client, self._read_lock, 1, 0x3605, 1)
+            _LOGGER.debug(f"Discharging state from register 0x3605: {bool(regs[0])}")
+            return bool(regs[0])
+        except Exception as e:
+            _LOGGER.error(f"Error reading discharging state: {e}")
+            return False
+
     async def set_charging(self, enable: bool) -> None:
         """Plans a change of the charging status for the next update cycle."""
         self._pending_charging_state = enable
+        
+    async def set_discharging(self, enable: bool) -> None:
+        """Plans a change of the discharging status for the next update cycle."""
+        self._pending_discharging_state = enable
         
     async def set_export_limit(self, limit: int) -> None:
         """Sets the new export limit value."""
