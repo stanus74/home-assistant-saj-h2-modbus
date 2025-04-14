@@ -178,11 +178,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
             # Query the current charging and discharging status
             try:
-                # Lese den aktuellen Zustand des Charge-Schalters
+                # Read the current state of the Charge switch
                 charging_state = await self.get_charging_state()
                 combined_data["charging_enabled"] = charging_state
                 
-                # Lese den aktuellen Zustand des Discharge-Schalters
+                # Read the current state of the Discharge switch
                 discharging_state = await self.get_discharging_state()
                 combined_data["discharging_enabled"] = discharging_state
 
@@ -393,24 +393,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _handle_pending_charging_state(self) -> dict:
         """Writes the pending charging status to register 0x3647."""
         if self._pending_charging_state is not None:
-            # Prüfe den Status des anderen Schalters (Discharging)
+            # Check the status of the other switch (Discharging)
             discharging_state = await self.get_discharging_state()
             
-            # Setze Wert für Register 0x3647 nur auf 0, wenn beide Schalter aus sind
+            # Set value for register 0x3647 to 0 only if both switches are off
             value = 1 if self._pending_charging_state or discharging_state else 0
             
             async with self._read_lock:
-                # Schreibe in Register 0x3647
-                _LOGGER.debug(f"Schreibe Charging-Status in Register 0x3647: {value} (Charging={self._pending_charging_state}, Discharging={discharging_state})")
+                # Write to register 0x3647
+                _LOGGER.debug(f"Writing Charging status to register 0x3647: {value} (Charging={self._pending_charging_state}, Discharging={discharging_state})")
                 response = await self._client.write_register(0x3647, value)
                 if response and not response.isError():
                     _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state} (Register 0x3647={value})")
                 else:
                     _LOGGER.error(f"Failed to set charging state: {response}")
                 
-                # Schreibe in Register 0x3604 den Wert 1 (wenn aktiviert) oder 0 (wenn deaktiviert)
+                # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3604
                 reg_value = 1 if self._pending_charging_state else 0
-                _LOGGER.debug(f"Schreibe Charging-Status in Register 0x3604: {reg_value}")
+                _LOGGER.debug(f"Writing Charging status to register 0x3604: {reg_value}")
                 response = await self._client.write_register(0x3604, reg_value)
                 if response and not response.isError():
                     _LOGGER.info(f"Successfully set register 0x3604 to {reg_value}")
@@ -423,24 +423,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _handle_pending_discharging_state(self) -> dict:
         """Writes the pending discharging status to register 0x3647."""
         if self._pending_discharging_state is not None:
-            # Prüfe den Status des anderen Schalters (Charging)
+            # Check the status of the other switch (Charging)
             charging_state = await self.get_charging_state()
             
-            # Setze Wert für Register 0x3647 nur auf 0, wenn beide Schalter aus sind
+            # Set value for register 0x3647 to 0 only if both switches are off
             value = 1 if self._pending_discharging_state or charging_state else 0
             
             async with self._read_lock:
-                # Schreibe in Register 0x3647 (gleiches Register wie für Charging)
-                _LOGGER.debug(f"Schreibe Discharging-Status in Register 0x3647: {value} (Discharging={self._pending_discharging_state}, Charging={charging_state})")
+                # Write to register 0x3647 (same register as for Charging)
+                _LOGGER.debug(f"Writing Discharging status to register 0x3647: {value} (Discharging={self._pending_discharging_state}, Charging={charging_state})")
                 response = await self._client.write_register(0x3647, value)
                 if response and not response.isError():
                     _LOGGER.info(f"Successfully set discharging to: {self._pending_discharging_state} (Register 0x3647={value})")
                 else:
                     _LOGGER.error(f"Failed to set discharging state: {response}")
                 
-                # Schreibe in Register 0x3605 den Wert 1 (wenn aktiviert) oder 0 (wenn deaktiviert)
+                # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3605
                 reg_value = 1 if self._pending_discharging_state else 0
-                _LOGGER.debug(f"Schreibe Discharging-Status in Register 0x3605: {reg_value}")
+                _LOGGER.debug(f"Writing Discharging status to register 0x3605: {reg_value}")
                 response = await self._client.write_register(0x3605, reg_value)
                 if response and not response.isError():
                     _LOGGER.info(f"Successfully set register 0x3605 to {reg_value}")

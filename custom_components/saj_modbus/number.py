@@ -58,7 +58,7 @@ class SajDischargeDayMaskInputEntity(SajNumberEntity):
         val = int(value)
         if not 0 <= val <= 127: _LOGGER.error(f"Invalid Day Mask: {val}"); return
         self._attr_native_value = val
-        # Setze die Day Mask für Entladung
+        # Set the Day Mask for discharge
         await self._hub.set_discharge_day_mask(val)
         self.async_write_ha_state()
 
@@ -75,7 +75,7 @@ class SajChargePowerPercentInputEntity(SajNumberEntity):
         _LOGGER.debug(f"Setting power percent to: {val}")
         self._attr_native_value = val
         await self._hub.set_charge_power_percent(val)
-        self.async_write_ha_state()  # Für Logbuch
+        self.async_write_ha_state()  # For logbook
 
 class SajDischargePowerPercentInputEntity(SajNumberEntity):
     """Entity for Discharge Power Percent (0-25)."""
@@ -89,7 +89,7 @@ class SajDischargePowerPercentInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting discharge power percent to: {val}")
         self._attr_native_value = val
-        # Setze den Power Percent für Entladung
+        # Set the Power Percent for discharge
         await self._hub.set_discharge_power_percent(val)
         self.async_write_ha_state()
 

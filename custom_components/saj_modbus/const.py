@@ -63,7 +63,7 @@ current_sensors_group = SensorGroup(
     icon="mdi:current-dc",  
 )
 
-# Neue Gruppe für Sensoren mit Milliampere als Einheit
+# New group for sensors with milliampere as unit
 milliampere_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
     device_class=SensorDeviceClass.CURRENT,
@@ -89,7 +89,7 @@ information_sensors_group = SensorGroup(
     icon="mdi:information-outline"  
 )
 
-# gfci_sensors_group wurde entfernt und in current_sensors_group integriert
+# gfci_sensors_group was removed and integrated into current_sensors_group
 
 iso_resistance_sensors_group = SensorGroup(
     unit_of_measurement="kΩ",  
@@ -224,7 +224,7 @@ current_sensors = [
     {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
 ]
 
-# Sensoren mit Milliampere als Einheit
+# Sensors with milliampere as unit
 milliampere_sensors = [
     {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
@@ -247,7 +247,7 @@ battery_sensors = [
 
 
 
-# gfci_sensors wurde in current_sensors integriert
+# gfci_sensors was integrated into current_sensors
 
 temperature_sensors = [
     {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
@@ -393,7 +393,7 @@ energy_sensors = [
 ]
     
 
-# Sensoren für "Charge" definieren:
+# Define sensors for "Charge":
 charge_sensors = [
     {
         "name": "Charge Start Time",
@@ -418,7 +418,7 @@ charge_sensors = [
     },
 ]
 
-# Sensoren für "Discharge" definieren:
+# Define sensors for "Discharge":
 discharge_sensors = [
     {
         "name": "Discharge Start Time",
@@ -443,7 +443,7 @@ discharge_sensors = [
     },
 ]
 
-# Anti-Reflux Sensoren definieren:
+# Define Anti-Reflux sensors:
 anti_reflux_sensors = [
     {
         "name": "Anti-Reflux Power Limit",

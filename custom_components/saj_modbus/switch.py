@@ -125,7 +125,7 @@ class SajDischargingSwitch(CoordinatorEntity, SwitchEntity):
             return
             
         try:
-            # Verwende die neue set_discharging Methode
+            # Use the new set_discharging method
             await self._hub.set_discharging(True)
             self._last_switch_time = time.time()  # Update time
             self.async_write_ha_state()  # Ensure UI updates
@@ -147,7 +147,7 @@ class SajDischargingSwitch(CoordinatorEntity, SwitchEntity):
             return
             
         try:
-            # Verwende die neue set_discharging Methode
+            # Use the new set_discharging method
             await self._hub.set_discharging(False)
             self._last_switch_time = time.time()  # Update time
             self.async_write_ha_state()  # Ensure UI updates
