@@ -17,24 +17,24 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the writable time entities for First Charge and Discharge."""
+    """Set up the writable time entities for Charge and Discharge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     entities = [
-        SajFirstChargeStartTimeTextEntity(hub),
-        SajFirstChargeEndTimeTextEntity(hub),
+        SajChargeStartTimeTextEntity(hub),
+        SajChargeEndTimeTextEntity(hub),
         SajDischargeStartTimeTextEntity(hub),
         SajDischargeEndTimeTextEntity(hub),
     ]
     async_add_entities(entities)
 
-class SajFirstChargeStartTimeTextEntity(TextEntity):
-    """Schreibbare Uhrzeit-Entität für den First Charge Start Time (Format HH:MM)."""
+class SajChargeStartTimeTextEntity(TextEntity):
+    """Schreibbare Uhrzeit-Entität für den Charge Start Time (Format HH:MM)."""
 
     def __init__(self, hub):
         """Initialisiere die Entität."""
         self._hub = hub
-        self._attr_name = "SAJ First Charge Start Time (Time)"
-        self._attr_unique_id = "saj_first_charge_start_time_time"
+        self._attr_name = "SAJ Charge Start Time (Time)"
+        self._attr_unique_id = "saj_charge_start_time_time"
         self._attr_native_value = "00:00"
         # Regex, das HH:MM erzwingt: Stunden von 00 bis 23, Minuten von 00 bis 59
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
@@ -54,22 +54,22 @@ class SajFirstChargeStartTimeTextEntity(TextEntity):
         
         if not isinstance(value, str) or not re.match(self._attr_pattern, value):
             _LOGGER.error(
-                "Ungültiges Zeitformat für First Charge Start Time: %s. Erwartet HH:MM", value
+                "Ungültiges Zeitformat für Charge Start Time: %s. Erwartet HH:MM", value
             )
             return
 
-        await self._hub.set_first_charge_start(value)
+        await self._hub.set_charge_start(value)
         self._attr_native_value = value
         self.async_write_ha_state()
 
-class SajFirstChargeEndTimeTextEntity(TextEntity):
-    """Schreibbare Uhrzeit-Entität für den First Charge End Time (Format HH:MM)."""
+class SajChargeEndTimeTextEntity(TextEntity):
+    """Schreibbare Uhrzeit-Entität für den Charge End Time (Format HH:MM)."""
 
     def __init__(self, hub):
         """Initialisiere die Entität."""
         self._hub = hub
-        self._attr_name = "SAJ First Charge End Time (Time)"
-        self._attr_unique_id = "saj_first_charge_end_time_time"
+        self._attr_name = "SAJ Charge End Time (Time)"
+        self._attr_unique_id = "saj_charge_end_time_time"
         self._attr_native_value = "00:00"
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"
@@ -86,11 +86,11 @@ class SajFirstChargeEndTimeTextEntity(TextEntity):
         
         if not isinstance(value, str) or not re.match(self._attr_pattern, value):
             _LOGGER.error(
-                "Ungültiges Zeitformat für First Charge End Time: %s. Erwartet HH:MM", value
+                "Ungültiges Zeitformat für Charge End Time: %s. Erwartet HH:MM", value
             )
             return
 
-        await self._hub.set_first_charge_end(value)
+        await self._hub.set_charge_end(value)
         self._attr_native_value = value
         self.async_write_ha_state()
 
@@ -123,8 +123,8 @@ class SajDischargeStartTimeTextEntity(TextEntity):
             )
             return
 
-        # Aktiviere Entladung, wenn eine gültige Zeit gesetzt wird
-        await self._hub.set_discharging(True)
+        # Setze die Startzeit für Entladung
+        await self._hub.set_discharge_start(value)
         self._attr_native_value = value
         self.async_write_ha_state()
 
@@ -156,7 +156,7 @@ class SajDischargeEndTimeTextEntity(TextEntity):
             )
             return
 
-        # Aktiviere Entladung, wenn eine gültige Zeit gesetzt wird
-        await self._hub.set_discharging(True)
+        # Setze die Endzeit für Entladung
+        await self._hub.set_discharge_end(value)
         self._attr_native_value = value
         self.async_write_ha_state()

@@ -46,11 +46,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
         
-        # Pending First Charge variables (Format "HH:MM" or int)
-        self._pending_first_charge_start: Optional[str] = None
-        self._pending_first_charge_end: Optional[str] = None
-        self._pending_first_charge_day_mask: Optional[int] = None
-        self._pending_first_charge_power_percent: Optional[int] = None
+        # Pending Charge variables (Format "HH:MM" or int)
+        self._pending_charge_start: Optional[str] = None
+        self._pending_charge_end: Optional[str] = None
+        self._pending_charge_day_mask: Optional[int] = None
+        self._pending_charge_power_percent: Optional[int] = None
+        
+        # Pending Discharge variables (Format "HH:MM" or int)
+        self._pending_discharge_start: Optional[str] = None
+        self._pending_discharge_end: Optional[str] = None
+        self._pending_discharge_day_mask: Optional[int] = None
+        self._pending_discharge_power_percent: Optional[int] = None
         
         # Pending Export Limit variable
         self._pending_export_limit: Optional[int] = None
@@ -143,7 +149,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_additional_modbus_data_3_2,  # New method for the second part of the data
                 modbus_readers.read_additional_modbus_data_4,
                 modbus_readers.read_battery_data,
-                modbus_readers.read_first_charge_data,
+                modbus_readers.read_charge_data,
+                modbus_readers.read_discharge_data,
                 modbus_readers.read_anti_reflux_data,  # New method for Anti-Reflux data
             ]
             
@@ -201,19 +208,34 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             except Exception as e:
                 _LOGGER.error(f"Error handling charging/discharging state: {e}")
 
-            # Handle pending First Charge settings
-            if (self._pending_first_charge_start is not None or
-                self._pending_first_charge_end is not None or
-                self._pending_first_charge_day_mask is not None or
-                self._pending_first_charge_power_percent is not None):
+            # Handle pending Charge settings
+            if (self._pending_charge_start is not None or
+                self._pending_charge_end is not None or
+                self._pending_charge_day_mask is not None or
+                self._pending_charge_power_percent is not None):
                 _LOGGER.info(
-                    "Writing First Charge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
-                    self._pending_first_charge_start,
-                    self._pending_first_charge_end,
-                    self._pending_first_charge_day_mask,
-                    self._pending_first_charge_power_percent
+                    "Writing Charge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
+                    self._pending_charge_start,
+                    self._pending_charge_end,
+                    self._pending_charge_day_mask,
+                    self._pending_charge_power_percent
                 )
-                await self._handle_pending_first_charge_settings()
+                await self._handle_pending_charge_settings()
+                # The new values will be read again in the next cycle.
+            
+            # Handle pending Discharge settings
+            if (self._pending_discharge_start is not None or
+                self._pending_discharge_end is not None or
+                self._pending_discharge_day_mask is not None or
+                self._pending_discharge_power_percent is not None):
+                _LOGGER.info(
+                    "Writing Discharge values: start=%s, end=%s, day_mask=%s, power_percent=%s",
+                    self._pending_discharge_start,
+                    self._pending_discharge_end,
+                    self._pending_discharge_day_mask,
+                    self._pending_discharge_power_percent
+                )
+                await self._handle_pending_discharge_settings()
                 # The new values will be read again in the next cycle.
                 
             # Handle pending Export Limit setting
@@ -233,41 +255,41 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
 
-    async def _handle_pending_first_charge_settings(self) -> None:
-        """Writes the pending First Charge settings to the corresponding registers."""
+    async def _handle_pending_charge_settings(self) -> None:
+        """Writes the pending Charge settings to the corresponding registers."""
         async with self._read_lock:
             # Register 0x3606: Start time (High Byte = Hour, Low Byte = Minute)
-            if self._pending_first_charge_start is not None:
+            if self._pending_charge_start is not None:
                 try:
-                    hour, minute = map(int, self._pending_first_charge_start.split(":"))
+                    hour, minute = map(int, self._pending_charge_start.split(":"))
                     value = (hour << 8) | minute
                     response = await self._client.write_register(0x3606, value)
                     if response and not response.isError():
-                        _LOGGER.info(f"Successfully set first charge start time: {self._pending_first_charge_start}")
+                        _LOGGER.info(f"Successfully set charge start time: {self._pending_charge_start}")
                     else:
-                        _LOGGER.error(f"Failed to write first charge start time: {response}")
+                        _LOGGER.error(f"Failed to write charge start time: {response}")
                 except Exception as e:
-                    _LOGGER.error(f"Error writing first charge start time: {e}")
+                    _LOGGER.error(f"Error writing charge start time: {e}")
                 finally:
-                    self._pending_first_charge_start = None
+                    self._pending_charge_start = None
 
             # Register 0x3607: End time (High Byte = Hour, Low Byte = Minute)
-            if self._pending_first_charge_end is not None:
+            if self._pending_charge_end is not None:
                 try:
-                    hour, minute = map(int, self._pending_first_charge_end.split(":"))
+                    hour, minute = map(int, self._pending_charge_end.split(":"))
                     value = (hour << 8) | minute
                     response = await self._client.write_register(0x3607, value)
                     if response and not response.isError():
-                        _LOGGER.info(f"Successfully set first charge end time: {self._pending_first_charge_end}")
+                        _LOGGER.info(f"Successfully set charge end time: {self._pending_charge_end}")
                     else:
-                        _LOGGER.error(f"Failed to write first charge end time: {response}")
+                        _LOGGER.error(f"Failed to write charge end time: {response}")
                 except Exception as e:
-                    _LOGGER.error(f"Error writing first charge end time: {e}")
+                    _LOGGER.error(f"Error writing charge end time: {e}")
                 finally:
-                    self._pending_first_charge_end = None
+                    self._pending_charge_end = None
 
             # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
-            if self._pending_first_charge_day_mask is not None or self._pending_first_charge_power_percent is not None:
+            if self._pending_charge_day_mask is not None or self._pending_charge_power_percent is not None:
                 try:
                     response = await self._client.read_holding_registers(address=0x3608, count=1)
                     if not response or response.isError() or len(response.registers) < 1:
@@ -277,39 +299,96 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     current_day_mask = (current_value >> 8) & 0xFF
                     current_power_percent = current_value & 0xFF
 
-                    day_mask = self._pending_first_charge_day_mask if self._pending_first_charge_day_mask is not None else current_day_mask
-                    power_percent = self._pending_first_charge_power_percent if self._pending_first_charge_power_percent is not None else current_power_percent
+                    day_mask = self._pending_charge_day_mask if self._pending_charge_day_mask is not None else current_day_mask
+                    power_percent = self._pending_charge_power_percent if self._pending_charge_power_percent is not None else current_power_percent
 
                     value = (day_mask << 8) | power_percent
                     response = await self._client.write_register(0x3608, value)
                     if response and not response.isError():
-                        _LOGGER.info(f"Successfully set first charge power time: day_mask={day_mask}, power_percent={power_percent}")
+                        _LOGGER.info(f"Successfully set charge power time: day_mask={day_mask}, power_percent={power_percent}")
                     else:
-                        _LOGGER.error(f"Failed to write first charge power time: {response}")
+                        _LOGGER.error(f"Failed to write charge power time: {response}")
                 except Exception as e:
-                    _LOGGER.error(f"Error writing first charge power time: {e}")
+                    _LOGGER.error(f"Error writing charge power time: {e}")
                 finally:
-                    self._pending_first_charge_day_mask = None
-                    self._pending_first_charge_power_percent = None
-                    
-                    
+                    self._pending_charge_day_mask = None
+                    self._pending_charge_power_percent = None
+    
+    async def _handle_pending_discharge_settings(self) -> None:
+        """Writes the pending Discharge settings to the corresponding registers."""
+        async with self._read_lock:
+            # Register 0x361B: Start time (High Byte = Hour, Low Byte = Minute)
+            if self._pending_discharge_start is not None:
+                try:
+                    hour, minute = map(int, self._pending_discharge_start.split(":"))
+                    value = (hour << 8) | minute
+                    response = await self._client.write_register(0x361B, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set discharge start time: {self._pending_discharge_start}")
+                    else:
+                        _LOGGER.error(f"Failed to write discharge start time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing discharge start time: {e}")
+                finally:
+                    self._pending_discharge_start = None
+
+            # Register 0x361C: End time (High Byte = Hour, Low Byte = Minute)
+            if self._pending_discharge_end is not None:
+                try:
+                    hour, minute = map(int, self._pending_discharge_end.split(":"))
+                    value = (hour << 8) | minute
+                    response = await self._client.write_register(0x361C, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set discharge end time: {self._pending_discharge_end}")
+                    else:
+                        _LOGGER.error(f"Failed to write discharge end time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing discharge end time: {e}")
+                finally:
+                    self._pending_discharge_end = None
+
+            # Register 0x361D: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
+            if self._pending_discharge_day_mask is not None or self._pending_discharge_power_percent is not None:
+                try:
+                    response = await self._client.read_holding_registers(address=0x361D, count=1)
+                    if not response or response.isError() or len(response.registers) < 1:
+                        current_value = 0
+                    else:
+                        current_value = response.registers[0]
+                    current_day_mask = (current_value >> 8) & 0xFF
+                    current_power_percent = current_value & 0xFF
+
+                    day_mask = self._pending_discharge_day_mask if self._pending_discharge_day_mask is not None else current_day_mask
+                    power_percent = self._pending_discharge_power_percent if self._pending_discharge_power_percent is not None else current_power_percent
+
+                    value = (day_mask << 8) | power_percent
+                    response = await self._client.write_register(0x361D, value)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set discharge power time: day_mask={day_mask}, power_percent={power_percent}")
+                    else:
+                        _LOGGER.error(f"Failed to write discharge power time: {response}")
+                except Exception as e:
+                    _LOGGER.error(f"Error writing discharge power time: {e}")
+                finally:
+                    self._pending_discharge_day_mask = None
+                    self._pending_discharge_power_percent = None
                     
     # Setter methods that are called by HA when the sensors change:
-    async def set_first_charge_start(self, time_str: str) -> None:
-        """Sets the new start time (format 'HH:MM') for First Charge."""
-        self._pending_first_charge_start = time_str
+    async def set_charge_start(self, time_str: str) -> None:
+        """Sets the new start time (format 'HH:MM') for Charge."""
+        self._pending_charge_start = time_str
 
-    async def set_first_charge_end(self, time_str: str) -> None:
-        """Sets the new end time (format 'HH:MM') for First Charge."""
-        self._pending_first_charge_end = time_str
+    async def set_charge_end(self, time_str: str) -> None:
+        """Sets the new end time (format 'HH:MM') for Charge."""
+        self._pending_charge_end = time_str
 
-    async def set_first_charge_day_mask(self, day_mask: int) -> None:
-        """Sets the new Day Mask value for First Charge."""
-        self._pending_first_charge_day_mask = day_mask
+    async def set_charge_day_mask(self, day_mask: int) -> None:
+        """Sets the new Day Mask value for Charge."""
+        self._pending_charge_day_mask = day_mask
 
-    async def set_first_charge_power_percent(self, power_percent: int) -> None:
-        """Sets the new Power Percent value for First Charge."""
-        self._pending_first_charge_power_percent = power_percent
+    async def set_charge_power_percent(self, power_percent: int) -> None:
+        """Sets the new Power Percent value for Charge."""
+        self._pending_charge_power_percent = power_percent
 
     async def _handle_pending_charging_state(self) -> dict:
         """Writes the pending charging status to register 0x3647."""
@@ -395,6 +474,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Plans a change of the charging status for the next update cycle."""
         self._pending_charging_state = enable
         
+    async def set_discharge_start(self, time_str: str) -> None:
+        """Sets the new start time (format 'HH:MM') for Discharge."""
+        self._pending_discharge_start = time_str
+
+    async def set_discharge_end(self, time_str: str) -> None:
+        """Sets the new end time (format 'HH:MM') for Discharge."""
+        self._pending_discharge_end = time_str
+
+    async def set_discharge_day_mask(self, day_mask: int) -> None:
+        """Sets the new Day Mask value for Discharge."""
+        self._pending_discharge_day_mask = day_mask
+
+    async def set_discharge_power_percent(self, power_percent: int) -> None:
+        """Sets the new Power Percent value for Discharge."""
+        self._pending_discharge_power_percent = power_percent
+
     async def set_discharging(self, enable: bool) -> None:
         """Plans a change of the discharging status for the next update cycle."""
         self._pending_discharging_state = enable

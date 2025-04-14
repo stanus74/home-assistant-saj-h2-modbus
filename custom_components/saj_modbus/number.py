@@ -10,8 +10,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up SAJ number entities."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     async_add_entities([
-        SajFirstChargeDayMaskInputEntity(hub), 
-        SajFirstChargePowerPercentInputEntity(hub),
+        SajChargeDayMaskInputEntity(hub), 
+        SajChargePowerPercentInputEntity(hub),
         SajDischargeDayMaskInputEntity(hub),
         SajDischargePowerPercentInputEntity(hub),
         SajExportLimitInputEntity(hub)
@@ -37,16 +37,16 @@ class SajNumberEntity(NumberEntity):
 
     async def async_update(self): pass
 
-class SajFirstChargeDayMaskInputEntity(SajNumberEntity):
-    """Entity for First Charge Day Mask (0-127)."""
+class SajChargeDayMaskInputEntity(SajNumberEntity):
+    """Entity for Charge Day Mask (0-127)."""
     def __init__(self, hub):
-        super().__init__(hub, "SAJ First Charge Day Mask (Input)", "saj_first_charge_day_mask_input", 0, 127, 1, 127)
+        super().__init__(hub, "SAJ Charge Day Mask (Input)", "saj_charge_day_mask_input", 0, 127, 1, 127)
 
     async def async_set_native_value(self, value):
         val = int(value)
         if not 0 <= val <= 127: _LOGGER.error(f"Invalid Day Mask: {val}"); return
         self._attr_native_value = val
-        await self._hub.set_first_charge_day_mask(val)
+        await self._hub.set_charge_day_mask(val)
         self.async_write_ha_state()
 
 class SajDischargeDayMaskInputEntity(SajNumberEntity):
@@ -58,13 +58,14 @@ class SajDischargeDayMaskInputEntity(SajNumberEntity):
         val = int(value)
         if not 0 <= val <= 127: _LOGGER.error(f"Invalid Day Mask: {val}"); return
         self._attr_native_value = val
-        await self._hub.set_discharging(val > 0)  # Aktiviere Entladung wenn Maske > 0
+        # Setze die Day Mask für Entladung
+        await self._hub.set_discharge_day_mask(val)
         self.async_write_ha_state()
 
-class SajFirstChargePowerPercentInputEntity(SajNumberEntity):
-    """Entity for First Charge Power Percent (0-25)."""
+class SajChargePowerPercentInputEntity(SajNumberEntity):
+    """Entity for Charge Power Percent (0-25)."""
     def __init__(self, hub):
-        super().__init__(hub, "SAJ First Charge Power Percent (Input)", "saj_first_charge_power_percent_input", 0, 25, 1, 5)
+        super().__init__(hub, "SAJ Charge Power Percent (Input)", "saj_charge_power_percent_input", 0, 25, 1, 5)
 
     async def async_set_native_value(self, value):
         val = int(value)
@@ -73,7 +74,7 @@ class SajFirstChargePowerPercentInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting power percent to: {val}")
         self._attr_native_value = val
-        await self._hub.set_first_charge_power_percent(val)
+        await self._hub.set_charge_power_percent(val)
         self.async_write_ha_state()  # Für Logbuch
 
 class SajDischargePowerPercentInputEntity(SajNumberEntity):
@@ -88,7 +89,8 @@ class SajDischargePowerPercentInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting discharge power percent to: {val}")
         self._attr_native_value = val
-        await self._hub.set_discharging(val > 0)  # Aktiviere Entladung wenn Wert > 0
+        # Setze den Power Percent für Entladung
+        await self._hub.set_discharge_power_percent(val)
         self.async_write_ha_state()
 
 class SajExportLimitInputEntity(SajNumberEntity):

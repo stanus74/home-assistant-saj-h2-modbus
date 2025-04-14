@@ -271,27 +271,52 @@ async def read_battery_data(client: ModbusClient) -> DataDict:
     
     return await _read_modbus_data(client, 40960, 56, decode_instructions, 'battery_data', default_factor=0.01)
 
-async def read_first_charge_data(client: ModbusClient) -> DataDict:
-    """Reads the First Charge registers using the generic read_modbus_data function."""
+async def read_charge_data(client: ModbusClient) -> DataDict:
+    """Reads the Charge registers using the generic read_modbus_data function."""
     decode_instructions = [
-        ("first_charge_start_time_raw", "16u", 1),
-        ("first_charge_end_time_raw", "16u", 1),
+        ("charge_start_time_raw", "16u", 1),
+        ("charge_end_time_raw", "16u", 1),
         ("power_time_raw", "16u", 1),
     ]
 
-    data = await _read_modbus_data(client, 0x3606, 3, decode_instructions, "first_charge_data", default_factor=1)
+    data = await _read_modbus_data(client, 0x3606, 3, decode_instructions, "charge_data", default_factor=1)
 
     if data:
         try:
             def decode_time(value: int) -> str:
                 return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
-            data["first_charge_start_time"] = decode_time(data.pop("first_charge_start_time_raw"))
-            data["first_charge_end_time"] = decode_time(data.pop("first_charge_end_time_raw"))
+            data["charge_start_time"] = decode_time(data.pop("charge_start_time_raw"))
+            data["charge_end_time"] = decode_time(data.pop("charge_end_time_raw"))
             power_value = data.pop("power_time_raw")
-            data["first_charge_day_mask"] = (power_value >> 8) & 0xFF
-            data["first_charge_power_percent"] = power_value & 0xFF
+            data["charge_day_mask"] = (power_value >> 8) & 0xFF
+            data["charge_power_percent"] = power_value & 0xFF
         except Exception as e:
-            _LOGGER.error(f"Error processing First Charge data: {e}")
+            _LOGGER.error(f"Error processing Charge data: {e}")
+            return {}
+
+    return data
+
+async def read_discharge_data(client: ModbusClient) -> DataDict:
+    """Reads the Discharge registers using the generic read_modbus_data function."""
+    decode_instructions = [
+        ("discharge_start_time_raw", "16u", 1),
+        ("discharge_end_time_raw", "16u", 1),
+        ("power_time_raw", "16u", 1),
+    ]
+
+    data = await _read_modbus_data(client, 0x361B, 3, decode_instructions, "discharge_data", default_factor=1)
+
+    if data:
+        try:
+            def decode_time(value: int) -> str:
+                return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
+            data["discharge_start_time"] = decode_time(data.pop("discharge_start_time_raw"))
+            data["discharge_end_time"] = decode_time(data.pop("discharge_end_time_raw"))
+            power_value = data.pop("power_time_raw")
+            data["discharge_day_mask"] = (power_value >> 8) & 0xFF
+            data["discharge_power_percent"] = power_value & 0xFF
+        except Exception as e:
+            _LOGGER.error(f"Error processing Discharge data: {e}")
             return {}
 
     return data
