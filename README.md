@@ -68,20 +68,13 @@ Enable this switch to charge/discharge the battery.
 - **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. **Note**: The integration limits charging power to a maximum of 25%.
 
 
-
 ![Charging Settings](images/saj_h2_modbus/input2.png "")
 
 
-- **Editable Registers**: Entities labeled "(Input)" and "(Time)" can be modified.
-
-**How It Works**: Values are written to the inverter via Modbus at the configured interval (e.g., every 60 seconds).
-
-
-To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.
+**To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.**
 
 
 <img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
-
 
 
 ### Important! The status of Input-Registers and mode will be updated after 1 interval
