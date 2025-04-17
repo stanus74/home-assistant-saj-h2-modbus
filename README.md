@@ -79,7 +79,7 @@ Enable this switch to charge/discharge the battery.
 To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.
 
 ![Charging Settings](images/saj_h2_modbus/export.jpg "enable discharging from battery")
-
+<img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
 
 
 **Note**: The integration limits charging power to a maximum of 25%.
