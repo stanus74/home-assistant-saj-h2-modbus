@@ -321,7 +321,7 @@ async def read_anti_reflux_data(client: ModbusClient) -> DataDict:
     try:
         data = await _read_modbus_data(client, 0x365A, 3, decode_instructions, "anti_reflux_data", default_factor=1)
         
-        # Conversion of the AntiRefluxCurrentmode value to text
+        
         # Conversion of the AntiRefluxCurrentmode value to text
         if "AntiRefluxCurrentmode_raw" in data:
             mode_value = data.pop("AntiRefluxCurrentmode_raw")

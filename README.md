@@ -4,7 +4,7 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-## <span style="color:red;">New Feature added: "Charge battery with mains power", see under Features</span>
+## <span style="color:red;">New Feature added: "Charge battery with mains power", see the Features section below</span>
 
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
@@ -15,22 +15,22 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 190 registers (power, energy, temperature sensors, battery ...)
+- Over 190 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
-- **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-use-Mode** (to charge the battery with grid power) 
+- **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-Use Mode** (to charge the battery with grid power) 
 
 ## Installation
 
-This integration should be available in the HACS default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home-Assistant. After restart, this integration can be configured through the integration setup UI.
+This integration should be available in the HACS default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home Assistant. After restart, this integration can be configured through the integration setup UI.
 
 ## Configuration
 
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval.
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
-4. Set charing values in Home Assistant , see below
+4. Set charging values in Home Assistant, see below
 
 ---
 
@@ -45,7 +45,7 @@ This release adds support for setting the max export power to the public grid.
   Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
 
 #### 🆕 New Sensors:
-- **SAJ Anti-Reflux Power Limit** (`365AH`) – changable with Export Limit (Input)
+- **SAJ Anti-Reflux Power Limit** (`365AH`) – changeable with Export Limit (Input)
 - **SAJ Anti-Reflux Current Limit** (`365BH`)
 - **SAJ Anti-Reflux Current Mode** (`365CH`)
 
@@ -54,17 +54,33 @@ Perfect for zero export or dynamic grid feed-in limitation.
 ---
 
 
-### Configure Charging Time and Power
+### Configure Charging and Discharging Time and Power
 
-![Charging Settings](images/saj_h2_modbus/charing.png "Home Assistant SAJ H2 Charging Settings")
+![Charging Settings](images/saj_h2_modbus/switch.png "Switch to Time-of-Use Mode")
 
-- **What’s New**: The first four sensors display Charging Time, Days, and Power (as a percentage).
+You can set the Inverter to "Time-of-Use" Mode with this switch.
+Enable this switch to charge/discharge the battery.
+
+![Charging Settings](images/saj_h2_modbus/input1.png "Home Assistant SAJ H2 Charging Settings")
+
+
 - **Day Mask**: This is a bitmask to select charging days (e.g., Monday to Sunday = 127, calculated as 1 + 2 + 4 + 8 + 16 + 32 + 64).
+- **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. 
+
+
+![Charging Settings](images/saj_h2_modbus/input2.png "")
+
+
 - **Editable Registers**: Entities labeled "(Input)" and "(Time)" can be modified.
 
 **How It Works**: Values are written to the inverter via Modbus at the configured interval (e.g., every 60 seconds).
 
-**Charging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts.
+
+To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.
+
+![Charging Settings](images/saj_h2_modbus/export.jpg "enable discharging from battery")
+
+
 
 **Note**: The integration limits charging power to a maximum of 25%.
 
@@ -77,6 +93,7 @@ Perfect for zero export or dynamic grid feed-in limitation.
 - **Feature**: Use the switch to toggle between "Time-of-Use (Charging)" and "Self-Consumption" modes.
 
 ### Important! The status and mode will be updated after 1 interval
+
 
 
 ## Additional Information
