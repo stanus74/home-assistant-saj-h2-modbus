@@ -65,7 +65,8 @@ Enable this switch to charge/discharge the battery.
 
 
 - **Day Mask**: This is a bitmask to select charging days (e.g., Monday to Sunday = 127, calculated as 1 + 2 + 4 + 8 + 16 + 32 + 64).
-- **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. 
+- **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. **Note**: The integration limits charging power to a maximum of 25%.
+
 
 
 ![Charging Settings](images/saj_h2_modbus/input2.png "")
@@ -78,21 +79,12 @@ Enable this switch to charge/discharge the battery.
 
 To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.
 
-![Charging Settings](images/saj_h2_modbus/export.jpg "enable discharging from battery")
+
 <img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
 
 
-**Note**: The integration limits charging power to a maximum of 25%.
 
-
-
-### Switch between Inverter Modes
-
-![Mode Switch](images/saj_h2_modbus/switch.png "Home Assistant SAJ H2 Mode Switch")
-
-- **Feature**: Use the switch to toggle between "Time-of-Use (Charging)" and "Self-Consumption" modes.
-
-### Important! The status and mode will be updated after 1 interval
+### Important! The status of Input-Registers and mode will be updated after 1 interval
 
 
 
