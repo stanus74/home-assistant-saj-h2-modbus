@@ -58,8 +58,9 @@ Perfect for zero export or dynamic grid feed-in limitation.
 
 ![Charging Settings](images/saj_h2_modbus/switch.png "Switch to Time-of-Use Mode")
 
-You can set the Inverter to "Time-of-Use" Mode with this switch.
-Enable this switch to charge/discharge the battery.
+**You can set the Inverter to "Time-of-Use" Mode with this switch.**
+
+Enable this switch to charge/discharge the battery - individually or both.
 
 ![Charging Settings](images/saj_h2_modbus/input1.png "Home Assistant SAJ H2 Charging Settings")
 
@@ -71,7 +72,7 @@ Enable this switch to charge/discharge the battery.
 ![Charging Settings](images/saj_h2_modbus/input2.png "")
 
 
-**To discharge from the battery, you must tick the 'Export' box in the SAJ App under 'Working Mode' > 'Time-of-Use'.**
+**To discharge from the battery, you must enable the 'Export' switch in the SAJ App under 'Working Mode' > 'Time-of-Use'.**
 
 
 <img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
