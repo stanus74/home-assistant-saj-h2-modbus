@@ -213,9 +213,9 @@ async def read_additional_modbus_data_3(client: ModbusClient) -> DataDict:
         return await _read_modbus_data(client, 16695, 30, decode_instructions_part_3, 'additional_data_3')
     except Exception as e:
         _LOGGER.warning(f"Error reading additional data 3 (first part): {e}. This may be normal if your device doesn't support these registers.")
-        # Füge leere Werte für die fehlenden Schlüssel hinzu
+        # Add empty values for the missing keys
         return {key: 0 for key in data_keys_part_3}
-    
+
 async def read_additional_modbus_data_3_2(client: ModbusClient) -> DataDict:
     """Reads additional operating data (Set 3) - second part."""
     data_keys_part_3_2 = [
@@ -232,7 +232,7 @@ async def read_additional_modbus_data_3_2(client: ModbusClient) -> DataDict:
         return await _read_modbus_data(client, 16725, 34, decode_instructions_part_3_2, 'additional_data_3_2')
     except Exception as e:
         _LOGGER.warning(f"Error reading additional data 3 (second part): {e}. This may be normal if your device doesn't support these registers.")
-        # Füge leere Werte für die fehlenden Schlüssel hinzu
+        # Add empty values for the missing keys
         return {key: 0 for key in data_keys_part_3_2}
 
 async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
@@ -241,7 +241,7 @@ async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
         ("RGridVolt", None, 0.1), ("RGridCurr", "16i", 0.01), ("RGridFreq", None, 0.01),
         ("RGridDCI", "16i",1), ("RGridPowerWatt", "16i", 1),
         ("RGridPowerVA", None, 1), ("RGridPowerPF", "16i"),
-        ("SGridVolt", None, 0.1), ("SGridCurr", "16i", 0.01), ("SGridFreq", None, 0.01),
+        ("SGridVolt", None, 0.1), ("SGridCurr", "16i", 0.01), ("RGridFreq", None, 0.01),
         ("SGridDCI", "16i",1), ("SGridPowerWatt", "16i", 1),
         ("SGridPowerVA", None, 1), ("SGridPowerPF", "16i"),
         ("TGridVolt", None, 0.1), ("TGridCurr", "16i", 0.01), ("TGridFreq", None, 0.01),
@@ -271,30 +271,44 @@ async def read_battery_data(client: ModbusClient) -> DataDict:
     
     return await _read_modbus_data(client, 40960, 56, decode_instructions, 'battery_data', default_factor=0.01)
 
-async def read_first_charge_data(client: ModbusClient) -> DataDict:
-    """Reads the First Charge registers using the generic read_modbus_data function."""
+async def read_power_schedule_data(client: ModbusClient, mode: str, start_register: int) -> DataDict:
+    """Reads the Charge or Discharge registers using the generic read_modbus_data function.
+    
+    Args:
+        client: The ModbusClient to use for reading
+        mode: Either "charge" or "discharge"
+        start_register: The starting register address (0x3606 for charge, 0x361B for discharge)
+    """
     decode_instructions = [
-        ("first_charge_start_time_raw", "16u", 1),
-        ("first_charge_end_time_raw", "16u", 1),
+        (f"{mode}_start_time_raw", "16u", 1),
+        (f"{mode}_end_time_raw", "16u", 1),
         ("power_time_raw", "16u", 1),
     ]
 
-    data = await _read_modbus_data(client, 0x3606, 3, decode_instructions, "first_charge_data", default_factor=1)
+    data = await _read_modbus_data(client, start_register, 3, decode_instructions, f"{mode}_data", default_factor=1)
 
     if data:
         try:
             def decode_time(value: int) -> str:
                 return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
-            data["first_charge_start_time"] = decode_time(data.pop("first_charge_start_time_raw"))
-            data["first_charge_end_time"] = decode_time(data.pop("first_charge_end_time_raw"))
+            data[f"{mode}_start_time"] = decode_time(data.pop(f"{mode}_start_time_raw"))
+            data[f"{mode}_end_time"] = decode_time(data.pop(f"{mode}_end_time_raw"))
             power_value = data.pop("power_time_raw")
-            data["first_charge_day_mask"] = (power_value >> 8) & 0xFF
-            data["first_charge_power_percent"] = power_value & 0xFF
+            data[f"{mode}_day_mask"] = (power_value >> 8) & 0xFF
+            data[f"{mode}_power_percent"] = power_value & 0xFF
         except Exception as e:
-            _LOGGER.error(f"Error processing First Charge data: {e}")
+            _LOGGER.error(f"Error processing {mode.capitalize()} data: {e}")
             return {}
 
     return data
+
+async def read_charge_data(client: ModbusClient) -> DataDict:
+    """Reads the Charge registers using the generic read_modbus_data function."""
+    return await read_power_schedule_data(client, "charge", 0x3606)
+
+async def read_discharge_data(client: ModbusClient) -> DataDict:
+    """Reads the Discharge registers using the generic read_modbus_data function."""
+    return await read_power_schedule_data(client, "discharge", 0x361B)
 
 async def read_anti_reflux_data(client: ModbusClient) -> DataDict:
     """Reads the Anti-Reflux registers using the generic read_modbus_data function."""
@@ -307,7 +321,8 @@ async def read_anti_reflux_data(client: ModbusClient) -> DataDict:
     try:
         data = await _read_modbus_data(client, 0x365A, 3, decode_instructions, "anti_reflux_data", default_factor=1)
         
-        # Umwandlung des AntiRefluxCurrentmode-Werts in Text
+        
+        # Conversion of the AntiRefluxCurrentmode value to text
         if "AntiRefluxCurrentmode_raw" in data:
             mode_value = data.pop("AntiRefluxCurrentmode_raw")
             mode_text = {

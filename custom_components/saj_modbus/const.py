@@ -63,7 +63,7 @@ current_sensors_group = SensorGroup(
     icon="mdi:current-dc",  
 )
 
-# Neue Gruppe für Sensoren mit Milliampere als Einheit
+# New group for sensors with milliampere as unit
 milliampere_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
     device_class=SensorDeviceClass.CURRENT,
@@ -89,7 +89,7 @@ information_sensors_group = SensorGroup(
     icon="mdi:information-outline"  
 )
 
-# gfci_sensors_group wurde entfernt und in current_sensors_group integriert
+# gfci_sensors_group was removed and integrated into current_sensors_group
 
 iso_resistance_sensors_group = SensorGroup(
     unit_of_measurement="kΩ",  
@@ -224,7 +224,7 @@ current_sensors = [
     {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
 ]
 
-# Sensoren mit Milliampere als Einheit
+# Sensors with milliampere as unit
 milliampere_sensors = [
     {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
@@ -247,7 +247,7 @@ battery_sensors = [
 
 
 
-# gfci_sensors wurde in current_sensors integriert
+# gfci_sensors was integrated into current_sensors
 
 temperature_sensors = [
     {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
@@ -393,32 +393,57 @@ energy_sensors = [
 ]
     
 
-# Neue Sensoren für "First Charge" definieren:
-first_charge_sensors = [
+# Define sensors for "Charge":
+charge_sensors = [
     {
-        "name": "First Charge Start Time",
-        "key": "first_charge_start_time",
+        "name": "Charge Start Time",
+        "key": "charge_start_time",
         "icon": "clock-outline",
     },
     {
-        "name": "First Charge End Time",
-        "key": "first_charge_end_time",
+        "name": "Charge End Time",
+        "key": "charge_end_time",
         "icon": "clock-outline",
     },
     {
-        "name": "First Charge Day Mask",
-        "key": "first_charge_day_mask",
+        "name": "Charge Day Mask",
+        "key": "charge_day_mask",
         "icon": "calendar",
     },
     {
-        "name": "First Charge Power Percent",
-        "key": "first_charge_power_percent",
+        "name": "Charge Power Percent",
+        "key": "charge_power_percent",
         "icon": "flash",
         "unit_of_measurement": "%"  # Override of the unit here
     },
 ]
 
-# Anti-Reflux Sensoren definieren:
+# Define sensors for "Discharge":
+discharge_sensors = [
+    {
+        "name": "Discharge Start Time",
+        "key": "discharge_start_time",
+        "icon": "clock-outline",
+    },
+    {
+        "name": "Discharge End Time",
+        "key": "discharge_end_time",
+        "icon": "clock-outline",
+    },
+    {
+        "name": "Discharge Day Mask",
+        "key": "discharge_day_mask",
+        "icon": "calendar",
+    },
+    {
+        "name": "Discharge Power Percent",
+        "key": "discharge_power_percent",
+        "icon": "flash",
+        "unit_of_measurement": "%"  # Override of the unit here
+    },
+]
+
+# Define Anti-Reflux sensors:
 anti_reflux_sensors = [
     {
         "name": "Anti-Reflux Power Limit",
@@ -450,7 +475,8 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
-    **create_sensor_descriptions(schedule_sensors_group, first_charge_sensors),
+    **create_sensor_descriptions(schedule_sensors_group, charge_sensors),
+    **create_sensor_descriptions(schedule_sensors_group, discharge_sensors),
     **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
 }
 
