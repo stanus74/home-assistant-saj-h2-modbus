@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import inspect
+import time  
 from datetime import timedelta
 from typing import Any, Dict, Optional, List
 from homeassistant.core import HomeAssistant
@@ -11,7 +12,6 @@ from pymodbus.exceptions import ConnectionException, ModbusIOException
 from . import modbus_readers
 from .modbus_utils import (
     try_read_registers,
-    try_write_registers,
     ensure_connection,
     safe_close,
     close_connection as modbus_close,
@@ -61,66 +61,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         # Pending Export Limit variable
         self._pending_export_limit: Optional[int] = None
-import asyncio
-import logging
-import inspect
-from datetime import timedelta
-from typing import Any, Dict, Optional, List
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from pymodbus.client import AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException, ModbusIOException
-
-from . import modbus_readers
-from .modbus_utils import (
-    try_read_registers,
-    ensure_connection,
-    safe_close,
-    close_connection as modbus_close,
-    ReconnectionNeededError
-)
-
-_LOGGER = logging.getLogger(__name__)
-
-class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int) -> None:
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=name,
-            update_interval=timedelta(seconds=scan_interval),
-            update_method=self._async_update_data,
-        )
-        self._host = host
-        self._port = port
-        self._client: Optional[AsyncModbusTcpClient] = None
-        self._read_lock = asyncio.Lock()
-        self._connection_lock = asyncio.Lock()
-        self.updating_settings = False
-        self.inverter_data: Dict[str, Any] = {}
-        
-        self._closing = False
-        self._reconnecting = False
-        self._max_retries = 2
-        self._retry_delay = 1
-        self._operation_timeout = 30
-        
-        # Pending charging and discharging state
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
-        
-        # Pending Charge variables (Format "HH:MM" or int)
-        self._pending_charge_start: Optional[str] = None
-        self._pending_charge_end: Optional[str] = None
-        self._pending_charge_day_mask: Optional[int] = None
-        self._pending_charge_power_percent: Optional[int] = None
-        
-        # Pending Discharge variables (Format "HH:MM" or int)
-        self._pending_discharge_start: Optional[str] = None
-        self._pending_discharge_end: Optional[str] = None
-        self._pending_discharge_day_mask: Optional[int] = None
-        self._pending_discharge_power_percent: Optional[int] = None
-        
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new instance of AsyncModbusTcpClient."""
@@ -183,15 +123,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = False
 
     async def _async_update_data(self) -> Dict[str, Any]:
+        
+        start_total = time.monotonic()
+        
         # Create the client if it doesn't exist yet, and ensure the connection is established.
         if self._client is None:
             self._client = self._create_client()
-        
+
         # Try to establish the connection with multiple retry attempts
         if not await ensure_connection(self._client, self._host, self._port, max_retries=3):
             _LOGGER.error("Connection could not be established after multiple attempts.")
             return {}
-
+   
         try:
             # Initial reading of inverter data (one-time)
             if not self.inverter_data:
@@ -212,31 +155,32 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_battery_data,
                 modbus_readers.read_charge_data,
                 modbus_readers.read_discharge_data,
-                modbus_readers.read_anti_reflux_data,  # Method for Anti-Reflux data
-                modbus_readers.read_passive_battery_data,  # Method for Passive Charge/Discharge and Battery configuration
+                modbus_readers.read_anti_reflux_data,  # New method for Anti-Reflux data
+                modbus_readers.read_passive_battery_data,
             ]
+            
+            n_ok = 0
+            n_fail = 0
             
             # Iterate over all reader methods
             for method in reader_methods:
+                start = time.monotonic()
                 try:
                     result = await method(self._client)
                     combined_data.update(result)
+                    duration = time.monotonic() - start
+                    _LOGGER.debug(f"Reading modbus data via: {method.__name__} took {duration:.2f}s")
+                    n_ok += 1
                 except ReconnectionNeededError as e:
                     _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                    if await self.reconnect_client():
-                        # Try again after successful reconnection
-                        try:
-                            result = await method(self._client)
-                            combined_data.update(result)
-                        except Exception as inner_e:
-                            _LOGGER.error(f"Error after reconnection in {method.__name__}: {inner_e}")
-                    else:
-                        _LOGGER.error("Reconnection failed during update cycle.")
+                    n_fail += 1
+                
                 except Exception as e:
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
+                    n_fail += 1
                 
                 # Short pause between read operations
-                #await asyncio.sleep(2)
+                await asyncio.sleep(0.3)
             
             # Query the current charging and discharging status
             try:
@@ -305,13 +249,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.info(f"Writing Export Limit value: {self._pending_export_limit}")
                 await self._handle_pending_export_limit()
                 # The new value will be read again in the next cycle.
-                
 
              # Close connection after the update cycle
             if self._client:
                 await modbus_close(self._client)
             
-                
+            duration_total = time.monotonic() - start_total
+            _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds ({n_ok} OK, {n_fail} failed)")
+ 
             return combined_data
 
         except Exception as e:
@@ -319,73 +264,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return {}
 
     async def _handle_pending_charge_settings(self) -> None:
-        """Writes the pending Charge settings to the corresponding registers."""
-        # Register 0x3606: Start time (High Byte = Hour, Low Byte = Minute)
-        if self._pending_charge_start is not None:
-            try:
-                hour, minute = map(int, self._pending_charge_start.split(":"))
-                value = (hour << 8) | minute
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3606, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success:
-                    _LOGGER.info(f"Successfully set charge start time: {self._pending_charge_start}")
-                else:
-                    _LOGGER.error(f"Failed to write charge start time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing charge start time: {e}")
-            finally:
-                self._pending_charge_start = None
-
-        # Register 0x3607: End time (High Byte = Hour, Low Byte = Minute)
-        if self._pending_charge_end is not None:
-            try:
-                hour, minute = map(int, self._pending_charge_end.split(":"))
-                value = (hour << 8) | minute
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3607, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success:
-                    _LOGGER.info(f"Successfully set charge end time: {self._pending_charge_end}")
-                else:
-                    _LOGGER.error(f"Failed to write charge end time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing charge end time: {e}")
-            finally:
-                self._pending_charge_end = None
-
-        # Register 0x3608: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
         if self._pending_charge_day_mask is not None or self._pending_charge_power_percent is not None:
             try:
-                # Read current value first
-                regs = await try_read_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3608, 
-                    1, 
-                    host=self._host, 
-                    port=self._port
-                )
-                
-                if not regs:
-                    _LOGGER.warning("Could not read current charge power time (0x3608), assuming 0.")
-                    current_value = 0
-                else:
-                    current_value = regs[0]
-                
+                regs = await try_read_registers(self._client, self._read_lock, 1, 0x3608, 1)
+                current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
                 current_power_percent = current_value & 0xFF
 
@@ -393,96 +275,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 power_percent = self._pending_charge_power_percent if self._pending_charge_power_percent is not None else current_power_percent
 
                 value = (day_mask << 8) | power_percent
-                
-                # Write the new value
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3608, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                
-                if success:
+                async with self._read_lock:
+                    response = await self._client.write_register(0x3608, value)
+
+                if response and not response.isError():
                     _LOGGER.info(f"Successfully set charge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
-                    _LOGGER.error(f"Failed to write charge power time")
+                    _LOGGER.error(f"Failed to write charge power time: {response}")
             except Exception as e:
                 _LOGGER.error(f"Error writing charge power time: {e}")
             finally:
                 self._pending_charge_day_mask = None
                 self._pending_charge_power_percent = None
-    
+
     async def _handle_pending_discharge_settings(self) -> None:
-        """Writes the pending Discharge settings to the corresponding registers."""
-        # Register 0x361B: Start time (High Byte = Hour, Low Byte = Minute)
-        if self._pending_discharge_start is not None:
-            try:
-                hour, minute = map(int, self._pending_discharge_start.split(":"))
-                value = (hour << 8) | minute
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x361B, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success:
-                    _LOGGER.info(f"Successfully set discharge start time: {self._pending_discharge_start}")
-                else:
-                    _LOGGER.error(f"Failed to write discharge start time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing discharge start time: {e}")
-            finally:
-                self._pending_discharge_start = None
-
-        # Register 0x361C: End time (High Byte = Hour, Low Byte = Minute)
-        if self._pending_discharge_end is not None:
-            try:
-                hour, minute = map(int, self._pending_discharge_end.split(":"))
-                value = (hour << 8) | minute
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x361C, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success:
-                    _LOGGER.info(f"Successfully set discharge end time: {self._pending_discharge_end}")
-                else:
-                    _LOGGER.error(f"Failed to write discharge end time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing discharge end time: {e}")
-            finally:
-                self._pending_discharge_end = None
-
-        # Register 0x361D: Power Time (High Byte = Day Mask, Low Byte = Power Percent)
         if self._pending_discharge_day_mask is not None or self._pending_discharge_power_percent is not None:
             try:
-                # Read current value first
-                regs = await try_read_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x361D, 
-                    1, 
-                    host=self._host, 
-                    port=self._port
-                )
-                
-                if not regs:
-                    _LOGGER.warning("Could not read current discharge power time (0x361D), assuming 0.")
-                    current_value = 0
-                else:
-                    current_value = regs[0]
-                
+                regs = await try_read_registers(self._client, self._read_lock, 1, 0x361D, 1)
+                current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
                 current_power_percent = current_value & 0xFF
 
@@ -490,28 +300,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 power_percent = self._pending_discharge_power_percent if self._pending_discharge_power_percent is not None else current_power_percent
 
                 value = (day_mask << 8) | power_percent
-                
-                # Write the new value
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x361D, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                
-                if success:
+                async with self._read_lock:
+                    response = await self._client.write_register(0x361D, value)
+
+                if response and not response.isError():
                     _LOGGER.info(f"Successfully set discharge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
-                    _LOGGER.error(f"Failed to write discharge power time")
+                    _LOGGER.error(f"Failed to write discharge power time: {response}")
             except Exception as e:
                 _LOGGER.error(f"Error writing discharge power time: {e}")
             finally:
                 self._pending_discharge_day_mask = None
-                self._pending_discharge_power_percent = None
-                    
+                self._pending_discharge_power_percent = None   
+                
     # Setter methods that are called by HA when the sensors change:
     async def set_charge_start(self, time_str: str) -> None:
         """Sets the new start time (format 'HH:MM') for Charge."""
@@ -539,38 +340,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 # Set value for register 0x3647 to 0 only if both switches are off
                 value = 1 if self._pending_charging_state or discharging_state else 0
 
-                # Write to register 0x3647
-                _LOGGER.debug(f"Writing Charging status to register 0x3647: {value} (Charging={self._pending_charging_state}, Discharging={discharging_state})")
-                success_3647 = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3647, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success_3647:
-                    _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state} (Register 0x3647={value})")
-                else:
-                    _LOGGER.error(f"Failed to set charging state (register 0x3647)")
+                async with self._read_lock:
+                    # Write to register 0x3647
+                    _LOGGER.debug(f"Writing Charging status to register 0x3647: {value} (Charging={self._pending_charging_state}, Discharging={discharging_state})")
+                    response_3647 = await self._client.write_register(0x3647, value)
+                    if response_3647 and not response_3647.isError():
+                        _LOGGER.info(f"Successfully set charging to: {self._pending_charging_state} (Register 0x3647={value})")
+                    else:
+                        _LOGGER.error(f"Failed to set charging state (register 0x3647): {response_3647}")
 
-                # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3604
-                reg_value = 1 if self._pending_charging_state else 0
-                _LOGGER.debug(f"Writing Charging status to register 0x3604: {reg_value}")
-                success_3604 = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3604, 
-                    reg_value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success_3604:
-                    _LOGGER.info(f"Successfully set register 0x3604 to {reg_value}")
-                else:
-                    _LOGGER.error(f"Failed to set register 0x3604")
+                    # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3604
+                    reg_value = 1 if self._pending_charging_state else 0
+                    _LOGGER.debug(f"Writing Charging status to register 0x3604: {reg_value}")
+                    response_3604 = await self._client.write_register(0x3604, reg_value)
+                    if response_3604 and not response_3604.isError():
+                        _LOGGER.info(f"Successfully set register 0x3604 to {reg_value}")
+                    else:
+                        _LOGGER.error(f"Failed to set register 0x3604: {response_3604}")
             except Exception as e:
                 _LOGGER.error(f"Error handling pending charging state: {e}")
             finally:
@@ -587,38 +373,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 # Set value for register 0x3647 to 0 only if both switches are off
                 value = 1 if self._pending_discharging_state or charging_state else 0
 
-                # Write to register 0x3647 (same register as for Charging)
-                _LOGGER.debug(f"Writing Discharging status to register 0x3647: {value} (Discharging={self._pending_discharging_state}, Charging={charging_state})")
-                success_3647 = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3647, 
-                    value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success_3647:
-                    _LOGGER.info(f"Successfully set discharging to: {self._pending_discharging_state} (Register 0x3647={value})")
-                else:
-                    _LOGGER.error(f"Failed to set discharging state (register 0x3647)")
+                async with self._read_lock:
+                    # Write to register 0x3647 (same register as for Charging)
+                    _LOGGER.debug(f"Writing Discharging status to register 0x3647: {value} (Discharging={self._pending_discharging_state}, Charging={charging_state})")
+                    response_3647 = await self._client.write_register(0x3647, value)
+                    if response_3647 and not response_3647.isError():
+                        _LOGGER.info(f"Successfully set discharging to: {self._pending_discharging_state} (Register 0x3647={value})")
+                    else:
+                        _LOGGER.error(f"Failed to set discharging state (register 0x3647): {response_3647}")
 
-                # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3605
-                reg_value = 1 if self._pending_discharging_state else 0
-                _LOGGER.debug(f"Writing Discharging status to register 0x3605: {reg_value}")
-                success_3605 = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x3605, 
-                    reg_value, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success_3605:
-                    _LOGGER.info(f"Successfully set register 0x3605 to {reg_value}")
-                else:
-                    _LOGGER.error(f"Failed to set register 0x3605")
+                    # Write the value 1 (if enabled) or 0 (if disabled) to register 0x3605
+                    reg_value = 1 if self._pending_discharging_state else 0
+                    _LOGGER.debug(f"Writing Discharging status to register 0x3605: {reg_value}")
+                    response_3605 = await self._client.write_register(0x3605, reg_value)
+                    if response_3605 and not response_3605.isError():
+                        _LOGGER.info(f"Successfully set register 0x3605 to {reg_value}")
+                    else:
+                        _LOGGER.error(f"Failed to set register 0x3605: {response_3605}")
             except Exception as e:
                 _LOGGER.error(f"Error handling pending discharging state: {e}")
             finally:
@@ -677,19 +448,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Writes the pending export limit to register 0x365A."""
         if self._pending_export_limit is not None:
             try:
-                success = await try_write_registers(
-                    self._client, 
-                    self._read_lock, 
-                    1, 
-                    0x365A, 
-                    self._pending_export_limit, 
-                    host=self._host, 
-                    port=self._port
-                )
-                if success:
-                    _LOGGER.info(f"Successfully set export limit to: {self._pending_export_limit}")
-                else:
-                    _LOGGER.error(f"Failed to write export limit")
+                async with self._read_lock:
+                    response = await self._client.write_register(0x365A, self._pending_export_limit)
+                    if response and not response.isError():
+                        _LOGGER.info(f"Successfully set export limit to: {self._pending_export_limit}")
+                    else:
+                        _LOGGER.error(f"Failed to write export limit: {response}")
             except Exception as e:
                 _LOGGER.error(f"Error writing export limit: {e}")
             finally:
