@@ -242,6 +242,9 @@ battery_sensors = [
     {"name": "Battery 3 SOH", "key": "Bat3SOH", "icon": "battery", "enable": False},
     {"name": "Battery 4 SOC", "key": "Bat4SOC", "icon": "battery", "enable": False},
     {"name": "Battery 4 SOH", "key": "Bat4SOH", "icon": "battery", "enable": False},
+    {"name": "Battary on grid discharge depth", "key": "BatOnGridDisDepth", "enable": True},
+    {"name": "Battery offgrid discharge depth", "key": "BatOffGridDisDepth", "enable": True},
+    {"name": "Battery charge depth", "key": "BatcharDepth", "enable": True},
 ]
 
 
@@ -311,6 +314,7 @@ information_sensors = [
     {"name": "Battery 3 Warning", "key": "Bat3WarnMSG", "icon": "alert", "enable": False},
     {"name": "Battery 4 Fault", "key": "Bat4FaultMSG", "icon": "alert", "enable": False},
     {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": False},
+    {"name": "App Mode", "key": "AppMode", "icon": "information-outline", "enable": True},
 ]
     
 
@@ -393,73 +397,29 @@ energy_sensors = [
 ]
     
 
-# Define sensors for "Charge":
-charge_sensors = [
-    {
-        "name": "Charge Start Time",
-        "key": "charge_start_time",
-        "icon": "clock-outline",
-    },
-    {
-        "name": "Charge End Time",
-        "key": "charge_end_time",
-        "icon": "clock-outline",
-    },
-    {
-        "name": "Charge Day Mask",
-        "key": "charge_day_mask",
-        "icon": "calendar",
-    },
-    {
-        "name": "Charge Power Percent",
-        "key": "charge_power_percent",
-        "icon": "flash",
-        "unit_of_measurement": "%"  # Override of the unit here
-    },
-]
-
-# Define sensors for "Discharge":
-discharge_sensors = [
-    {
-        "name": "Discharge Start Time",
-        "key": "discharge_start_time",
-        "icon": "clock-outline",
-    },
-    {
-        "name": "Discharge End Time",
-        "key": "discharge_end_time",
-        "icon": "clock-outline",
-    },
-    {
-        "name": "Discharge Day Mask",
-        "key": "discharge_day_mask",
-        "icon": "calendar",
-    },
-    {
-        "name": "Discharge Power Percent",
-        "key": "discharge_power_percent",
-        "icon": "flash",
-        "unit_of_measurement": "%"  # Override of the unit here
-    },
+# Define sensors for battery charge/discharge schedule:
+battery_schedule_sensors = [
+    {"name": "Charge Start Time", "key": "charge_start_time", "icon": "clock-outline"},
+    {"name": "Charge End Time", "key": "charge_end_time", "icon": "clock-outline"},
+    {"name": "Charge Day Mask", "key": "charge_day_mask", "icon": "calendar"},
+    {"name": "Charge Power Percent", "key": "charge_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge Start Time", "key": "discharge_start_time", "icon": "clock-outline"},
+    {"name": "Discharge End Time", "key": "discharge_end_time", "icon": "clock-outline"},
+    {"name": "Discharge Day Mask", "key": "discharge_day_mask", "icon": "calendar"},
+    {"name": "Discharge Power Percent", "key": "discharge_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    # Passive charge and discharge sensors
+    {"name": "Passive Charge Enable", "key": "Passive_charge_enable", "icon": "power-settings"},
+    {"name": "Passive Grid Charge Power", "key": "Passive_GridChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
+    {"name": "Passive Grid Discharge Power", "key": "Passive_GridDisChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
+    {"name": "Passive Battery Charge Power", "key": "Passive_BatChargePower", "icon": "battery-charging", "unit_of_measurement": "%"},
+    {"name": "Passive Battery Discharge Power", "key": "Passive_BatDisChargePower", "icon": "battery", "unit_of_measurement": "%"},
 ]
 
 # Define Anti-Reflux sensors:
 anti_reflux_sensors = [
-    {
-        "name": "Anti-Reflux Power Limit",
-        "key": "AntiRefluxPowerLimit",
-        "icon": "flash-outline",
-    },
-    {
-        "name": "Anti-Reflux Current Limit",
-        "key": "AntiRefluxCurrentLimit",
-        "icon": "current-dc",
-    },
-    {
-        "name": "Anti-Reflux Current Mode",
-        "key": "AntiRefluxCurrentmode",
-        "icon": "cog-outline",
-    },
+    {"name": "Anti-Reflux Power Limit", "key": "AntiRefluxPowerLimit", "icon": "flash-outline"},
+    {"name": "Anti-Reflux Current Limit", "key": "AntiRefluxCurrentLimit", "icon": "current-dc"},
+    {"name": "Anti-Reflux Current Mode", "key": "AntiRefluxCurrentmode", "icon": "cog-outline"},
 ]
 
 
@@ -475,8 +435,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
     **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
-    **create_sensor_descriptions(schedule_sensors_group, charge_sensors),
-    **create_sensor_descriptions(schedule_sensors_group, discharge_sensors),
+    **create_sensor_descriptions(schedule_sensors_group, battery_schedule_sensors),
     **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
 }
 
