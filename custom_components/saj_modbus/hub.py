@@ -265,8 +265,39 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return {}
 
     async def _handle_pending_charge_settings(self) -> None:
-        if self._pending_charge_day_mask is not None or self._pending_charge_power_percent is not None:
-            try:
+        try:
+            # Behandle Start-Zeit
+            if self._pending_charge_start is not None:
+                time_parts = self._pending_charge_start.split(":")
+                if len(time_parts) == 2:
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    value = (hours << 8) | minutes
+                    success = await self._write_register(0x3606, value)
+                    if success:
+                        _LOGGER.info(f"Successfully set charge start time: {self._pending_charge_start}")
+                    else:
+                        _LOGGER.error(f"Failed to write charge start time")
+                else:
+                    _LOGGER.error(f"Invalid time format for charge start time: {self._pending_charge_start}")
+            
+            # Behandle End-Zeit
+            if self._pending_charge_end is not None:
+                time_parts = self._pending_charge_end.split(":")
+                if len(time_parts) == 2:
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    value = (hours << 8) | minutes
+                    success = await self._write_register(0x3607, value)
+                    if success:
+                        _LOGGER.info(f"Successfully set charge end time: {self._pending_charge_end}")
+                    else:
+                        _LOGGER.error(f"Failed to write charge end time")
+                else:
+                    _LOGGER.error(f"Invalid time format for charge end time: {self._pending_charge_end}")
+            
+            # Behandle Day Mask und Power Percent
+            if self._pending_charge_day_mask is not None or self._pending_charge_power_percent is not None:
                 regs = await self._read_registers(0x3608)
                 current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
@@ -282,15 +313,48 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Successfully set charge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
                     _LOGGER.error(f"Failed to write charge power time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing charge power time: {e}")
-            finally:
-                self._pending_charge_day_mask = None
-                self._pending_charge_power_percent = None
+        except Exception as e:
+            _LOGGER.error(f"Error writing charge settings: {e}")
+        finally:
+            self._pending_charge_start = None
+            self._pending_charge_end = None
+            self._pending_charge_day_mask = None
+            self._pending_charge_power_percent = None
 
     async def _handle_pending_discharge_settings(self) -> None:
-        if self._pending_discharge_day_mask is not None or self._pending_discharge_power_percent is not None:
-            try:
+        try:
+            # Behandle Start-Zeit
+            if self._pending_discharge_start is not None:
+                time_parts = self._pending_discharge_start.split(":")
+                if len(time_parts) == 2:
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    value = (hours << 8) | minutes
+                    success = await self._write_register(0x361B, value)
+                    if success:
+                        _LOGGER.info(f"Successfully set discharge start time: {self._pending_discharge_start}")
+                    else:
+                        _LOGGER.error(f"Failed to write discharge start time")
+                else:
+                    _LOGGER.error(f"Invalid time format for discharge start time: {self._pending_discharge_start}")
+            
+            # Behandle End-Zeit
+            if self._pending_discharge_end is not None:
+                time_parts = self._pending_discharge_end.split(":")
+                if len(time_parts) == 2:
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    value = (hours << 8) | minutes
+                    success = await self._write_register(0x361C, value)
+                    if success:
+                        _LOGGER.info(f"Successfully set discharge end time: {self._pending_discharge_end}")
+                    else:
+                        _LOGGER.error(f"Failed to write discharge end time")
+                else:
+                    _LOGGER.error(f"Invalid time format for discharge end time: {self._pending_discharge_end}")
+            
+            # Behandle Day Mask und Power Percent
+            if self._pending_discharge_day_mask is not None or self._pending_discharge_power_percent is not None:
                 regs = await self._read_registers(0x361D)
                 current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
@@ -306,11 +370,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Successfully set discharge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
                     _LOGGER.error(f"Failed to write discharge power time")
-            except Exception as e:
-                _LOGGER.error(f"Error writing discharge power time: {e}")
-            finally:
-                self._pending_discharge_day_mask = None
-                self._pending_discharge_power_percent = None   
+        except Exception as e:
+            _LOGGER.error(f"Error writing discharge settings: {e}")
+        finally:
+            self._pending_discharge_start = None
+            self._pending_discharge_end = None
+            self._pending_discharge_day_mask = None
+            self._pending_discharge_power_percent = None   
                 
     # Setter methods that are called by HA when the sensors change:
     async def set_charge_start(self, time_str: str) -> None:
