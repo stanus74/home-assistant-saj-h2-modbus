@@ -31,11 +31,16 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_entity_registry_enabled_default = True
         self._last_switch_time = 0  # Time of last switch
         self._switch_timeout = 2  # Time lock in seconds
+        self._last_state = None  # Speichert den letzten bekannten Zustand
 
     @property
     def is_on(self) -> bool:
         """Check if charging is enabled."""
-        return self._hub.data.get("charging_enabled", False)
+        current_state = self._hub.data.get("charging_enabled", False)
+        # Aktualisiere den letzten bekannten Zustand
+        if self._last_state != current_state:
+            self._last_state = current_state
+        return current_state
 
     async def async_turn_on(self, **kwargs) -> None:
         """Enable charging."""
@@ -53,6 +58,7 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
         try:
             await self._hub.set_charging(True)
             self._last_switch_time = time.time()  # Update time
+            self._last_state = True  # Aktualisiere den letzten bekannten Zustand
             self.async_write_ha_state()  # Ensure UI updates
         except Exception as e:
             _LOGGER.error(f"Turn on failed: {e}")
@@ -74,20 +80,11 @@ class SajChargingSwitch(CoordinatorEntity, SwitchEntity):
         try:
             await self._hub.set_charging(False)
             self._last_switch_time = time.time()  # Update time
+            self._last_state = False  # Aktualisiere den letzten bekannten Zustand
             self.async_write_ha_state()  # Ensure UI updates
         except Exception as e:
             _LOGGER.error(f"Turn off failed: {e}")
             raise
-
-    async def _update_state(self) -> None:
-        """Update switch state."""
-        try:
-            state = await self._hub.get_charging_state()
-            _LOGGER.debug(f"Charging state: {state}")
-            self._hub.data["charging_enabled"] = state
-            self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error(f"Update failed: {e}")
 
     @property
     def available(self) -> bool:
@@ -105,11 +102,16 @@ class SajDischargingSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_entity_registry_enabled_default = True
         self._last_switch_time = 0  # Time of last switch
         self._switch_timeout = 2  # Time lock in seconds
+        self._last_state = None  # Speichert den letzten bekannten Zustand
 
     @property
     def is_on(self) -> bool:
         """Check if discharging is enabled."""
-        return self._hub.data.get("discharging_enabled", False)
+        current_state = self._hub.data.get("discharging_enabled", False)
+        # Aktualisiere den letzten bekannten Zustand
+        if self._last_state != current_state:
+            self._last_state = current_state
+        return current_state
 
     async def async_turn_on(self, **kwargs) -> None:
         """Enable discharging."""
@@ -128,6 +130,7 @@ class SajDischargingSwitch(CoordinatorEntity, SwitchEntity):
             # Use the new set_discharging method
             await self._hub.set_discharging(True)
             self._last_switch_time = time.time()  # Update time
+            self._last_state = True  # Aktualisiere den letzten bekannten Zustand
             self.async_write_ha_state()  # Ensure UI updates
         except Exception as e:
             _LOGGER.error(f"Turn on failed: {e}")
@@ -150,20 +153,11 @@ class SajDischargingSwitch(CoordinatorEntity, SwitchEntity):
             # Use the new set_discharging method
             await self._hub.set_discharging(False)
             self._last_switch_time = time.time()  # Update time
+            self._last_state = False  # Aktualisiere den letzten bekannten Zustand
             self.async_write_ha_state()  # Ensure UI updates
         except Exception as e:
             _LOGGER.error(f"Turn off failed: {e}")
             raise
-
-    async def _update_state(self) -> None:
-        """Update switch state."""
-        try:
-            state = await self._hub.get_discharging_state()
-            _LOGGER.debug(f"Discharging state: {state}")
-            self._hub.data["discharging_enabled"] = state
-            self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error(f"Update failed: {e}")
 
     @property
     def available(self) -> bool:

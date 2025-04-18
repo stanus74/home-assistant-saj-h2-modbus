@@ -60,6 +60,66 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         # Pending Export Limit variable
         self._pending_export_limit: Optional[int] = None
+import asyncio
+import logging
+import inspect
+from datetime import timedelta
+from typing import Any, Dict, Optional, List
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.exceptions import ConnectionException, ModbusIOException
+
+from . import modbus_readers
+from .modbus_utils import (
+    try_read_registers,
+    ensure_connection,
+    safe_close,
+    close_connection as modbus_close,
+    ReconnectionNeededError
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
+    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=name,
+            update_interval=timedelta(seconds=scan_interval),
+            update_method=self._async_update_data,
+        )
+        self._host = host
+        self._port = port
+        self._client: Optional[AsyncModbusTcpClient] = None
+        self._read_lock = asyncio.Lock()
+        self._connection_lock = asyncio.Lock()
+        self.updating_settings = False
+        self.inverter_data: Dict[str, Any] = {}
+        
+        self._closing = False
+        self._reconnecting = False
+        self._max_retries = 2
+        self._retry_delay = 1
+        self._operation_timeout = 30
+        
+        # Pending charging and discharging state
+        self._pending_charging_state: Optional[bool] = None
+        self._pending_discharging_state: Optional[bool] = None
+        
+        # Pending Charge variables (Format "HH:MM" or int)
+        self._pending_charge_start: Optional[str] = None
+        self._pending_charge_end: Optional[str] = None
+        self._pending_charge_day_mask: Optional[int] = None
+        self._pending_charge_power_percent: Optional[int] = None
+        
+        # Pending Discharge variables (Format "HH:MM" or int)
+        self._pending_discharge_start: Optional[str] = None
+        self._pending_discharge_end: Optional[str] = None
+        self._pending_discharge_day_mask: Optional[int] = None
+        self._pending_discharge_power_percent: Optional[int] = None
+        
 
     def _create_client(self) -> AsyncModbusTcpClient:
         """Creates a new instance of AsyncModbusTcpClient."""
@@ -151,7 +211,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_battery_data,
                 modbus_readers.read_charge_data,
                 modbus_readers.read_discharge_data,
-                modbus_readers.read_anti_reflux_data,  # New method for Anti-Reflux data
+                modbus_readers.read_anti_reflux_data,  # Method for Anti-Reflux data
+                modbus_readers.read_passive_battery_data,  # Method for Passive Charge/Discharge and Battery configuration
             ]
             
             # Iterate over all reader methods
@@ -243,6 +304,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.info(f"Writing Export Limit value: {self._pending_export_limit}")
                 await self._handle_pending_export_limit()
                 # The new value will be read again in the next cycle.
+                
 
              # Close connection after the update cycle
             if self._client:
