@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, List
 from .modbus_utils import try_read_registers, try_write_registers
 
 _LOGGER = logging.getLogger(__name__)
@@ -7,6 +7,32 @@ _LOGGER = logging.getLogger(__name__)
 class ChargeSettingHandler:
     def __init__(self, hub):
         self._hub = hub
+        self._client = hub._client
+        self._read_lock = hub._read_lock
+        self._host = hub._host
+        self._port = hub._port
+
+    async def _read_registers(self, address: int, count: int = 1) -> List[int]:
+        return await try_read_registers(
+            self._client,
+            self._read_lock,
+            1,
+            address,
+            count,
+            host=self._host,
+            port=self._port
+        )
+
+    async def _write_register(self, address: int, value: int) -> bool:
+        return await try_write_registers(
+            self._client,
+            self._read_lock,
+            1,
+            address,
+            value,
+            host=self._host,
+            port=self._port
+        )
 
     async def handle_charge_settings(self) -> None:
         try:
@@ -22,7 +48,7 @@ class ChargeSettingHandler:
 
             if (self._hub._pending_charge_day_mask is not None or
                 self._hub._pending_charge_power_percent is not None):
-                regs = await self._hub._read_registers(0x3608)
+                regs = await self._read_registers(0x3608)
                 current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
                 current_power_percent = current_value & 0xFF
@@ -31,7 +57,7 @@ class ChargeSettingHandler:
                 power_percent = self._hub._pending_charge_power_percent if self._hub._pending_charge_power_percent is not None else current_power_percent
 
                 value = (day_mask << 8) | power_percent
-                success = await self._hub._write_register(0x3608, value)
+                success = await self._write_register(0x3608, value)
                 if success:
                     _LOGGER.info(f"Successfully set charge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
@@ -58,7 +84,7 @@ class ChargeSettingHandler:
 
             if (self._hub._pending_discharge_day_mask is not None or
                 self._hub._pending_discharge_power_percent is not None):
-                regs = await self._hub._read_registers(0x361D)
+                regs = await self._read_registers(0x361D)
                 current_value = regs[0]
                 current_day_mask = (current_value >> 8) & 0xFF
                 current_power_percent = current_value & 0xFF
@@ -67,7 +93,7 @@ class ChargeSettingHandler:
                 power_percent = self._hub._pending_discharge_power_percent if self._hub._pending_discharge_power_percent is not None else current_power_percent
 
                 value = (day_mask << 8) | power_percent
-                success = await self._hub._write_register(0x361D, value)
+                success = await self._write_register(0x361D, value)
                 if success:
                     _LOGGER.info(f"Successfully set discharge power time: day_mask={day_mask}, power_percent={power_percent}")
                 else:
@@ -83,7 +109,7 @@ class ChargeSettingHandler:
     async def handle_export_limit(self) -> None:
         if self._hub._pending_export_limit is not None:
             try:
-                success = await self._hub._write_register(0x365A, self._hub._pending_export_limit)
+                success = await self._write_register(0x365A, self._hub._pending_export_limit)
                 if success:
                     _LOGGER.info(f"Successfully set export limit to: {self._hub._pending_export_limit}")
                 else:
@@ -98,14 +124,14 @@ class ChargeSettingHandler:
             discharging_state = await self._hub.get_discharging_state()
             try:
                 value = 1 if self._hub._pending_charging_state or discharging_state else 0
-                success_3647 = await self._hub._write_register(0x3647, value)
+                success_3647 = await self._write_register(0x3647, value)
                 if success_3647:
                     _LOGGER.info(f"Successfully set charging (0x3647) to: {value}")
                 else:
                     _LOGGER.error("Failed to set charging state (0x3647)")
 
                 reg_value = 1 if self._hub._pending_charging_state else 0
-                success_3604 = await self._hub._write_register(0x3604, reg_value)
+                success_3604 = await self._write_register(0x3604, reg_value)
                 if success_3604:
                     _LOGGER.info(f"Successfully set register 0x3604 to {reg_value}")
                 else:
@@ -120,14 +146,14 @@ class ChargeSettingHandler:
             charging_state = await self._hub.get_charging_state()
             try:
                 value = 1 if self._hub._pending_discharging_state or charging_state else 0
-                success_3647 = await self._hub._write_register(0x3647, value)
+                success_3647 = await self._write_register(0x3647, value)
                 if success_3647:
                     _LOGGER.info(f"Successfully set discharging (0x3647) to: {value}")
                 else:
                     _LOGGER.error("Failed to set discharging state (0x3647)")
 
                 reg_value = 1 if self._hub._pending_discharging_state else 0
-                success_3605 = await self._hub._write_register(0x3605, reg_value)
+                success_3605 = await self._write_register(0x3605, reg_value)
                 if success_3605:
                     _LOGGER.info(f"Successfully set register 0x3605 to {reg_value}")
                 else:
@@ -143,7 +169,7 @@ class ChargeSettingHandler:
             hours = int(time_parts[0])
             minutes = int(time_parts[1])
             value = (hours << 8) | minutes
-            success = await self._hub._write_register(address, value)
+            success = await self._write_register(address, value)
             if success:
                 _LOGGER.info(f"Successfully set {label}: {time_str}")
             else:
