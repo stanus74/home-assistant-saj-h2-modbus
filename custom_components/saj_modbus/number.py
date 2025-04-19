@@ -80,11 +80,11 @@ class SajChargePowerPercentInputEntity(SajNumberEntity):
 class SajDischargePowerPercentInputEntity(SajNumberEntity):
     """Entity for Discharge Power Percent (0-25)."""
     def __init__(self, hub):
-        super().__init__(hub, "SAJ Discharge Power Percent (Input)", "saj_discharge_power_percent_input", 0, 25, 1, 5)
+        super().__init__(hub, "SAJ Discharge Power Percent (Input)", "saj_discharge_power_percent_input", 0, 100, 1, 5)
 
     async def async_set_native_value(self, value):
         val = int(value)
-        if not 0 <= val <= 25:
+        if not 0 <= val <= 100:
             _LOGGER.error(f"Invalid percent: {val}")
             return
         _LOGGER.debug(f"Setting discharge power percent to: {val}")
