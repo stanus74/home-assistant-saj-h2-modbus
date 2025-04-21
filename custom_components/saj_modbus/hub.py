@@ -15,9 +15,10 @@ from .modbus_utils import (
     ensure_connection,
     safe_close,
     close_connection as modbus_close,
-    ReconnectionNeededError
+    ReconnectionNeededError,
 )
-from .charge_control import ChargeSettingHandler  # inkl. Pending-Status-Handling
+# Import der Pending-Setter Factory und Felder
+from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_setter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,8 +45,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._retry_delay = 1
         self._operation_timeout = 30
 
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
+        # Pending settings
         self._pending_charge_start: Optional[str] = None
         self._pending_charge_end: Optional[str] = None
         self._pending_charge_day_mask: Optional[int] = None
@@ -55,9 +55,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_discharge_day_mask: Optional[int] = None
         self._pending_discharge_power_percent: Optional[int] = None
         self._pending_export_limit: Optional[int] = None
+        self._pending_charging_state: Optional[bool] = None
+        self._pending_discharging_state: Optional[bool] = None
 
         self._setting_handler = ChargeSettingHandler(self)
 
+    # Dynamisch alle setter-Methoden erzeugen
+    for _name, _suffix in PENDING_FIELDS:
+        locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
+    del _name, _suffix
+    
+   
     def _create_client(self) -> AsyncModbusTcpClient:
         client = AsyncModbusTcpClient(
             host=self._host,
@@ -110,19 +118,41 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             finally:
                 self._reconnecting = False
 
+
     async def _async_update_data(self) -> Dict[str, Any]:
         start_total = time.monotonic()
+        # ensure Modbus connection
         if self._client is None:
             self._client = self._create_client()
 
-        if not await ensure_connection(self._client, self._host, self._port, max_retries=3):
-            _LOGGER.error("Connection could not be established after multiple attempts.")
+        if not await ensure_connection(
+            self._client, self._host, self._port, max_retries=3
+        ):
+            _LOGGER.error(
+                "Connection could not be established after multiple attempts."
+            )
             return {}
 
+        # --- zuerst alle Pending-Write-Operationen durchführen ---
+        try:
+            if self._pending_charging_state is not None:
+                await self._setting_handler.handle_pending_charging_state()
+            if self._pending_discharging_state is not None:
+                await self._setting_handler.handle_pending_discharging_state()
+            await self._setting_handler.handle_charge_settings()
+            await self._setting_handler.handle_discharge_settings()
+            await self._setting_handler.handle_export_limit()
+        except Exception as e:
+            _LOGGER.error(f"Error executing pending settings: {e}")
+
+        # --- Daten vom Inverter einlesen ---
+        combined_data: Dict[str, Any] = {}
         try:
             if not self.inverter_data:
-                self.inverter_data.update(await modbus_readers.read_modbus_inverter_data(self._client))
-            combined_data = {**self.inverter_data}
+                self.inverter_data.update(
+                    await modbus_readers.read_modbus_inverter_data(self._client)
+                )
+            combined_data.update(self.inverter_data)
 
             reader_methods = [
                 modbus_readers.read_modbus_realtime_data,
@@ -139,7 +169,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 modbus_readers.read_anti_reflux_data,
                 modbus_readers.read_passive_battery_data,
             ]
-
             for method in reader_methods:
                 try:
                     result = await method(self._client)
@@ -150,39 +179,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.error(f"Error in {method.__name__}: {e}")
                 await asyncio.sleep(0.3)
 
-            try:
-                combined_data["charging_enabled"] = await self.get_charging_state()
-                combined_data["discharging_enabled"] = await self.get_discharging_state()
-
-                if self._pending_charging_state is not None:
-                    if self._pending_charging_state != combined_data["charging_enabled"]:
-                        await self._setting_handler.handle_pending_charging_state()
-                        combined_data["charging_enabled"] = await self.get_charging_state()
-                    else:
-                        self._pending_charging_state = None
-
-                if self._pending_discharging_state is not None:
-                    if self._pending_discharging_state != combined_data["discharging_enabled"]:
-                        await self._setting_handler.handle_pending_discharging_state()
-                        combined_data["discharging_enabled"] = await self.get_discharging_state()
-                    else:
-                        self._pending_discharging_state = None
-            except Exception as e:
-                _LOGGER.error(f"Error handling charging/discharging state: {e}")
-
-            await self._setting_handler.handle_charge_settings()
-            await self._setting_handler.handle_discharge_settings()
-            await self._setting_handler.handle_export_limit()
-
-            if self._client:
-                await modbus_close(self._client)
-
-            duration_total = time.monotonic() - start_total
-            _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds")
-            return combined_data
+            combined_data["charging_enabled"] = await self.get_charging_state()
+            combined_data["discharging_enabled"] = await self.get_discharging_state()
         except Exception as e:
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
+        finally:
+            if self._client:
+                await modbus_close(self._client)
+
+        duration_total = time.monotonic() - start_total
+        _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds")
+        return combined_data
 
     async def get_charging_state(self) -> bool:
         try:
@@ -224,39 +232,4 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             port=self._port
         )
         
-        
-
-
-    async def set_charge_start(self, time_str: str) -> None:
-        self._pending_charge_start = time_str
-
-    async def set_charge_end(self, time_str: str) -> None:
-        self._pending_charge_end = time_str
-
-    async def set_charge_day_mask(self, day_mask: int) -> None:
-        self._pending_charge_day_mask = day_mask
-
-    async def set_charge_power_percent(self, power_percent: int) -> None:
-        self._pending_charge_power_percent = power_percent
-
-    async def set_discharge_start(self, time_str: str) -> None:
-        self._pending_discharge_start = time_str
-
-    async def set_discharge_end(self, time_str: str) -> None:
-        self._pending_discharge_end = time_str
-
-    async def set_discharge_day_mask(self, day_mask: int) -> None:
-        self._pending_discharge_day_mask = day_mask
-
-    async def set_discharge_power_percent(self, power_percent: int) -> None:
-        self._pending_discharge_power_percent = power_percent
-
-    async def set_export_limit(self, limit: int) -> None:
-        self._pending_export_limit = limit
-
-    async def set_charging(self, enable: bool) -> None:
-        self._pending_charging_state = enable
-
-    async def set_discharging(self, enable: bool) -> None:
-        self._pending_discharging_state = enable
-
+   
