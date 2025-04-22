@@ -28,7 +28,9 @@ async def _read_modbus_data(
 ) -> DataDict:
     """Helper function to read and decode Modbus data."""
     try:
+        
         regs = await try_read_registers(client, _MODBUS_READ_LOCK, 1, start_address, count)
+
         if not regs:
             _LOGGER.error(f"Error reading modbus data: No response for {data_key}")
             return {}

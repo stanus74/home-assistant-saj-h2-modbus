@@ -12,11 +12,12 @@ from . import modbus_readers
 from .modbus_utils import (
     try_read_registers,
     try_write_registers,
-    ensure_connection,
-    safe_close,
-    close_connection as modbus_close,
+    ModbusConnection,
     ReconnectionNeededError,
+    set_modbus_config, 
+    
 )
+
 # Import der Pending-Setter Factory und Felder
 from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_setter
 
@@ -60,12 +61,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         self._setting_handler = ChargeSettingHandler(self)
 
-    # Dynamisch alle setter-Methoden erzeugen
     for _name, _suffix in PENDING_FIELDS:
         locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
     del _name, _suffix
-    
-   
+
     def _create_client(self) -> AsyncModbusTcpClient:
         client = AsyncModbusTcpClient(
             host=self._host,
@@ -82,16 +81,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 connection_changed = (host != self._host) or (port != self._port)
                 self._host = host
                 self._port = port
+                set_modbus_config(self._host, self._port)
                 self.update_interval = timedelta(seconds=scan_interval)
 
                 if connection_changed:
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
-                    if self._client:
-                        await safe_close(self._client)
                     self._client = self._create_client()
-                    connected = await ensure_connection(self._client, self._host, self._port, max_retries=3)
-                    if not connected:
-                        _LOGGER.error(f"Failed to connect to new address {host}:{port}")
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
             finally:
@@ -105,92 +100,74 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 return False
             try:
                 self._reconnecting = True
-                if self._client:
-                    await safe_close(self._client)
-                await asyncio.sleep(1)
                 self._client = self._create_client()
-                connected = await ensure_connection(self._client, self._host, self._port, max_retries=3)
-                if connected:
+                async with ModbusConnection(self._client, self._host, self._port):
                     _LOGGER.info("Reconnection successful.")
-                else:
-                    _LOGGER.error("Reconnection failed after multiple attempts.")
-                return connected
+                    return True
+            except Exception as e:
+                _LOGGER.error("Reconnection failed: %s", e)
+                return False
             finally:
                 self._reconnecting = False
 
-
     async def _async_update_data(self) -> Dict[str, Any]:
         start_total = time.monotonic()
-        # ensure Modbus connection
+
         if self._client is None:
             self._client = self._create_client()
 
-        if not await ensure_connection(
-            self._client, self._host, self._port, max_retries=3
-        ):
-            _LOGGER.error(
-                "Connection could not be established after multiple attempts."
-            )
-            return {}
-
-        # --- zuerst alle Pending-Write-Operationen durchführen ---
         try:
-            if self._pending_charging_state is not None:
-                await self._setting_handler.handle_pending_charging_state()
-            if self._pending_discharging_state is not None:
-                await self._setting_handler.handle_pending_discharging_state()
-            await self._setting_handler.handle_charge_settings()
-            await self._setting_handler.handle_discharge_settings()
-            await self._setting_handler.handle_export_limit()
-        except Exception as e:
-            _LOGGER.error(f"Error executing pending settings: {e}")
+            async with ModbusConnection(self._client, self._host, self._port):
 
-        # --- Daten vom Inverter einlesen ---
-        combined_data: Dict[str, Any] = {}
-        try:
-            if not self.inverter_data:
-                self.inverter_data.update(
-                    await modbus_readers.read_modbus_inverter_data(self._client)
-                )
-            combined_data.update(self.inverter_data)
+                if self._pending_charging_state is not None:
+                    await self._setting_handler.handle_pending_charging_state()
+                if self._pending_discharging_state is not None:
+                    await self._setting_handler.handle_pending_discharging_state()
+                await self._setting_handler.handle_charge_settings()
+                await self._setting_handler.handle_discharge_settings()
+                await self._setting_handler.handle_export_limit()
 
-            reader_methods = [
-                modbus_readers.read_modbus_realtime_data,
-                modbus_readers.read_additional_modbus_data_1_part_1,
-                modbus_readers.read_additional_modbus_data_1_part_2,
-                modbus_readers.read_additional_modbus_data_2_part_1,
-                modbus_readers.read_additional_modbus_data_2_part_2,
-                modbus_readers.read_additional_modbus_data_3,
-                modbus_readers.read_additional_modbus_data_3_2,
-                modbus_readers.read_additional_modbus_data_4,
-                modbus_readers.read_battery_data,
-                modbus_readers.read_charge_data,
-                modbus_readers.read_discharge_data,
-                modbus_readers.read_anti_reflux_data,
-                modbus_readers.read_passive_battery_data,
-            ]
-            for method in reader_methods:
-                try:
-                    result = await method(self._client)
-                    combined_data.update(result)
-                except ReconnectionNeededError as e:
-                    _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                except Exception as e:
-                    _LOGGER.error(f"Error in {method.__name__}: {e}")
-                await asyncio.sleep(0.3)
+                combined_data: Dict[str, Any] = {}
+                if not self.inverter_data:
+                    self.inverter_data.update(
+                        await modbus_readers.read_modbus_inverter_data(self._client)
+                    )
+                combined_data.update(self.inverter_data)
 
-            combined_data["charging_enabled"] = await self.get_charging_state()
-            combined_data["discharging_enabled"] = await self.get_discharging_state()
+                reader_methods = [
+                    modbus_readers.read_modbus_realtime_data,
+                    modbus_readers.read_additional_modbus_data_1_part_1,
+                    modbus_readers.read_additional_modbus_data_1_part_2,
+                    modbus_readers.read_additional_modbus_data_2_part_1,
+                    modbus_readers.read_additional_modbus_data_2_part_2,
+                    modbus_readers.read_additional_modbus_data_3,
+                    modbus_readers.read_additional_modbus_data_3_2,
+                    modbus_readers.read_additional_modbus_data_4,
+                    modbus_readers.read_battery_data,
+                    modbus_readers.read_charge_data,
+                    modbus_readers.read_discharge_data,
+                    modbus_readers.read_anti_reflux_data,
+                    modbus_readers.read_passive_battery_data,
+                ]
+                for method in reader_methods:
+                    try:
+                        result = await method(self._client)
+                        combined_data.update(result)
+                    except ReconnectionNeededError as e:
+                        _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
+                    except Exception:
+                        _LOGGER.exception("Unexpected error during update")
+                    await asyncio.sleep(0.3)
+
+                combined_data["charging_enabled"] = await self.get_charging_state()
+                combined_data["discharging_enabled"] = await self.get_discharging_state()
+
+                duration_total = time.monotonic() - start_total
+                _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds")
+                return combined_data
         except Exception as e:
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
-        finally:
-            if self._client:
-                await modbus_close(self._client)
-
-        duration_total = time.monotonic() - start_total
-        _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds")
-        return combined_data
 
     async def get_charging_state(self) -> bool:
         try:
@@ -217,8 +194,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             1,
             address,
             count,
-            host=self._host,
-            port=self._port
+            #host=self._host,
+            #port=self._port
         )
 
     async def _write_register(self, address: int, value: int) -> bool:
@@ -228,8 +205,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             1,
             address,
             value,
-            host=self._host,
-            port=self._port
+            #host=self._host,
+            #port=self._port
         )
-        
-   

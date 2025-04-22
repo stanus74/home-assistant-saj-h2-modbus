@@ -9,6 +9,7 @@ import logging
 from .const import DEFAULT_NAME, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
 from .hub import SAJModbusHub
 
+
 _LOGGER = logging.getLogger(__name__)
 
 DATA_SCHEMA = vol.Schema({
@@ -95,7 +96,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     user_input[CONF_PORT],
                     user_input[CONF_SCAN_INTERVAL]
                 )
-
+                from .modbus_utils import set_modbus_config
+                set_modbus_config(user_input[CONF_HOST], user_input[CONF_PORT])
                 # Save the new options in the configuration entry
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
