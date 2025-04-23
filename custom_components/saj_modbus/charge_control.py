@@ -17,6 +17,7 @@ PENDING_FIELDS: List[tuple[str, str]] = [
     ("export_limit", "export_limit"),
     ("charging", "charging_state"),
     ("discharging", "discharging_state"),
+    ("app_mode", "app_mode"),
 ]
 
 
@@ -154,6 +155,23 @@ class ChargeSettingHandler:
                 _LOGGER.error(f"Error writing export limit: {e}")
             finally:
                 self._hub._pending_export_limit = None
+                
+    async def handle_app_mode(self) -> None:
+        if self._hub._pending_app_mode is not None:
+            try:
+                success = await self._hub._write_register(
+                    0x3647, self._hub._pending_app_mode
+                )
+                if success:
+                    _LOGGER.info(
+                        f"Successfully set app mode to: {self._hub._pending_app_mode}"
+                    )
+                else:
+                    _LOGGER.error("Failed to write app mode")
+            except Exception as e:
+                _LOGGER.error(f"Error writing app mode: {e}")
+            finally:
+                self._hub._pending_app_mode = None
 
     async def handle_pending_charging_state(self) -> None:
         if self._hub._pending_charging_state is not None:
@@ -227,4 +245,3 @@ class ChargeSettingHandler:
             _LOGGER.info(f"Successfully set {label}: {time_str}")
         else:
             _LOGGER.error(f"Failed to write {label}")
-

@@ -14,7 +14,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SajChargePowerPercentInputEntity(hub),
         SajDischargeDayMaskInputEntity(hub),
         SajDischargePowerPercentInputEntity(hub),
-        SajExportLimitInputEntity(hub)
+        SajExportLimitInputEntity(hub),
+        SajAppModeInputEntity(hub)
     ])
 
 class SajNumberEntity(NumberEntity):
@@ -106,4 +107,20 @@ class SajExportLimitInputEntity(SajNumberEntity):
         _LOGGER.debug(f"Setting export limit to: {val}")
         self._attr_native_value = val
         await self._hub.set_export_limit(val)
+        self.async_write_ha_state()
+
+class SajAppModeInputEntity(SajNumberEntity):
+    """Entity for App Mode (0-3)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ App Mode (Input)", "saj_app_mode_input", 0, 3, 1, 0)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 3:
+            _LOGGER.error(f"Invalid app mode: {val}")
+            return
+        _LOGGER.debug(f"Setting app mode to: {val}")
+        self._attr_native_value = val
+        # Verwende die set_app_mode-Methode des Hubs
+        await self._hub.set_app_mode(val)
         self.async_write_ha_state()

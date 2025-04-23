@@ -58,6 +58,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_export_limit: Optional[int] = None
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
+        self._pending_app_mode: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
 
@@ -126,6 +127,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 await self._setting_handler.handle_charge_settings()
                 await self._setting_handler.handle_discharge_settings()
                 await self._setting_handler.handle_export_limit()
+                if self._pending_app_mode is not None:
+                    await self._setting_handler.handle_app_mode()
 
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:
