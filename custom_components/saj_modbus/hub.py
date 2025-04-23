@@ -18,7 +18,7 @@ from .modbus_utils import (
     
 )
 
-# Import der Pending-Setter Factory und Felder
+# Import of the Pending-Setter Factory and Fields
 from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_setter
 
 _LOGGER = logging.getLogger(__name__)

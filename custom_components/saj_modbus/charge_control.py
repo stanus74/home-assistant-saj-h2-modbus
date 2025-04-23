@@ -4,7 +4,7 @@ from .modbus_utils import try_read_registers, try_write_registers
 
 _LOGGER = logging.getLogger(__name__)
 
-# --- neue Definitionen für Pending-Setter ---
+# --- new definitions for pending setters ---
 PENDING_FIELDS: List[tuple[str, str]] = [
     ("charge_start", "charge_start"),
     ("charge_end", "charge_end"),

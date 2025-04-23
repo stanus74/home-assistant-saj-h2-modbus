@@ -121,6 +121,6 @@ class SajAppModeInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting app mode to: {val}")
         self._attr_native_value = val
-        # Verwende die set_app_mode-Methode des Hubs
+        # Use the set_app_mode method of the hub
         await self._hub.set_app_mode(val)
         self.async_write_ha_state()
