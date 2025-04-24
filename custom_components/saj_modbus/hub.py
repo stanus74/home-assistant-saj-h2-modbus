@@ -118,7 +118,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             async with ModbusConnection(self._client, self._host, self._port):
 
-                # Behandlung der Pending-Einstellungen
+                
                 pending_handlers = [
                     (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
                     (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
@@ -173,17 +173,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 combined_data["discharging_enabled"] = await self.get_discharging_state()
 
                 duration_total = time.monotonic() - start_total
-                # Die Log-Meldung wird entfernt, da sie vom DataUpdateCoordinator bereits erzeugt wird
+                
                 return combined_data
         except Exception as e:
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
 
     async def _get_state(self, register: int, state_type: str) -> bool:
-        """Gemeinsame Methode zum Lesen von Zuständen aus Registern."""
+        
         try:
             regs = await self._read_registers(register)
-            # Debug-Meldung entfernt, um doppelte Log-Einträge zu vermeiden
+            
             return bool(regs[0])
         except Exception as e:
             _LOGGER.error(f"Error reading {state_type} state: {e}")
