@@ -6,6 +6,9 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTER
 
 from .hub import SAJModbusHub
 from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
+from homeassistant.helpers import config_validation as cv
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 _LOGGER = logging.getLogger(__name__)
 
