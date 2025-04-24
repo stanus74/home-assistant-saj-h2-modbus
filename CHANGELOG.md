@@ -1,7 +1,8 @@
 # Changelog (v2.1.0)
 
-#### ✨ New Features
-- **New Sensor + Number Entity: "SAJ App Mode (Input)"**
+#### ✨ New Sensor + Number Entity: "SAJ App Mode (Input)
+
+  - **sensor.saj_app_mode** added (register `0x3647`)
   - A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
   - Range: 0–3, step: 1, default: 0.
   - Full integration into `charge_control.py`, `hub.py`, and `number.py`.
