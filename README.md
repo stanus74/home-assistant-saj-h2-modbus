@@ -34,24 +34,26 @@ This integration should be available in the HACS default repository. Simply go t
 
 ---
 
-## New Features Since Version 1.9
+## Features
 
-### 🚀 New Feature: Export Limit Control
 
-This release adds support for setting the max export power to the public grid.
+### 🚀 Working Mode Control (Advanced Users, new since Version 2.1)
 
-#### 🆕 New Input Entity:
+This version adds support for controlling the working mode of the inverter. This feature is intended for advanced users.
+see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/CHANGELOG.md)
+
+
+### 🚀 Export Limit Control
+
 - **SAJ Export Limit (Input)**
-  Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
+  Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
 
-#### 🆕 New Sensors:
+#### Sensors:
 - **SAJ Anti-Reflux Power Limit** (`365AH`) – changeable with Export Limit (Input)
 - **SAJ Anti-Reflux Current Limit** (`365BH`)
 - **SAJ Anti-Reflux Current Mode** (`365CH`)
 
 Perfect for zero export or dynamic grid feed-in limitation.
-
----
 
 
 ### Configure Charging and Discharging Time and Power

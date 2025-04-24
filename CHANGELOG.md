@@ -5,8 +5,14 @@
   - **sensor.saj_app_mode** added (register `0x3647`)
   - A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
   - Range: 0–3, step: 1, default: 0.
-  - Full integration into `charge_control.py`, `hub.py`, and `number.py`.
-  - Uses the existing pending-setting pattern with `handle_app_mode()` and `set_app_mode()`.
+ 
+
+  - **0x00 Self-use_mode** - Self-consumption mode
+  - **0x01 time_mode** - Time-controlled mode 
+  - **0x02 backup_mode** - Backup mode
+  - **0x03 passive_mode** - Passive mode
+
+
 
 ### 🚀 Code Optimizations
 - Introduced a robust `ModbusConnection` async context manager for auto-connect and safe close.
