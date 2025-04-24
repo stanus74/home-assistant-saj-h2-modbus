@@ -6,11 +6,10 @@
   - A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
   - Range: 0–3, step: 1, default: 0.
  
-
-  - **0x00 Self-use_mode** - Self-consumption mode
-  - **0x01 time_mode** - Time-controlled mode 
-  - **0x02 backup_mode** - Backup mode
-  - **0x03 passive_mode** - Passive mode
+    **0 Self-use_mode** - Self-consumption mode
+    **1 time_mode** - Time-controlled mode 
+    **2 backup_mode** - Backup mode
+    **3 passive_mode** - Passive mode
 
 
 
