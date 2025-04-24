@@ -19,7 +19,7 @@ from homeassistant.const import (
 from typing import Dict, NamedTuple, Any
 
 
-DOMAIN = "saj_modbus"
+DOMAIN = "saj_h2_modbus"
 DEFAULT_NAME = "SAJ"
 DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_PORT = 502
