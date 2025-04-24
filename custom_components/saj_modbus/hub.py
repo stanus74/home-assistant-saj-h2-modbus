@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import inspect
 import time
 from datetime import timedelta
 from typing import Any, Dict, Optional, List
@@ -14,8 +13,7 @@ from .modbus_utils import (
     try_write_registers,
     ModbusConnection,
     ReconnectionNeededError,
-    set_modbus_config, 
-    
+    set_modbus_config,
 )
 
 # Import of the Pending-Setter Factory and Fields
@@ -120,15 +118,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             async with ModbusConnection(self._client, self._host, self._port):
 
-                if self._pending_charging_state is not None:
-                    await self._setting_handler.handle_pending_charging_state()
-                if self._pending_discharging_state is not None:
-                    await self._setting_handler.handle_pending_discharging_state()
-                await self._setting_handler.handle_charge_settings()
-                await self._setting_handler.handle_discharge_settings()
-                await self._setting_handler.handle_export_limit()
-                if self._pending_app_mode is not None:
-                    await self._setting_handler.handle_app_mode()
+                # Behandlung der Pending-Einstellungen
+                pending_handlers = [
+                    (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
+                    (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
+                    (True, self._setting_handler.handle_charge_settings),
+                    (True, self._setting_handler.handle_discharge_settings),
+                    (True, self._setting_handler.handle_export_limit),
+                    (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
+                ]
+                
+                for condition, handler in pending_handlers:
+                    if condition:
+                        await handler()
 
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:
@@ -136,6 +138,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         await modbus_readers.read_modbus_inverter_data(self._client)
                     )
                 combined_data.update(self.inverter_data)
+
+                async def execute_reader_method(method):
+                    """Hilfsfunktion zum Ausführen einer Reader-Methode mit Fehlerbehandlung."""
+                    try:
+                        result = await method(self._client)
+                        combined_data.update(result)
+                    except ReconnectionNeededError as e:
+                        _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
+                    except Exception:
+                        _LOGGER.exception("Unexpected error during update")
+                    await asyncio.sleep(0.3)
 
                 reader_methods = [
                     modbus_readers.read_modbus_realtime_data,
@@ -152,43 +165,35 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_anti_reflux_data,
                     modbus_readers.read_passive_battery_data,
                 ]
+                
                 for method in reader_methods:
-                    try:
-                        result = await method(self._client)
-                        combined_data.update(result)
-                    except ReconnectionNeededError as e:
-                        _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                    except Exception:
-                        _LOGGER.exception("Unexpected error during update")
-                    await asyncio.sleep(0.3)
+                    await execute_reader_method(method)
 
                 combined_data["charging_enabled"] = await self.get_charging_state()
                 combined_data["discharging_enabled"] = await self.get_discharging_state()
 
                 duration_total = time.monotonic() - start_total
-                _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds")
+                # Die Log-Meldung wird entfernt, da sie vom DataUpdateCoordinator bereits erzeugt wird
                 return combined_data
         except Exception as e:
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
 
-    async def get_charging_state(self) -> bool:
+    async def _get_state(self, register: int, state_type: str) -> bool:
+        """Gemeinsame Methode zum Lesen von Zuständen aus Registern."""
         try:
-            regs = await self._read_registers(0x3604)
-            _LOGGER.debug(f"Charging state from register 0x3604: {bool(regs[0])}")
+            regs = await self._read_registers(register)
+            # Debug-Meldung entfernt, um doppelte Log-Einträge zu vermeiden
             return bool(regs[0])
         except Exception as e:
-            _LOGGER.error(f"Error reading charging state: {e}")
+            _LOGGER.error(f"Error reading {state_type} state: {e}")
             return False
+            
+    async def get_charging_state(self) -> bool:
+        return await self._get_state(0x3604, "Charging")
 
     async def get_discharging_state(self) -> bool:
-        try:
-            regs = await self._read_registers(0x3605)
-            _LOGGER.debug(f"Discharging state from register 0x3605: {bool(regs[0])}")
-            return bool(regs[0])
-        except Exception as e:
-            _LOGGER.error(f"Error reading discharging state: {e}")
-            return False
+        return await self._get_state(0x3605, "Discharging")
 
     async def _read_registers(self, address: int, count: int = 1) -> List[int]:
         return await try_read_registers(
@@ -197,8 +202,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             1,
             address,
             count,
-            #host=self._host,
-            #port=self._port
         )
 
     async def _write_register(self, address: int, value: int) -> bool:
@@ -208,6 +211,4 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             1,
             address,
             value,
-            #host=self._host,
-            #port=self._port
         )
