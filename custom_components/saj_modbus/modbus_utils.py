@@ -115,27 +115,58 @@ class ModbusConnection:
             task_name="Modbus-Connect"
         )
 
+# Default retry settings
+DEFAULT_READ_RETRIES = 3
+DEFAULT_READ_BASE_DELAY = 2.0
+DEFAULT_READ_CAP_DELAY = 10.0
+
+DEFAULT_WRITE_RETRIES = 2
+DEFAULT_WRITE_BASE_DELAY = 1.0
+DEFAULT_WRITE_CAP_DELAY = 5.0
+
+async def _ensure_connected(
+    client: ModbusClient,
+    operation_name: str
+) -> None:
+    """Ensure the client is connected before performing an operation."""
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    
+    if not client.connected:
+        if host is None or port is None:
+            raise ReconnectionNeededError("Client not connected and no host/port available")
+        _LOGGER.info(f"Client not connected, reconnecting before {operation_name}...")
+        async with ModbusConnection(client, host, port):
+            _LOGGER.info(f"Reconnect before {operation_name} successful")
+
+def _create_retry_handlers(client: ModbusClient, operation_name: str):
+    """Create standard retry handlers for Modbus operations."""
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    
+    def should_retry(e: Exception) -> bool:
+        return isinstance(e, (ConnectionException, ModbusIOException))
+
+    async def on_retry(attempt: int, e: Exception) -> None:
+        if isinstance(e, ConnectionException) and host and port:
+            _LOGGER.info(f"Connection lost during {operation_name}, attempting reconnect")
+            async with ModbusConnection(client, host, port):
+                _LOGGER.info(f"Reconnect during {operation_name} successful")
+    
+    return should_retry, on_retry
+
 async def try_read_registers(
     client: ModbusClient,
     lock: Lock,
     unit: int,
     address: int,
     count: int,
-    max_retries: int = 3,
-    base_delay: float = 2.0,
-    cap_delay: float = 10.0,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
+    max_retries: int = DEFAULT_READ_RETRIES,
+    base_delay: float = DEFAULT_READ_BASE_DELAY,
+    cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> List[int]:
-    host = host or ModbusGlobalConfig.host
-    port = port or ModbusGlobalConfig.port
-
-    if not client.connected:
-        if host is None or port is None:
-            raise ReconnectionNeededError("Client not connected and no host/port available")
-        _LOGGER.info("Client not connected, reconnecting...")
-        async with ModbusConnection(client, host, port):
-            _LOGGER.info("Reconnect before read successful")
+    await _ensure_connected(client, "read")
+    should_retry, on_retry = _create_retry_handlers(client, "read")
 
     async def read_once():
         async with lock:
@@ -145,15 +176,6 @@ async def try_read_registers(
         if response.isError() or not hasattr(response, "registers"):
             raise ModbusIOException("Invalid or error response")
         return response.registers  # type: ignore
-
-    def should_retry(e: Exception) -> bool:
-        return isinstance(e, (ConnectionException, ModbusIOException))
-
-    async def on_retry(attempt: int, e: Exception) -> None:
-        if isinstance(e, ConnectionException) and host and port:
-            _LOGGER.info("Connection lost during read, attempting reconnect")
-            async with ModbusConnection(client, host, port):
-                _LOGGER.info("Reconnect during read successful")
 
     return await _retry_with_backoff(
         func=read_once,
@@ -171,22 +193,13 @@ async def try_write_registers(
     unit: int,
     address: int,
     values: Union[int, List[int]],
-    max_retries: int = 2,
-    base_delay: float = 1.0,
-    cap_delay: float = 5.0,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
+    max_retries: int = DEFAULT_WRITE_RETRIES,
+    base_delay: float = DEFAULT_WRITE_BASE_DELAY,
+    cap_delay: float = DEFAULT_WRITE_CAP_DELAY,
 ) -> bool:
-    host = host or ModbusGlobalConfig.host
-    port = port or ModbusGlobalConfig.port
-
-    if not client.connected:
-        if host is None or port is None:
-            raise ReconnectionNeededError("Client not connected and no host/port available")
-        _LOGGER.info("Client not connected, reconnecting...")
-        async with ModbusConnection(client, host, port):
-            _LOGGER.info("Reconnect before write successful")
-
+    await _ensure_connected(client, "write")
+    should_retry, on_retry = _create_retry_handlers(client, "write")
+    
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
@@ -202,15 +215,6 @@ async def try_write_registers(
         if result.isError():
             raise ModbusIOException("Write response error")
         return True
-
-    def should_retry(e: Exception) -> bool:
-        return isinstance(e, (ConnectionException, ModbusIOException))
-
-    async def on_retry(attempt: int, e: Exception) -> None:
-        if isinstance(e, ConnectionException) and host and port:
-            _LOGGER.info("Connection lost during write, attempting reconnect")
-            async with ModbusConnection(client, host, port):
-                _LOGGER.info("Reconnect during write successful")
 
     return await _retry_with_backoff(
         func=write_once,
