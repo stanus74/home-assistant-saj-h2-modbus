@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from typing import List, Optional, TypeAlias, Union
 import inspect
+from typing import Any, Awaitable, Callable, List, Optional, TypeAlias, Union
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
@@ -12,157 +12,216 @@ Lock: TypeAlias = asyncio.Lock
 _LOGGER = logging.getLogger(__name__)
 
 class ReconnectionNeededError(Exception):
+    """Indicates that a reconnect is needed due to communication failure."""
     pass
 
-async def safe_close(client: Optional[ModbusClient]) -> None:
-    if not client:
-        return
-    try:
-        close = getattr(client, "close", None)
-        if close:
-            await close() if inspect.iscoroutinefunction(close) else close()
-    except Exception as e:
-        _LOGGER.warning(f"Error during safe close: {e}", exc_info=True)
+# Global Modbus config storage
+class ModbusGlobalConfig:
+    host: Optional[str] = None
+    port: Optional[int] = None
 
-async def ensure_connection(client: ModbusClient, host: str, port: int, max_retries: int = 3, timeout_seconds: float = 10.0) -> bool:
-    for attempt in range(max_retries):
+def set_modbus_config(host: str, port: int) -> None:
+    ModbusGlobalConfig.host = host
+    ModbusGlobalConfig.port = port
+    _LOGGER.debug(f"Global Modbus config set: {host}:{port}")
+
+async def _exponential_backoff(attempt: int, base: float, cap: float) -> None:
+    delay = min(base * 2 ** (attempt - 1), cap)
+    _LOGGER.debug(f"Backoff: waiting {delay:.2f}s before retry #{attempt}")
+    await asyncio.sleep(delay)
+
+async def _retry_with_backoff(
+    func: Callable[[], Awaitable[Any]],
+    should_retry: Callable[[Exception], bool],
+    retries: int,
+    base_delay: float,
+    cap: float,
+    on_retry: Optional[Callable[[int, Exception], Awaitable[None]]] = None,
+    task_name: str = "Task"
+) -> Any:
+    last_exception: Exception
+    for attempt in range(1, retries + 1):
         try:
-            _LOGGER.debug(f"Connecting to {host}:{port}, attempt {attempt + 1}/{max_retries}")
-            await asyncio.wait_for(client.connect(), timeout=timeout_seconds)
-            if client.connected:
-                return True
+            return await func()
         except Exception as e:
-            _LOGGER.warning(f"Connection error on attempt {attempt + 1}: {e}")
-        await asyncio.sleep(2)
-    return False
+            last_exception = e
+            if not should_retry(e):
+                _LOGGER.error("Non-retriable exception occurred", exc_info=True)
+                raise
+            _LOGGER.warning(f"[{task_name}] Attempt {attempt} failed: {e}", exc_info=(attempt == retries))
+            if on_retry:
+                await on_retry(attempt, e)
+            if attempt < retries:
+                await _exponential_backoff(attempt, base_delay, cap)
+    _LOGGER.warning(f"[{task_name}] All {retries} attempts failed: {last_exception}")
+    raise last_exception
 
-async def close_connection(client: Optional[ModbusClient], timeout_seconds: float = 5.0) -> None:
-    if not client:
-        return
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            await safe_close(client)
-    except asyncio.TimeoutError:
-        _LOGGER.warning(f"Closing connection timed out after {timeout_seconds}s")
-    except Exception as e:
-        _LOGGER.warning(f"Error during close_connection: {e}", exc_info=True)
+class ModbusConnection:
+    """Async context manager for Modbus TCP connections with auto-connect and close."""
+    def __init__(
+        self,
+        client: ModbusClient,
+        host: str,
+        port: int,
+        max_retries: int = 3,
+        timeout: float = 10.0,
+        backoff_base: float = 2.0
+    ):
+        self._client = client
+        self._host = host
+        self._port = port
+        self._max_retries = max_retries
+        self._timeout = timeout
+        self._backoff_base = backoff_base
+
+    async def __aenter__(self) -> ModbusClient:
+        await self.connect()
+        return self._client
+
+    async def __aexit__(
+        self, exc_type: Any, exc: Any, tb: Any
+    ) -> None:
+        try:
+            timeout = self._timeout or 5.0
+            async with asyncio.timeout(timeout):
+                close_fn = getattr(self._client, "close", None)
+                if close_fn:
+                    if inspect.iscoroutinefunction(close_fn):
+                        await close_fn()
+                    else:
+                        close_fn()
+        except Exception:
+            _LOGGER.warning("Error closing Modbus connection", exc_info=True)
+
+    async def connect(self) -> None:
+        async def do_connect():
+            await asyncio.wait_for(
+                self._client.connect(), timeout=self._timeout
+            )
+            if not self._client.connected:
+                raise ConnectionException("Connection failed")
+            return True
+
+        async def on_retry(attempt: int, e: Exception) -> None:
+            _LOGGER.info(f"Reconnect attempt {attempt} after error: {e}")
+
+        await _retry_with_backoff(
+            func=do_connect,
+            should_retry=lambda e: isinstance(e, ConnectionException),
+            retries=self._max_retries,
+            base_delay=self._backoff_base,
+            cap=self._backoff_base ** self._max_retries,
+            on_retry=on_retry,
+            task_name="Modbus-Connect"
+        )
+
+# Default retry settings
+DEFAULT_READ_RETRIES = 3
+DEFAULT_READ_BASE_DELAY = 2.0
+DEFAULT_READ_CAP_DELAY = 10.0
+
+DEFAULT_WRITE_RETRIES = 2
+DEFAULT_WRITE_BASE_DELAY = 1.0
+DEFAULT_WRITE_CAP_DELAY = 5.0
+
+async def _ensure_connected(
+    client: ModbusClient,
+    operation_name: str
+) -> None:
+    """Ensure the client is connected before performing an operation."""
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    
+    if not client.connected:
+        if host is None or port is None:
+            raise ReconnectionNeededError("Client not connected and no host/port available")
+        _LOGGER.info(f"Client not connected, reconnecting before {operation_name}...")
+        async with ModbusConnection(client, host, port):
+            _LOGGER.info(f"Reconnect before {operation_name} successful")
+
+def _create_retry_handlers(client: ModbusClient, operation_name: str):
+    """Create standard retry handlers for Modbus operations."""
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    
+    def should_retry(e: Exception) -> bool:
+        return isinstance(e, (ConnectionException, ModbusIOException))
+
+    async def on_retry(attempt: int, e: Exception) -> None:
+        if isinstance(e, ConnectionException) and host and port:
+            _LOGGER.info(f"Connection lost during {operation_name}, attempting reconnect")
+            async with ModbusConnection(client, host, port):
+                _LOGGER.info(f"Reconnect during {operation_name} successful")
+    
+    return should_retry, on_retry
 
 async def try_read_registers(
     client: ModbusClient,
-    read_lock: Lock,
+    lock: Lock,
     unit: int,
     address: int,
     count: int,
-    max_retries: int = 3,
-    base_delay: float = 2.0,
-    host: Optional[str] = None,
-    port: Optional[int] = None
+    max_retries: int = DEFAULT_READ_RETRIES,
+    base_delay: float = DEFAULT_READ_BASE_DELAY,
+    cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> List[int]:
-    last_exception: Optional[Exception] = None
+    await _ensure_connected(client, "read")
+    should_retry, on_retry = _create_retry_handlers(client, "read")
 
-    if not client or not client.connected:
-        _LOGGER.error(f"Read failed: Client not connected before attempting to read {count} registers from address {address}, unit {unit}.")
-        raise ReconnectionNeededError("Client not connected, reconnection needed before reading")
+    async def read_once():
+        async with lock:
+            response = await client.read_holding_registers(
+                address=address, count=count, slave=unit
+            )
+        if response.isError() or not hasattr(response, "registers"):
+            raise ModbusIOException("Invalid or error response")
+        return response.registers  # type: ignore
 
-    for attempt in range(max_retries):
-        try:
-            async with read_lock:
-                coro = client.read_holding_registers(address=address, count=count, slave=unit)
-            resp = await coro
-            if resp and not resp.isError() and hasattr(resp, 'registers') and resp.registers:
-                return resp.registers
-            else:
-                last_exception = ModbusIOException("Invalid or error response")
-        except (ConnectionException, ModbusIOException, Exception) as e:
-            _LOGGER.warning(f"Read attempt {attempt + 1} for address {address}, unit {unit}: {type(e).__name__}: {e}", exc_info=True)
-            last_exception = e
-
-            if isinstance(e, ConnectionException) and host and port:
-                _LOGGER.info("Attempting reconnect due to connection loss...")
-                connected = await ensure_connection(client, host, port)
-                if not connected:
-                    _LOGGER.error("Reconnect failed")
-                    raise ReconnectionNeededError("Reconnect failed") from e
-
-        if attempt < max_retries - 1:
-            delay = min(base_delay * (2 ** attempt), 10.0)
-            _LOGGER.info(f"Waiting {delay:.1f}s before retry {attempt + 2}/{max_retries} for address {address}, unit {unit}")
-            await asyncio.sleep(delay)
-
-    _LOGGER.error(f"All {max_retries} read attempts failed for address {address}, unit {unit}. Last error: {last_exception}")
-    raise ReconnectionNeededError(f"Reconnection needed after {max_retries} failed read attempts at address {address}, unit {unit}. Last error: {last_exception}")
+    return await _retry_with_backoff(
+        func=read_once,
+        should_retry=should_retry,
+        retries=max_retries,
+        base_delay=base_delay,
+        cap=cap_delay,
+        on_retry=on_retry,
+        task_name="Modbus-Read"
+    )
 
 async def try_write_registers(
     client: ModbusClient,
-    write_lock: Lock,
+    lock: Lock,
     unit: int,
     address: int,
     values: Union[int, List[int]],
-    max_retries: int = 2,
-    base_delay: float = 1.0,
-    host: Optional[str] = None,
-    port: Optional[int] = None
+    max_retries: int = DEFAULT_WRITE_RETRIES,
+    base_delay: float = DEFAULT_WRITE_BASE_DELAY,
+    cap_delay: float = DEFAULT_WRITE_CAP_DELAY,
 ) -> bool:
-    """
-    Attempts to write a value or values to one or more registers with retry logic.
+    await _ensure_connected(client, "write")
+    should_retry, on_retry = _create_retry_handlers(client, "write")
     
-    Args:
-        client: The Modbus client
-        write_lock: Lock to synchronize write operations
-        unit: The unit ID
-        address: The starting register address
-        values: Either a single integer value or a list of integer values
-        max_retries: Maximum number of retry attempts
-        base_delay: Base delay between retries in seconds
-        host: Optional host address for reconnection
-        port: Optional port for reconnection
-        
-    Returns:
-        True if write was successful, False otherwise
-        
-    Raises:
-        ReconnectionNeededError: If client is not connected or reconnection is needed
-    """
-    last_exception: Optional[Exception] = None
-    
-    if not client or not client.connected:
-        _LOGGER.error(f"Write failed: Client not connected before attempting to write to address {address}, unit {unit}.")
-        raise ReconnectionNeededError("Client not connected, reconnection needed before writing")
-    
-    # Determine if we're writing a single register or multiple registers
-    is_single_value = isinstance(values, int)
-    
-    for attempt in range(max_retries):
-        try:
-            async with write_lock:
-                if is_single_value:
-                    coro = client.write_register(address=address, value=values, slave=unit)
-                else:
-                    coro = client.write_registers(address=address, values=values, slave=unit)
-            
-            resp = await coro
-            if resp and not resp.isError():
-                _LOGGER.debug(f"Successfully wrote {'value' if is_single_value else 'values'} to address {address}, unit {unit}")
-                return True
+    is_single = isinstance(values, int)
+
+    async def write_once() -> bool:
+        async with lock:
+            if is_single:
+                result = await client.write_register(
+                    address=address, value=values, slave=unit
+                )
             else:
-                last_exception = ModbusIOException(f"Invalid or error response: {resp}")
-                _LOGGER.warning(f"Write attempt {attempt + 1} failed for address {address}, unit {unit}: {last_exception}")
-        
-        except (ConnectionException, ModbusIOException, Exception) as e:
-            _LOGGER.warning(f"Write attempt {attempt + 1} for address {address}, unit {unit}: {type(e).__name__}: {e}", exc_info=True)
-            last_exception = e
-            
-            if isinstance(e, ConnectionException) and host and port:
-                _LOGGER.info("Attempting reconnect due to connection loss...")
-                connected = await ensure_connection(client, host, port)
-                if not connected:
-                    _LOGGER.error("Reconnect failed")
-                    raise ReconnectionNeededError("Reconnect failed") from e
-        
-        if attempt < max_retries - 1:
-            delay = min(base_delay * (2 ** attempt), 5.0)  # Shorter max delay for writes
-            _LOGGER.info(f"Waiting {delay:.1f}s before retry {attempt + 2}/{max_retries} for writing to address {address}, unit {unit}")
-            await asyncio.sleep(delay)
-    
-    _LOGGER.error(f"All {max_retries} write attempts failed for address {address}, unit {unit}. Last error: {last_exception}")
-    return False
+                result = await client.write_registers(
+                    address=address, values=values, slave=unit
+                )
+        if result.isError():
+            raise ModbusIOException("Write response error")
+        return True
+
+    return await _retry_with_backoff(
+        func=write_once,
+        should_retry=should_retry,
+        retries=max_retries,
+        base_delay=base_delay,
+        cap=cap_delay,
+        on_retry=on_retry,
+        task_name="Modbus-Write"
+    )

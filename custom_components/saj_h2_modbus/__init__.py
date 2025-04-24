@@ -40,10 +40,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hub = hass.data[DOMAIN][entry.entry_id]["hub"]
-        if hasattr(hub, "_client") and hub._client:
-            from .modbus_utils import close_connection as modbus_close
-            await modbus_close(hub._client)
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
 
