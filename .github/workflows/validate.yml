@@ -36,4 +36,4 @@ jobs:
         with:
           category: "integration"
           # Entferne diesen Schlüssel, wenn du Logos zur Home Assistant Brands-Repo hinzugefügt hast
-          # ignore: "brands"
+          ignore: "brands"
