@@ -110,6 +110,14 @@ frequency_sensors_group = SensorGroup(
     icon="mdi:sine-wave"  # Suitable icon for frequency
 )
 
+# Neue Sensorgruppe für Power Factor
+power_factor_sensors_group = SensorGroup(
+    unit_of_measurement=None,  # Power Factor hat keine Einheit
+    device_class=None,  # Es gibt keine spezifische device_class für Power Factor
+    state_class=SensorStateClass.MEASUREMENT,  # Wichtig für die Chart-Darstellung
+    icon="mdi:power-plug",
+)
+
 
 # New group for time and scheduling data
 schedule_sensors_group = SensorGroup(
@@ -274,6 +282,13 @@ iso_resistance_sensors = [
  
 ]
 
+# Neue Liste für Power Factor Sensoren
+power_factor_sensors = [
+    {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": True},
+    {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": True},
+    {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": True},
+]
+
 information_sensors = [
     {"name": "Device Type", "key": "devtype", "icon": "information-outline", "enable": False},
     {"name": "Sub Type", "key": "subtype", "icon": "information-outline", "enable": False},
@@ -293,9 +308,6 @@ information_sensors = [
     {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
     {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
     {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
-    {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": False},
-    {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": False},
-    {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": False},
     
     {"name": "Battery Number", "key": "BatNum", "icon": "numeric", "enable": True},
     {"name": "Battery Capacity", "key": "BatCapcity", "icon": "battery", "enable": True},
@@ -437,6 +449,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, battery_schedule_sensors),
     **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
+    **create_sensor_descriptions(power_factor_sensors_group, power_factor_sensors),
 }
 
 
