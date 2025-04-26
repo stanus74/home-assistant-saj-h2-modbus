@@ -28,7 +28,9 @@ async def _read_modbus_data(
 ) -> DataDict:
     """Helper function to read and decode Modbus data."""
     try:
+        
         regs = await try_read_registers(client, _MODBUS_READ_LOCK, 1, start_address, count)
+
         if not regs:
             _LOGGER.error(f"Error reading modbus data: No response for {data_key}")
             return {}
@@ -241,7 +243,7 @@ async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
         ("RGridVolt", None, 0.1), ("RGridCurr", "16i", 0.01), ("RGridFreq", None, 0.01),
         ("RGridDCI", "16i",1), ("RGridPowerWatt", "16i", 1),
         ("RGridPowerVA", None, 1), ("RGridPowerPF", "16i"),
-        ("SGridVolt", None, 0.1), ("SGridCurr", "16i", 0.01), ("RGridFreq", None, 0.01),
+        ("SGridVolt", None, 0.1), ("SGridCurr", "16i", 0.01), ("SGridFreq", None, 0.01),
         ("SGridDCI", "16i",1), ("SGridPowerWatt", "16i", 1),
         ("SGridPowerVA", None, 1), ("SGridPowerPF", "16i"),
         ("TGridVolt", None, 0.1), ("TGridCurr", "16i", 0.01), ("TGridFreq", None, 0.01),
