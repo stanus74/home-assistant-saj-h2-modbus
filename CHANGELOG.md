@@ -2,9 +2,9 @@
 
 #### ✨ New Sensor + Number Entity: "SAJ App Mode (Input)
 
-  - **sensor.saj_app_mode** added (register `0x3647`)
-  - A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
-  - Range: 0–3, step: 1, default: 0.
+- **sensor.saj_app_mode** added (register `0x3647`)
+- A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
+- Range: 0–3, step: 1, default: 0.
  
     **0 Self-use_mode** - Self-consumption mode
     **1 time_mode** - Time-controlled mode 
@@ -12,6 +12,8 @@
     **3 passive_mode** - Passive mode
 
 
+### Change Domain for HACS compatibility
+- from saj_modbus to saj_h2_modbus, as there was already an integration with this domain in the HACS directory. 
 
 ### 🚀 Code Optimizations
 - Introduced a robust `ModbusConnection` async context manager for auto-connect and safe close.
