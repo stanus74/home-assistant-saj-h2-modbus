@@ -2,6 +2,7 @@ import logging
 import asyncio
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.components.input_number import DOMAIN as INPUT_NUMBER_DOMAIN
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,11 +33,42 @@ class SajNumberEntity(NumberEntity):
         self._attr_native_step = step
         self._attr_native_value = default
         self._attr_native_unit_of_measurement = unit
+        self._last_synced_value = default
 
     @property
     def native_value(self): return self._attr_native_value
 
-    async def async_update(self): pass
+    async def async_update(self):
+        """Aktualisiert den Wert der Entität und synchronisiert mit input_number."""
+        # Wenn sich der Wert geändert hat, synchronisiere mit input_number
+        if self._attr_native_value != self._last_synced_value:
+            await self._sync_with_input_number()
+            self._last_synced_value = self._attr_native_value
+
+    async def _sync_with_input_number(self):
+        """Synchronisiert den Wert mit der entsprechenden input_number Entität."""
+        # Finde die zugehörige input_number Entität
+        input_number_entity_id = None
+        
+        # Extrahiere die ID aus dem unique_id (z.B. "saj_charge_day_mask_input" -> "saj_charge_day_mask")
+        entity_id_base = self._attr_unique_id.replace("_input", "")
+        input_number_entity_id = f"input_number.{entity_id_base}"
+        
+        if input_number_entity_id and self.hass.states.get(input_number_entity_id):
+            try:
+                # Aktualisiere den Wert der input_number Entität
+                await self.hass.services.async_call(
+                    INPUT_NUMBER_DOMAIN,
+                    "set_value",
+                    {
+                        "entity_id": input_number_entity_id,
+                        "value": self._attr_native_value
+                    },
+                    blocking=False
+                )
+                _LOGGER.debug(f"Synchronized {input_number_entity_id} with value {self._attr_native_value}")
+            except Exception as e:
+                _LOGGER.error(f"Error synchronizing {input_number_entity_id}: {e}")
 
 class SajChargeDayMaskInputEntity(SajNumberEntity):
     """Entity for Charge Day Mask (0-127)."""

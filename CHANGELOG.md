@@ -1,3 +1,23 @@
+
+# Changelog (v2.2.0)
+
+### Added
+- Support for `input_number` entities to provide a better user interface for numeric settings
+- Bidirectional synchronization between `number` entities and `input_number` entities
+- Thread-safe implementation for handling state changes from different threads
+
+### Changed
+- Improved error handling and logging for better troubleshooting
+- Updated code to use thread-safe methods for asynchronous operations
+
+- change unit_of_measuremnt to show grahpicial chart for Inverter Power Factor R,S,T Phase
+
+### Documentation
+- Added instructions for setting up `input_number` entities in configuration.yaml
+- Added explanation of how the integration works with or without `input_number` entities
+
+
+
 # Changelog (v2.1.0)
 
 #### ✨ New Sensor + Number Entity: "SAJ App Mode (Input)
