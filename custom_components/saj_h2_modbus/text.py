@@ -19,26 +19,32 @@ async def async_setup_entry(
 ) -> None:
     """Set up the writable time entities for Charge and Discharge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
+    
     entities = [
         SajChargeStartTimeTextEntity(hub),
         SajChargeEndTimeTextEntity(hub),
-        SajDischargeStartTimeTextEntity(hub),
-        SajDischargeEndTimeTextEntity(hub),
     ]
+    
+    # Discharge Start/End Time Entities (1-7)
+    for i in range(1, 8):
+        entities.append(SajDischargeStartTimeTextEntity(hub, i))
+        entities.append(SajDischargeEndTimeTextEntity(hub, i))
+    
     async_add_entities(entities)
 
-class SajChargeStartTimeTextEntity(TextEntity):
-    """Writable time entity for Charge Start Time (Format HH:MM)."""
+class SajTimeTextEntity(TextEntity):
+    """Base class for SAJ writable time entities."""
 
-    def __init__(self, hub):
+    def __init__(self, hub, name, unique_id, set_method):
         """Initialize the entity."""
         self._hub = hub
-        self._attr_name = "SAJ Charge Start Time (Time)"
-        self._attr_unique_id = "saj_charge_start_time"
+        self._attr_name = name
+        self._attr_unique_id = unique_id
         self._attr_native_value = "00:00"
         # Regex that enforces HH:MM: Hours from 00 to 23, minutes from 00 to 59
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"
+        self.set_method = set_method
 
     async def async_update(self) -> None:
         """Update is not used here to avoid additional Modbus requests."""
@@ -47,116 +53,71 @@ class SajChargeStartTimeTextEntity(TextEntity):
         pass
 
     async def async_set_value(self, value) -> None:
-        """Set a new start time value (Format 'HH:MM')."""
+        """Set a new time value (Format 'HH:MM')."""
         # If value is a datetime.time object, convert it
         if isinstance(value, datetime.time):
             value = value.strftime("%H:%M")
         
         if not isinstance(value, str) or not re.match(self._attr_pattern, value):
             _LOGGER.error(
-                "Invalid time format for Charge Start Time: %s. Expected HH:MM", value
+                f"Invalid time format for {self._attr_name}: {value}. Expected HH:MM"
             )
             return
 
-        await self._hub.set_charge_start(value)
+        await self.set_method(value)
         self._attr_native_value = value
         self.async_write_ha_state()
 
-class SajChargeEndTimeTextEntity(TextEntity):
+class SajChargeStartTimeTextEntity(SajTimeTextEntity):
+    """Writable time entity for Charge Start Time (Format HH:MM)."""
+
+    def __init__(self, hub):
+        """Initialize the entity."""
+        super().__init__(
+            hub, 
+            "SAJ Charge Start Time (Time)", 
+            "saj_charge_start_time", 
+            hub.set_charge_start
+        )
+
+class SajChargeEndTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Charge End Time (Format HH:MM)."""
 
     def __init__(self, hub):
         """Initialize the entity."""
-        self._hub = hub
-        self._attr_name = "SAJ Charge End Time (Time)"
-        self._attr_unique_id = "saj_charge_end_time"
-        self._attr_native_value = "00:00"
-        self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
-        self._attr_mode = "text"
+        super().__init__(
+            hub, 
+            "SAJ Charge End Time (Time)", 
+            "saj_charge_end_time", 
+            hub.set_charge_end
+        )
 
-    async def async_update(self) -> None:
-        """Update is not used here to avoid additional Modbus requests."""
-        pass
-
-    async def async_set_value(self, value) -> None:
-        """Set a new end time value (Format 'HH:MM')."""
-        # If value is a datetime.time object, convert it
-        if isinstance(value, datetime.time):
-            value = value.strftime("%H:%M")
-        
-        if not isinstance(value, str) or not re.match(self._attr_pattern, value):
-            _LOGGER.error(
-                "Invalid time format for Charge End Time: %s. Expected HH:MM", value
-            )
-            return
-
-        await self._hub.set_charge_end(value)
-        self._attr_native_value = value
-        self.async_write_ha_state()
-
-class SajDischargeStartTimeTextEntity(TextEntity):
+class SajDischargeStartTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Discharge Start Time (Format HH:MM)."""
 
-    def __init__(self, hub):
+    def __init__(self, hub, index=1):
         """Initialize the entity."""
-        self._hub = hub
-        self._attr_name = "SAJ Discharge Start Time (Time)"
-        self._attr_unique_id = "saj_discharge_start_time"
-        self._attr_native_value = "00:00"
-        # Regex that enforces HH:MM: Hours from 00 to 23, minutes from 00 to 59
-        self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
-        self._attr_mode = "text"
-
-    async def async_update(self) -> None:
-        """Update is not used here to avoid additional Modbus requests."""
-        pass
-
-    async def async_set_value(self, value) -> None:
-        """Set a new start time value for discharge (Format 'HH:MM')."""
-        # If value is a datetime.time object, convert it
-        if isinstance(value, datetime.time):
-            value = value.strftime("%H:%M")
+        prefix = "" if index == 1 else str(index)
+        name = f"SAJ Discharge{prefix} Start Time (Time)"
+        unique_id = f"saj_discharge{prefix}_start_time"
         
-        if not isinstance(value, str) or not re.match(self._attr_pattern, value):
-            _LOGGER.error(
-                "Invalid time format for Discharge Start Time: %s. Expected HH:MM", value
-            )
-            return
+        # Dynamisch die richtige Hub-Methode auswählen
+        method_name = f"set_discharge{prefix}_start"
+        set_method = getattr(hub, method_name)
+        
+        super().__init__(hub, name, unique_id, set_method)
 
-        # Set the start time for discharge
-        await self._hub.set_discharge_start(value)
-        self._attr_native_value = value
-        self.async_write_ha_state()
-
-class SajDischargeEndTimeTextEntity(TextEntity):
+class SajDischargeEndTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Discharge End Time (Format HH:MM)."""
 
-    def __init__(self, hub):
+    def __init__(self, hub, index=1):
         """Initialize the entity."""
-        self._hub = hub
-        self._attr_name = "SAJ Discharge End Time (Time)"
-        self._attr_unique_id = "saj_discharge_end_time"
-        self._attr_native_value = "00:00"
-        self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
-        self._attr_mode = "text"
-
-    async def async_update(self) -> None:
-        """Update is not used here to avoid additional Modbus requests."""
-        pass
-
-    async def async_set_value(self, value) -> None:
-        """Set a new end time value for discharge (Format 'HH:MM')."""
-        # If value is a datetime.time object, convert it
-        if isinstance(value, datetime.time):
-            value = value.strftime("%H:%M")
+        prefix = "" if index == 1 else str(index)
+        name = f"SAJ Discharge{prefix} End Time (Time)"
+        unique_id = f"saj_discharge{prefix}_end_time"
         
-        if not isinstance(value, str) or not re.match(self._attr_pattern, value):
-            _LOGGER.error(
-                "Invalid time format for Discharge End Time: %s. Expected HH:MM", value
-            )
-            return
-
-        # Set the end time for discharge
-        await self._hub.set_discharge_end(value)
-        self._attr_native_value = value
-        self.async_write_ha_state()
+        # Dynamisch die richtige Hub-Methode auswählen
+        method_name = f"set_discharge{prefix}_end"
+        set_method = getattr(hub, method_name)
+        
+        super().__init__(hub, name, unique_id, set_method)

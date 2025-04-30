@@ -14,10 +14,35 @@ PENDING_FIELDS: List[tuple[str, str]] = [
     ("discharge_end", "discharge_end"),
     ("discharge_day_mask", "discharge_day_mask"),
     ("discharge_power_percent", "discharge_power_percent"),
+    ("discharge2_start", "discharge2_start"),
+    ("discharge2_end", "discharge2_end"),
+    ("discharge2_day_mask", "discharge2_day_mask"),
+    ("discharge2_power_percent", "discharge2_power_percent"),
+    ("discharge3_start", "discharge3_start"),
+    ("discharge3_end", "discharge3_end"),
+    ("discharge3_day_mask", "discharge3_day_mask"),
+    ("discharge3_power_percent", "discharge3_power_percent"),
+    ("discharge4_start", "discharge4_start"),
+    ("discharge4_end", "discharge4_end"),
+    ("discharge4_day_mask", "discharge4_day_mask"),
+    ("discharge4_power_percent", "discharge4_power_percent"),
+    ("discharge5_start", "discharge5_start"),
+    ("discharge5_end", "discharge5_end"),
+    ("discharge5_day_mask", "discharge5_day_mask"),
+    ("discharge5_power_percent", "discharge5_power_percent"),
+    ("discharge6_start", "discharge6_start"),
+    ("discharge6_end", "discharge6_end"),
+    ("discharge6_day_mask", "discharge6_day_mask"),
+    ("discharge6_power_percent", "discharge6_power_percent"),
+    ("discharge7_start", "discharge7_start"),
+    ("discharge7_end", "discharge7_end"),
+    ("discharge7_day_mask", "discharge7_day_mask"),
+    ("discharge7_power_percent", "discharge7_power_percent"),
     ("export_limit", "export_limit"),
     ("charging", "charging_state"),
     ("discharging", "discharging_state"),
     ("app_mode", "app_mode"),
+    ("discharge_time_enable", "discharge_time_enable"),
 ]
 
 # --- Register-Definitionen ---
@@ -31,6 +56,36 @@ REGISTERS = {
         "start_time": 0x361B,
         "end_time": 0x361C,
         "day_mask_power": 0x361D,
+    },
+    "discharge2": {
+        "start_time": 0x361E,
+        "end_time": 0x361F,
+        "day_mask_power": 0x3620,
+    },
+    "discharge3": {
+        "start_time": 0x3621,
+        "end_time": 0x3622,
+        "day_mask_power": 0x3623,
+    },
+    "discharge4": {
+        "start_time": 0x3624,
+        "end_time": 0x3625,
+        "day_mask_power": 0x3626,
+    },
+    "discharge5": {
+        "start_time": 0x3627,
+        "end_time": 0x3628,
+        "day_mask_power": 0x3629,
+    },
+    "discharge6": {
+        "start_time": 0x362A,
+        "end_time": 0x362B,
+        "day_mask_power": 0x362C,
+    },
+    "discharge7": {
+        "start_time": 0x362D,
+        "end_time": 0x362E,
+        "day_mask_power": 0x362F,
     },
     "export_limit": 0x365A,
     "app_mode": 0x3647,
@@ -73,6 +128,72 @@ class ChargeSettingHandler:
             self._hub._pending_discharge_day_mask,
             self._hub._pending_discharge_power_percent,
             "discharge"
+        )
+        
+    async def handle_discharge2_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 2"""
+        await self._handle_power_settings(
+            "discharge2",
+            self._hub._pending_discharge2_start,
+            self._hub._pending_discharge2_end,
+            self._hub._pending_discharge2_day_mask,
+            self._hub._pending_discharge2_power_percent,
+            "discharge2"
+        )
+        
+    async def handle_discharge3_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 3"""
+        await self._handle_power_settings(
+            "discharge3",
+            self._hub._pending_discharge3_start,
+            self._hub._pending_discharge3_end,
+            self._hub._pending_discharge3_day_mask,
+            self._hub._pending_discharge3_power_percent,
+            "discharge3"
+        )
+        
+    async def handle_discharge4_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 4"""
+        await self._handle_power_settings(
+            "discharge4",
+            self._hub._pending_discharge4_start,
+            self._hub._pending_discharge4_end,
+            self._hub._pending_discharge4_day_mask,
+            self._hub._pending_discharge4_power_percent,
+            "discharge4"
+        )
+        
+    async def handle_discharge5_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 5"""
+        await self._handle_power_settings(
+            "discharge5",
+            self._hub._pending_discharge5_start,
+            self._hub._pending_discharge5_end,
+            self._hub._pending_discharge5_day_mask,
+            self._hub._pending_discharge5_power_percent,
+            "discharge5"
+        )
+        
+    async def handle_discharge6_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 6"""
+        await self._handle_power_settings(
+            "discharge6",
+            self._hub._pending_discharge6_start,
+            self._hub._pending_discharge6_end,
+            self._hub._pending_discharge6_day_mask,
+            self._hub._pending_discharge6_power_percent,
+            "discharge6"
+        )
+        
+    async def handle_discharge7_settings(self) -> None:
+        """Verarbeitet die Entlade-Einstellungen für Discharge 7"""
+        await self._handle_power_settings(
+            "discharge7",
+            self._hub._pending_discharge7_start,
+            self._hub._pending_discharge7_end,
+            self._hub._pending_discharge7_day_mask,
+            self._hub._pending_discharge7_power_percent,
+            "discharge7"
         )
 
     async def _handle_power_settings(
@@ -158,6 +279,36 @@ class ChargeSettingHandler:
             self._hub._pending_discharge_end = None
             self._hub._pending_discharge_day_mask = None
             self._hub._pending_discharge_power_percent = None
+        elif mode == "discharge2":
+            self._hub._pending_discharge2_start = None
+            self._hub._pending_discharge2_end = None
+            self._hub._pending_discharge2_day_mask = None
+            self._hub._pending_discharge2_power_percent = None
+        elif mode == "discharge3":
+            self._hub._pending_discharge3_start = None
+            self._hub._pending_discharge3_end = None
+            self._hub._pending_discharge3_day_mask = None
+            self._hub._pending_discharge3_power_percent = None
+        elif mode == "discharge4":
+            self._hub._pending_discharge4_start = None
+            self._hub._pending_discharge4_end = None
+            self._hub._pending_discharge4_day_mask = None
+            self._hub._pending_discharge4_power_percent = None
+        elif mode == "discharge5":
+            self._hub._pending_discharge5_start = None
+            self._hub._pending_discharge5_end = None
+            self._hub._pending_discharge5_day_mask = None
+            self._hub._pending_discharge5_power_percent = None
+        elif mode == "discharge6":
+            self._hub._pending_discharge6_start = None
+            self._hub._pending_discharge6_end = None
+            self._hub._pending_discharge6_day_mask = None
+            self._hub._pending_discharge6_power_percent = None
+        elif mode == "discharge7":
+            self._hub._pending_discharge7_start = None
+            self._hub._pending_discharge7_end = None
+            self._hub._pending_discharge7_day_mask = None
+            self._hub._pending_discharge7_power_percent = None
 
     async def handle_export_limit(self) -> None:
         """Verarbeitet das Export-Limit"""
@@ -175,6 +326,15 @@ class ChargeSettingHandler:
             REGISTERS["app_mode"],
             "app mode",
             lambda: setattr(self._hub, "_pending_app_mode", None)
+        )
+        
+    async def handle_discharge_time_enable(self) -> None:
+        """Verarbeitet den Discharge Time Enable Wert"""
+        await self._handle_simple_register(
+            self._hub._pending_discharge_time_enable,
+            REGISTERS["discharging_state"],
+            "discharge time enable",
+            lambda: setattr(self._hub, "_pending_discharge_time_enable", None)
         )
 
     async def _handle_simple_register(

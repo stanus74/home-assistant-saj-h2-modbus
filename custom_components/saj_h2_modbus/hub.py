@@ -53,10 +53,38 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_discharge_end: Optional[str] = None
         self._pending_discharge_day_mask: Optional[int] = None
         self._pending_discharge_power_percent: Optional[int] = None
+        
+        # Pending settings für zusätzliche Entladezeiten
+        self._pending_discharge2_start: Optional[str] = None
+        self._pending_discharge2_end: Optional[str] = None
+        self._pending_discharge2_day_mask: Optional[int] = None
+        self._pending_discharge2_power_percent: Optional[int] = None
+        self._pending_discharge3_start: Optional[str] = None
+        self._pending_discharge3_end: Optional[str] = None
+        self._pending_discharge3_day_mask: Optional[int] = None
+        self._pending_discharge3_power_percent: Optional[int] = None
+        self._pending_discharge4_start: Optional[str] = None
+        self._pending_discharge4_end: Optional[str] = None
+        self._pending_discharge4_day_mask: Optional[int] = None
+        self._pending_discharge4_power_percent: Optional[int] = None
+        self._pending_discharge5_start: Optional[str] = None
+        self._pending_discharge5_end: Optional[str] = None
+        self._pending_discharge5_day_mask: Optional[int] = None
+        self._pending_discharge5_power_percent: Optional[int] = None
+        self._pending_discharge6_start: Optional[str] = None
+        self._pending_discharge6_end: Optional[str] = None
+        self._pending_discharge6_day_mask: Optional[int] = None
+        self._pending_discharge6_power_percent: Optional[int] = None
+        self._pending_discharge7_start: Optional[str] = None
+        self._pending_discharge7_end: Optional[str] = None
+        self._pending_discharge7_day_mask: Optional[int] = None
+        self._pending_discharge7_power_percent: Optional[int] = None
+        
         self._pending_export_limit: Optional[int] = None
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
         self._pending_app_mode: Optional[int] = None
+        self._pending_discharge_time_enable: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
 
@@ -124,8 +152,39 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
                     (True, self._setting_handler.handle_charge_settings),
                     (True, self._setting_handler.handle_discharge_settings),
+                    (self._pending_discharge2_start is not None or 
+                     self._pending_discharge2_end is not None or 
+                     self._pending_discharge2_day_mask is not None or 
+                     self._pending_discharge2_power_percent is not None, 
+                     self._setting_handler.handle_discharge2_settings),
+                    (self._pending_discharge3_start is not None or 
+                     self._pending_discharge3_end is not None or 
+                     self._pending_discharge3_day_mask is not None or 
+                     self._pending_discharge3_power_percent is not None, 
+                     self._setting_handler.handle_discharge3_settings),
+                    (self._pending_discharge4_start is not None or 
+                     self._pending_discharge4_end is not None or 
+                     self._pending_discharge4_day_mask is not None or 
+                     self._pending_discharge4_power_percent is not None, 
+                     self._setting_handler.handle_discharge4_settings),
+                    (self._pending_discharge5_start is not None or 
+                     self._pending_discharge5_end is not None or 
+                     self._pending_discharge5_day_mask is not None or 
+                     self._pending_discharge5_power_percent is not None, 
+                     self._setting_handler.handle_discharge5_settings),
+                    (self._pending_discharge6_start is not None or 
+                     self._pending_discharge6_end is not None or 
+                     self._pending_discharge6_day_mask is not None or 
+                     self._pending_discharge6_power_percent is not None, 
+                     self._setting_handler.handle_discharge6_settings),
+                    (self._pending_discharge7_start is not None or 
+                     self._pending_discharge7_end is not None or 
+                     self._pending_discharge7_day_mask is not None or 
+                     self._pending_discharge7_power_percent is not None, 
+                     self._setting_handler.handle_discharge7_settings),
                     (True, self._setting_handler.handle_export_limit),
                     (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
+                    (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
                 ]
                 
                 for condition, handler in pending_handlers:
@@ -161,7 +220,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_additional_modbus_data_4,
                     modbus_readers.read_battery_data,
                     modbus_readers.read_charge_data,
-                    modbus_readers.read_discharge_data,
+                    modbus_readers.read_discharge_data,  # Liest alle Entladungen auf einmal
                     modbus_readers.read_anti_reflux_data,
                     modbus_readers.read_passive_battery_data,
                 ]
