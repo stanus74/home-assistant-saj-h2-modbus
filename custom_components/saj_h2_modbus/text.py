@@ -101,7 +101,7 @@ class SajDischargeStartTimeTextEntity(SajTimeTextEntity):
         name = f"SAJ Discharge{prefix} Start Time (Time)"
         unique_id = f"saj_discharge{prefix}_start_time"
         
-        # Dynamisch die richtige Hub-Methode auswählen
+        # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_start"
         set_method = getattr(hub, method_name)
         
@@ -116,7 +116,7 @@ class SajDischargeEndTimeTextEntity(SajTimeTextEntity):
         name = f"SAJ Discharge{prefix} End Time (Time)"
         unique_id = f"saj_discharge{prefix}_end_time"
         
-        # Dynamisch die richtige Hub-Methode auswählen
+        # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_end"
         set_method = getattr(hub, method_name)
         

@@ -4,7 +4,7 @@ from .modbus_utils import try_read_registers, try_write_registers
 
 _LOGGER = logging.getLogger(__name__)
 
-# --- Definitionen für Pending-Setter ---
+# --- Definitions for Pending Setter ---
 PENDING_FIELDS: List[tuple[str, str]] = [
     ("charge_start", "charge_start"),
     ("charge_end", "charge_end"),
@@ -45,7 +45,7 @@ PENDING_FIELDS: List[tuple[str, str]] = [
     ("discharge_time_enable", "discharge_time_enable"),
 ]
 
-# --- Register-Definitionen ---
+# --- Register Definitions ---
 REGISTERS = {
     "charge": {
         "start_time": 0x3606,
@@ -109,7 +109,7 @@ class ChargeSettingHandler:
         self._hub = hub
 
     async def handle_charge_settings(self) -> None:
-        """Verarbeitet die Lade-Einstellungen"""
+        """Handles the charge settings"""
         await self._handle_power_settings(
             "charge",
             self._hub._pending_charge_start,
@@ -120,7 +120,7 @@ class ChargeSettingHandler:
         )
 
     async def handle_discharge_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen"""
+        """Handles the discharge settings"""
         await self._handle_power_settings(
             "discharge",
             self._hub._pending_discharge_start,
@@ -131,7 +131,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge2_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 2"""
+        """Handles the discharge settings for Discharge 2"""
         await self._handle_power_settings(
             "discharge2",
             self._hub._pending_discharge2_start,
@@ -142,7 +142,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge3_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 3"""
+        """Handles the discharge settings for Discharge 3"""
         await self._handle_power_settings(
             "discharge3",
             self._hub._pending_discharge3_start,
@@ -153,7 +153,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge4_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 4"""
+        """Handles the discharge settings for Discharge 4"""
         await self._handle_power_settings(
             "discharge4",
             self._hub._pending_discharge4_start,
@@ -164,7 +164,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge5_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 5"""
+        """Handles the discharge settings for Discharge 5"""
         await self._handle_power_settings(
             "discharge5",
             self._hub._pending_discharge5_start,
@@ -175,7 +175,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge6_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 6"""
+        """Handles the discharge settings for Discharge 6"""
         await self._handle_power_settings(
             "discharge6",
             self._hub._pending_discharge6_start,
@@ -186,7 +186,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge7_settings(self) -> None:
-        """Verarbeitet die Entlade-Einstellungen für Discharge 7"""
+        """Handles the discharge settings for Discharge 7"""
         await self._handle_power_settings(
             "discharge7",
             self._hub._pending_discharge7_start,
@@ -206,7 +206,7 @@ class ChargeSettingHandler:
         label: str
     ) -> None:
         """
-        Gemeinsame Methode zur Verarbeitung von Lade- und Entlade-Einstellungen
+        Common method for handling charge and discharge settings
         """
         try:
             registers = REGISTERS[mode]
@@ -248,7 +248,7 @@ class ChargeSettingHandler:
         power_percent: Optional[int],
         label: str
     ) -> None:
-        """Aktualisiert die Tagesmaske und den Leistungsprozentsatz"""
+        """Updates the day mask and power percentage"""
         regs = await self._hub._read_registers(address)
         current_value = regs[0]
         current_day_mask = (current_value >> 8) & 0xFF
@@ -268,7 +268,7 @@ class ChargeSettingHandler:
             _LOGGER.error(f"Failed to write {label} power time")
 
     def _reset_pending_values(self, mode: str) -> None:
-        """Setzt die Pending-Werte zurück"""
+        """Resets the pending values"""
         if mode == "charge":
             self._hub._pending_charge_start = None
             self._hub._pending_charge_end = None
@@ -311,7 +311,7 @@ class ChargeSettingHandler:
             self._hub._pending_discharge7_power_percent = None
 
     async def handle_export_limit(self) -> None:
-        """Verarbeitet das Export-Limit"""
+        """Handles the export limit"""
         await self._handle_simple_register(
             self._hub._pending_export_limit,
             REGISTERS["export_limit"],
@@ -320,7 +320,7 @@ class ChargeSettingHandler:
         )
                 
     async def handle_app_mode(self) -> None:
-        """Verarbeitet den App-Modus"""
+        """Handles the app mode"""
         await self._handle_simple_register(
             self._hub._pending_app_mode,
             REGISTERS["app_mode"],
@@ -329,7 +329,7 @@ class ChargeSettingHandler:
         )
         
     async def handle_discharge_time_enable(self) -> None:
-        """Verarbeitet den Discharge Time Enable Wert"""
+        """Handles the Discharge Time Enable value"""
         await self._handle_simple_register(
             self._hub._pending_discharge_time_enable,
             REGISTERS["discharging_state"],
@@ -344,7 +344,7 @@ class ChargeSettingHandler:
         label: str,
         reset_callback: Callable[[], None]
     ) -> None:
-        """Verarbeitet einfache Register-Schreibvorgänge"""
+        """Handles simple register write operations"""
         if value is not None:
             try:
                 success = await self._hub._write_register(address, value)
@@ -358,7 +358,7 @@ class ChargeSettingHandler:
                 reset_callback()
 
     async def handle_pending_charging_state(self) -> None:
-        """Verarbeitet den ausstehenden Ladezustand"""
+        """Handles the pending charging state"""
         await self._handle_power_state(
             self._hub._pending_charging_state,
             self._hub.get_discharging_state,
@@ -368,7 +368,7 @@ class ChargeSettingHandler:
         )
 
     async def handle_pending_discharging_state(self) -> None:
-        """Verarbeitet den ausstehenden Entladezustand"""
+        """Handles the pending discharging state"""
         await self._handle_power_state(
             self._hub._pending_discharging_state,
             self._hub.get_charging_state,
@@ -385,7 +385,7 @@ class ChargeSettingHandler:
         label: str,
         reset_callback: Callable[[], None]
     ) -> None:
-        """Gemeinsame Methode zur Verarbeitung von Lade- und Entladezuständen"""
+        """Common method for handling charging and discharging states"""
         if state is not None:
             other_state = await get_other_state()
             try:
@@ -412,7 +412,7 @@ class ChargeSettingHandler:
     async def _write_time_register(
         self, address: int, time_str: str, label: str
     ) -> None:
-        """Schreibt ein Zeitregister im Format HH:MM"""
+        """Writes a time register in HH:MM format"""
         parts = time_str.split(":")
         if len(parts) != 2:
             _LOGGER.error(f"Invalid time format for {label}: {time_str}")

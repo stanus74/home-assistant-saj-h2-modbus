@@ -286,7 +286,7 @@ def decode_time(value: int) -> str:
 
 async def read_charge_data(client: ModbusClient) -> DataDict:
     """Reads the Charge registers."""
-    # Lese die Charge-Register direkt mit den Sensornamen
+    # Read the Charge registers directly with the sensor names
     decode_instructions = [
         ("charge_start_time", "16u", 1),
         ("charge_end_time", "16u", 1),
@@ -297,11 +297,11 @@ async def read_charge_data(client: ModbusClient) -> DataDict:
 
     if data:
         try:
-            # Decodiere die Zeitwerte
+            # Decode the time values
             data["charge_start_time"] = decode_time(data["charge_start_time"])
             data["charge_end_time"] = decode_time(data["charge_end_time"])
             
-            # Extrahiere day_mask und power_percent aus dem dritten Register
+            # Extract day_mask and power_percent from the third register
             power_value = data.pop("charge_power_raw")
             data["charge_day_mask"] = (power_value >> 8) & 0xFF
             data["charge_power_percent"] = power_value & 0xFF
@@ -313,7 +313,7 @@ async def read_charge_data(client: ModbusClient) -> DataDict:
 
 async def read_discharge_data(client: ModbusClient) -> DataDict:
     """Reads all Discharge registers at once (discharge 1-7)."""
-    # Lese alle Discharge-Register direkt mit den Sensornamen
+    # Read all Discharge registers directly with the sensor names
     decode_instructions = [
         # Discharge 1
         ("discharge_start_time", "16u", 1),
@@ -349,16 +349,16 @@ async def read_discharge_data(client: ModbusClient) -> DataDict:
 
     if data:
         try:
-            # Verarbeite die Daten für alle Entladungen
+            # Process the data for all discharges
             for prefix in ["discharge", "discharge2", "discharge3", "discharge4", "discharge5", "discharge6", "discharge7"]:
-                # Decodiere die Zeitwerte
+                # Decode the time values
                 if f"{prefix}_start_time" in data:
                     data[f"{prefix}_start_time"] = decode_time(data[f"{prefix}_start_time"])
                 
                 if f"{prefix}_end_time" in data:
                     data[f"{prefix}_end_time"] = decode_time(data[f"{prefix}_end_time"])
                 
-                # Extrahiere day_mask und power_percent aus dem dritten Register
+                # Extract day_mask and power_percent from the third register
                 if f"{prefix}_power_raw" in data:
                     power_value = data.pop(f"{prefix}_power_raw")
                     data[f"{prefix}_day_mask"] = (power_value >> 8) & 0xFF

@@ -47,24 +47,24 @@ class SajNumberEntity(NumberEntity):
     def native_value(self): return self._attr_native_value
 
     async def async_update(self):
-        """Aktualisiert den Wert der Entität und synchronisiert mit input_number."""
-        # Wenn sich der Wert geändert hat, synchronisiere mit input_number
+        """Updates the value of the entity and synchronizes with input_number."""
+        # If the value has changed, synchronize with input_number
         if self._attr_native_value != self._last_synced_value:
             await self._sync_with_input_number()
             self._last_synced_value = self._attr_native_value
 
     async def _sync_with_input_number(self):
-        """Synchronisiert den Wert mit der entsprechenden input_number Entität."""
-        # Finde die zugehörige input_number Entität
+        """Synchronizes the value with the corresponding input_number entity."""
+        # Find the associated input_number entity
         input_number_entity_id = None
         
-        # Extrahiere die ID aus dem unique_id (z.B. "saj_charge_day_mask_input" -> "saj_charge_day_mask")
+        # Extract the ID from the unique_id (e.g. "saj_charge_day_mask_input" -> "saj_charge_day_mask")
         entity_id_base = self._attr_unique_id.replace("_input", "")
         input_number_entity_id = f"input_number.{entity_id_base}"
         
         if input_number_entity_id and self.hass.states.get(input_number_entity_id):
             try:
-                # Aktualisiere den Wert der input_number Entität
+                # Update the value of the input_number entity
                 await self.hass.services.async_call(
                     INPUT_NUMBER_DOMAIN,
                     "set_value",
@@ -99,13 +99,13 @@ class SajDischargeDayMaskInputEntity(SajNumberEntity):
         super().__init__(hub, name, unique_id, 0, 127, 1, 127)
         self.index = index
         
-        # Dynamisch die richtige Hub-Methode auswählen
+        # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_day_mask"
         self.set_method = getattr(self._hub, method_name)
 
     async def async_set_native_value(self, value):
         val = int(value)
-        if not 0 <= val <= 127: 
+        if not 0 <= val <= 127:
             _LOGGER.error(f"Invalid Day Mask: {val}")
             return
         self._attr_native_value = val
@@ -137,7 +137,7 @@ class SajDischargePowerPercentInputEntity(SajNumberEntity):
         super().__init__(hub, name, unique_id, 0, 100, 1, 5)
         self.index = index
         
-        # Dynamisch die richtige Hub-Methode auswählen
+        # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_power_percent"
         self.set_method = getattr(self._hub, method_name)
 
@@ -179,7 +179,7 @@ class SajAppModeInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting app mode to: {val}")
         self._attr_native_value = val
-        # Verwende die set_app_mode-Methode des Hubs
+        # Use the set_app_mode method of the Hub
         await self._hub.set_app_mode(val)
         self.async_write_ha_state()
 
@@ -195,6 +195,6 @@ class SajDischargeTimeEnableInputEntity(SajNumberEntity):
             return
         _LOGGER.debug(f"Setting discharge time enable to: {val}")
         self._attr_native_value = val
-        # Verwende die set_discharge_time_enable-Methode des Hubs
+        # Use the set_discharge_time_enable method of the Hub
         await self._hub.set_discharge_time_enable(val)
         self.async_write_ha_state()

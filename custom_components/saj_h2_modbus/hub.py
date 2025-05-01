@@ -54,7 +54,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_discharge_day_mask: Optional[int] = None
         self._pending_discharge_power_percent: Optional[int] = None
         
-        # Pending settings für zusätzliche Entladezeiten
+        # Pending settings for additional discharge times
         self._pending_discharge2_start: Optional[str] = None
         self._pending_discharge2_end: Optional[str] = None
         self._pending_discharge2_day_mask: Optional[int] = None
@@ -199,7 +199,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 combined_data.update(self.inverter_data)
 
                 async def execute_reader_method(method):
-                    """Hilfsfunktion zum Ausführen einer Reader-Methode mit Fehlerbehandlung."""
+                    """Helper function to execute a reader method with error handling."""
                     try:
                         result = await method(self._client)
                         combined_data.update(result)
@@ -220,7 +220,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_additional_modbus_data_4,
                     modbus_readers.read_battery_data,
                     modbus_readers.read_charge_data,
-                    modbus_readers.read_discharge_data,  # Liest alle Entladungen auf einmal
+                    modbus_readers.read_discharge_data,  # Reads all discharges at once
                     modbus_readers.read_anti_reflux_data,
                     modbus_readers.read_passive_battery_data,
                 ]
