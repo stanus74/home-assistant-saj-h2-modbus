@@ -1,0 +1,85 @@
+name: Bug Report / Support Request
+description: Report issues or ask for help with the Modbus integration.
+title: "[Bug/Support] - [Short Description]"
+labels: ["bug", "support"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please complete **all fields**. Without full information (especially log files), we cannot investigate your issue.
+
+  - type: input
+    id: inverter_model
+    attributes:
+      label: Inverter model
+      description: e.g., "SAJ H1-6-S2"
+      placeholder: "SAJ H1-6-S2"
+    validations:
+      required: true
+
+  - type: input
+    id: inverter_firmware
+    attributes:
+      label: Inverter firmware version
+      description: Please provide the exact version
+      placeholder: "e.g., V1.2.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: modbus_converter
+    attributes:
+      label: Which Modbus TCP converter are you using?
+      options:
+        - AIO3
+        - AIO2
+        - Other (please specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: converter_firmware
+    attributes:
+      label: Modbus converter firmware version
+      placeholder: "e.g., AIO3 FW 1.4.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: converter_details
+    attributes:
+      label: Additional converter details (if "Other" selected)
+      description: Manufacturer, model, etc.
+    validations:
+      required: false
+
+  - type: textarea
+    id: issue_description
+    attributes:
+      label: Describe the issue
+      description: When does it happen? Do all sensors show "unknown"? Any pattern?
+    validations:
+      required: true
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "e.g., 2025.5.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: Copy relevant lines or attach the full log file
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve this integration!
