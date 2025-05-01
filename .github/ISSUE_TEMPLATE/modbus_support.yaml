@@ -10,6 +10,18 @@ body:
       value: |
         Please complete **all fields**. Without full information (especially log files), we cannot investigate your issue.
 
+        ⚠️ **Important Firmware Note**  
+        If you are using an AIO3 converter, please ensure it is updated to the latest firmware.  
+        Earlier versions caused Modbus communication issues.  
+        Also, check your inverter firmware. If it is **older** than the following versions, please update it:
+
+        - **Module**: V1.211  
+        - **Display Board**: V1.070  
+        - **Control Board**: V4.066
+
+        Since this update (Nov 14, 2024), connection quality has improved significantly.  
+        If your firmware is outdated, contact SAJ for assistance.
+
   - type: input
     id: inverter_model
     attributes:
