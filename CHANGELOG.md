@@ -1,3 +1,37 @@
+
+# Changelog (v2.2.0)
+
+### Added
+
+- **Support for multiple discharge time windows**
+
+  - New input entity "SAJ Discharge_time_enable (Input)" for controlling the discharge **"Time Enable"** register (0x3605)
+  - Direct access to the discharge time enable register for **binary** Time Slot selection (e.g., 1 = Time 1, 3 = Time 1 and Time 2,... 127 All 7 Slots)
+  - Support for multiple discharge time windows (Discharge 1-7)
+  - New entities for Discharge 2-7 start and end times
+  - New entities for Discharge 2-7 day mask (weekday selection)
+  - New entities for Discharge 2-7 power percent settings
+
+
+- Support for `input_number` entities to provide a better user interface for numeric settings
+- Bidirectional synchronization between `number` entities and `input_number` entities
+- Thread-safe implementation for handling state changes from different threads
+
+
+### Changed
+- Improved error handling and logging for better troubleshooting
+- Updated code to use thread-safe methods for asynchronous operations
+- Code optimization in `number.py`: Parameterized classes for discharge entities
+- Code optimization in `text.py`: Introduction of a base class for time entities
+- Reduction of code duplication through dynamic method selection
+- Change unit_of_measuremnt to show graphical chart for Inverter Power Factor R,S,T Phase
+
+### Documentation
+- Added instructions for setting up `input_number` entities in configuration.yaml
+- Added explanation of how the integration works with or without `input_number` entities
+
+
+
 # Changelog (v2.1.0)
 
 #### ✨ New Sensor + Number Entity: "SAJ App Mode (Input)

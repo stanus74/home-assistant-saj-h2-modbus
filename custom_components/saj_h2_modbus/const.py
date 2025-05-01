@@ -110,6 +110,14 @@ frequency_sensors_group = SensorGroup(
     icon="mdi:sine-wave"  # Suitable icon for frequency
 )
 
+# Neue Sensorgruppe für Power Factor
+power_factor_sensors_group = SensorGroup(
+    unit_of_measurement=None,  # Power Factor hat keine Einheit
+    device_class=None,  # Es gibt keine spezifische device_class für Power Factor
+    state_class=SensorStateClass.MEASUREMENT,  # Wichtig für die Chart-Darstellung
+    icon="mdi:power-plug",
+)
+
 
 # New group for time and scheduling data
 schedule_sensors_group = SensorGroup(
@@ -274,6 +282,13 @@ iso_resistance_sensors = [
  
 ]
 
+# Neue Liste für Power Factor Sensoren
+power_factor_sensors = [
+    {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": True},
+    {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": True},
+    {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": True},
+]
+
 information_sensors = [
     {"name": "Device Type", "key": "devtype", "icon": "information-outline", "enable": False},
     {"name": "Sub Type", "key": "subtype", "icon": "information-outline", "enable": False},
@@ -293,9 +308,6 @@ information_sensors = [
     {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
     {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
     {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
-    {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": False},
-    {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": False},
-    {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": False},
     
     {"name": "Battery Number", "key": "BatNum", "icon": "numeric", "enable": True},
     {"name": "Battery Capacity", "key": "BatCapcity", "icon": "battery", "enable": True},
@@ -407,6 +419,30 @@ battery_schedule_sensors = [
     {"name": "Discharge End Time", "key": "discharge_end_time", "icon": "clock-outline"},
     {"name": "Discharge Day Mask", "key": "discharge_day_mask", "icon": "calendar"},
     {"name": "Discharge Power Percent", "key": "discharge_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 2 Start Time", "key": "discharge2_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 2 End Time", "key": "discharge2_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 2 Day Mask", "key": "discharge2_day_mask", "icon": "calendar"},
+    {"name": "Discharge 2 Power Percent", "key": "discharge2_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 3 Start Time", "key": "discharge3_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 3 End Time", "key": "discharge3_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 3 Day Mask", "key": "discharge3_day_mask", "icon": "calendar"},
+    {"name": "Discharge 3 Power Percent", "key": "discharge3_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 4 Start Time", "key": "discharge4_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 4 End Time", "key": "discharge4_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 4 Day Mask", "key": "discharge4_day_mask", "icon": "calendar"},
+    {"name": "Discharge 4 Power Percent", "key": "discharge4_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 5 Start Time", "key": "discharge5_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 5 End Time", "key": "discharge5_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 5 Day Mask", "key": "discharge5_day_mask", "icon": "calendar"},
+    {"name": "Discharge 5 Power Percent", "key": "discharge5_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 6 Start Time", "key": "discharge6_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 6 End Time", "key": "discharge6_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 6 Day Mask", "key": "discharge6_day_mask", "icon": "calendar"},
+    {"name": "Discharge 6 Power Percent", "key": "discharge6_power_percent", "icon": "flash", "unit_of_measurement": "%"},
+    {"name": "Discharge 7 Start Time", "key": "discharge7_start_time", "icon": "clock-outline"},
+    {"name": "Discharge 7 End Time", "key": "discharge7_end_time", "icon": "clock-outline"},
+    {"name": "Discharge 7 Day Mask", "key": "discharge7_day_mask", "icon": "calendar"},
+    {"name": "Discharge 7 Power Percent", "key": "discharge7_power_percent", "icon": "flash", "unit_of_measurement": "%"},
     # Passive charge and discharge sensors
     {"name": "Passive Charge Enable", "key": "Passive_charge_enable", "icon": "power-settings"},
     {"name": "Passive Grid Charge Power", "key": "Passive_GridChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
@@ -437,6 +473,7 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, battery_schedule_sensors),
     **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
+    **create_sensor_descriptions(power_factor_sensors_group, power_factor_sensors),
 }
 
 
