@@ -15,7 +15,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 190 registers (power, energy, temperature sensors, battery...)
+- Over 220 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
