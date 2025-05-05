@@ -64,7 +64,3 @@ class SajSensor(CoordinatorEntity, SensorEntity):
             self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
         #_LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
-
-    async def async_update(self) -> None:
-        """Update the entity."""
-        await self.coordinator.async_request_refresh()
