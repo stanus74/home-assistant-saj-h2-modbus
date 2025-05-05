@@ -15,7 +15,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 190 registers (power, energy, temperature sensors, battery...)
+- Over 220 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
@@ -23,7 +23,15 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 
 ## Installation
 
-This integration should be available in the HACS default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home Assistant. After restart, this integration can be configured through the integration setup UI.
+This integration is NOT available in the HACS default repository. (the inclusion in HACS has been requested)
+
+1. Open HACS and click the three dots in the top right corner.
+2. Select "Custom repositories," then enter the GitHub URL https://github.com/stanus74/home-assistant-saj-h2-modbus
+3. Choose "Integration" and click "Add."
+4. Find "SAJ H2 Inverter Modbus" and click "Install."
+5. Restart Home Assistant.
+6. After reboot of Home-Assistant, this integration can be configured through the integration setup UI
+
 
 ## Configuration
 
