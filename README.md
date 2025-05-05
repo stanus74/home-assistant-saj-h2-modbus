@@ -91,6 +91,25 @@ Enable this switch to charge/discharge the battery - individually or both.
 
 ### Important! The status of Input-Registers and mode will be updated after 1 interval
 
+### 🚀 Custom Lovelace Card for Charging Control
+
+A custom Lovelace card is available to provide a user-friendly interface for controlling charging settings:
+
+![SAJ H2 Charge Card](www/saj-h2-charge-card/screenshot.png "SAJ H2 Charge Card")
+
+Features:
+- Easy time selection for charge start and end
+- Slider for charge power percentage
+- Checkbox selection for charging days (automatically calculates the day mask)
+- Button to enable/disable charging
+
+To install the card:
+1. Copy the files from the `www/saj-h2-charge-card/` directory to your Home Assistant `/config/www/saj-h2-charge-card/` directory
+2. Add the resource to your Lovelace configuration
+3. Add the card to your dashboard
+
+For detailed installation instructions, see [SAJ H2 Charge Card Installation](www/saj-h2-charge-card/INSTALLATION.md)
+
 
 
 ## Using Input Number Entities

@@ -1,0 +1,142 @@
+.saj-h2-charge-card {
+  padding: 16px;
+}
+
+.card-header {
+  font-size: 1.5rem;
+  font-weight: 500;
+  padding: 16px;
+  text-align: center;
+}
+
+.card-content {
+  padding: 16px;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 10px;
+  color: var(--primary-color);
+}
+
+.time-inputs {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.time-input {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.time-input label {
+  margin-right: 10px;
+  min-width: 50px;
+}
+
+.time-input input {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--divider-color);
+}
+
+.time-selectors {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.time-select {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--divider-color);
+  background-color: var(--card-background-color);
+  color: var(--primary-text-color);
+  width: 60px;
+  text-align: center;
+}
+
+.power-slider {
+  padding: 10px 0;
+}
+
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.slider-container input {
+  flex: 1;
+}
+
+.slider-value {
+  min-width: 40px;
+  text-align: right;
+}
+
+.days-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.day-checkbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.day-checkbox span {
+  margin-top: 4px;
+}
+
+.daymask-value {
+  font-size: 0.9rem;
+  color: var(--secondary-text-color);
+  margin-top: 8px;
+}
+
+.charge-toggle-button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 4px;
+  border: none;
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.charge-toggle-button.active {
+  background-color: var(--error-color);
+}
+
+.charge-status {
+  text-align: center;
+}
+
+.charge-status .active {
+  color: var(--success-color);
+  font-weight: 500;
+}
+
+.charge-status .inactive {
+  color: var(--error-color);
+}
+
+.card-error {
+  padding: 16px;
+  color: var(--error-color);
+}
