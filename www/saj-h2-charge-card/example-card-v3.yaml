@@ -1,6 +1,0 @@
-type: 'custom:saj-h2-charge-card-v3'
-charge_start_entity: text.saj_charge_start_time_time
-charge_end_entity: text.saj_charge_end_time_time
-charge_day_mask_entity: number.saj_charge_day_mask_input
-charge_power_entity: number.saj_charge_power_percent_input
-charging_switch_entity: switch.saj_charging_control
