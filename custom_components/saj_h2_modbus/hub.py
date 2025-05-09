@@ -240,15 +240,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _get_power_state(self, state_register: int, state_type: str) -> bool:
         try:
-            # Lese das State-Register
+            # Read the state register
             state_regs = await self._read_registers(state_register)
             state_value = state_regs[0]
             
-            # Lese das App-Mode-Register (0x3647)
+            # Read the App-Mode register (0x3647)
             app_mode_regs = await self._read_registers(0x3647)
             app_mode_value = app_mode_regs[0]
             
-            # Gib True zurück, wenn beide Bedingungen erfüllt sind
+            # Return True if both conditions are met
             return state_value > 0 and app_mode_value == 1
         except Exception as e:
             _LOGGER.error(f"Error reading {state_type} state: {e}")

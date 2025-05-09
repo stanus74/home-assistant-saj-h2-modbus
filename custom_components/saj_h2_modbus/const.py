@@ -31,10 +31,10 @@ ATTR_MANUFACTURER = "SAJ Electric"
 class SensorGroup:
     unit_of_measurement: Optional[str] = None
     icon: str = ""  # Optional
-    device_class: Optional[str] = None  
-    state_class: Optional[str] = None  
+    device_class: Optional[str] = None
+    state_class: Optional[str] = None
     force_update: bool = False  # New attribute for the group
-    
+
 @dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
     """A class that describes SAJ H2 sensor entities."""
@@ -53,14 +53,14 @@ voltage_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricPotential.VOLT,
     device_class=SensorDeviceClass.VOLTAGE,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:sine-wave",  
+    icon="mdi:sine-wave",
 )
 
 current_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricCurrent.AMPERE,
     device_class=SensorDeviceClass.CURRENT,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:current-dc",  
+    icon="mdi:current-dc",
 )
 
 # New group for sensors with milliampere as unit
@@ -68,39 +68,46 @@ milliampere_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
     device_class=SensorDeviceClass.CURRENT,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:current-dc",  
+    icon="mdi:current-dc",
 )
 
 temperature_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfTemperature.CELSIUS,
     device_class=SensorDeviceClass.TEMPERATURE,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:thermometer",  
+    icon="mdi:thermometer",
 )
 
-energy_sensors_group = SensorGroup(
+# Existing group for total increasing energy sensors
+energy_sensors_total_increasing_group = SensorGroup(
     unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
     device_class=SensorDeviceClass.ENERGY,
     state_class=SensorStateClass.TOTAL_INCREASING,
-    icon="mdi:solar-power",  
+    icon="mdi:chart-line", # Changed icon to better reflect total increasing
+)
+
+# New group for energy sensors that reset periodically
+energy_sensors_periodic_reset_group = SensorGroup(
+    unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL, # Correct state_class for resetting counters
+    icon="mdi:counter", # Icon indicating a counter
 )
 
 information_sensors_group = SensorGroup(
-    icon="mdi:information-outline"  
+    icon="mdi:information-outline"
 )
 
-# gfci_sensors_group was removed and integrated into current_sensors_group
-
 iso_resistance_sensors_group = SensorGroup(
-    unit_of_measurement="kΩ",  
+    unit_of_measurement="kΩ",
     icon="mdi:omega"
 )
 
 battery_sensors_group = SensorGroup(
-    unit_of_measurement='%',  
+    unit_of_measurement='%',
     device_class=SensorDeviceClass.BATTERY,
     state_class=SensorStateClass.MEASUREMENT,
-    icon="mdi:battery"  
+    icon="mdi:battery"
 )
 
 frequency_sensors_group = SensorGroup(
@@ -110,7 +117,6 @@ frequency_sensors_group = SensorGroup(
     icon="mdi:sine-wave"  # Suitable icon for frequency
 )
 
-# Neue Sensorgruppe für Power Factor
 power_factor_sensors_group = SensorGroup(
     unit_of_measurement=None,  # Power Factor hat keine Einheit
     device_class=None,  # Es gibt keine spezifische device_class für Power Factor
@@ -118,8 +124,6 @@ power_factor_sensors_group = SensorGroup(
     icon="mdi:power-plug",
 )
 
-
-# New group for time and scheduling data
 schedule_sensors_group = SensorGroup(
     unit_of_measurement=None,
     icon="mdi:clock-outline",
@@ -130,15 +134,15 @@ schedule_sensors_group = SensorGroup(
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
     for sensor in sensors:
-        
+
         icon = sensor.get("icon", group.icon)
         if icon and not icon.startswith("mdi:"):
             icon = f"mdi:{icon}"
-        
-        
+
+
         enable = sensor.get("enable", True)
         native_unit = sensor.get("unit_of_measurement", group.unit_of_measurement)
-        
+
         descriptions[sensor["key"]] = SajModbusSensorEntityDescription(
             name=sensor["name"],
             key=sensor["key"],
@@ -152,7 +156,6 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     return descriptions
 
 
-
 power_sensors = [
     {"name": "Total Load Power", "key": "TotalLoadPower", "icon": "transmission-tower"},
     {"name": "Grid Load Power", "key": "gridPower", "icon": "power-socket"},
@@ -164,7 +167,7 @@ power_sensors = [
     {"name": "PV2 Power", "key": "pv2Power", "icon": "flash"},
     {"name": "PV3 Power", "key": "pv3Power", "icon": "flash", "enable": False},
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
-    
+
     {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
     {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
@@ -178,22 +181,18 @@ power_sensors = [
     {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "T-Phase Grid Power Watt", "key": "TGridPowerWatt", "icon": "flash", "enable": False},
     {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "icon": "flash-outline", "enable": False},
-    
-   
 ]
-
-
 
 voltage_sensors = [
     {"name": "PV1 Voltage", "key": "pv1Voltage", "icon": "sine-wave"},
     {"name": "PV2 Voltage", "key": "pv2Voltage", "icon": "sine-wave"},
     {"name": "PV3 Voltage", "key": "pv3Voltage", "icon": "sine-wave", "enable": False},
     {"name": "PV4 Voltage", "key": "pv4Voltage", "icon": "sine-wave", "enable": False},
-    
+
     {"name": "R-Phase Grid Voltage", "key": "RGridVolt", "icon": "sine-wave", "enable": False},
     {"name": "S-Phase Grid Voltage", "key": "SGridVolt", "icon": "sine-wave", "enable": False},
     {"name": "T-Phase Grid Voltage", "key": "TGridVolt", "icon": "sine-wave", "enable": False},
-    
+
     {"name": "Battery 1 Voltage", "key": "Bat1Voltage", "icon": "flash", "enable": True},
     {"name": "Battery 2 Voltage", "key": "Bat2Voltage", "icon": "flash", "enable": False},
     {"name": "Battery 3 Voltage", "key": "Bat3Voltage", "icon": "flash", "enable": False},
@@ -204,26 +203,22 @@ voltage_sensors = [
     {"name": "Battery Discharge Cut-off Voltage", "key": "Bat_DisCutOffVolt", "icon": "battery", "enable": False},
 ]
 
-
-
 frequency_sensors = [
-    
     {"name": "R-Phase Grid Frequency", "key": "RGridFreq", "icon": "sine-wave", "enable": False},
     {"name": "S-Phase Grid Frequency", "key": "SGridFreq", "icon": "sine-wave", "enable": False},
     {"name": "T-Phase Grid Frequency", "key": "TGridFreq", "icon": "sine-wave", "enable": False},
-    
 ]
-    
+
 current_sensors = [
     {"name": "PV1 Total Current", "key": "pv1TotalCurrent", "icon": "current-dc"},
     {"name": "PV2 Total Current", "key": "pv2TotalCurrent", "icon": "current-dc"},
     {"name": "PV3 Total Current", "key": "pv3TotalCurrent", "icon": "current-dc", "enable": False},
     {"name": "PV4 Total Current", "key": "pv4TotalCurrent", "icon": "current-dc", "enable": False},
-   
+
     {"name": "R-Phase Grid Current", "key": "RGridCurr", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid Current", "key": "SGridCurr", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid Current", "key": "TGridCurr", "icon": "current-dc", "enable": False},
-    
+
     {"name": "Battery 1 Current", "key": "Bat1Current", "icon": "current-dc", "enable": True},
     {"name": "Battery 2 Current", "key": "Bat2Current", "icon": "current-dc", "enable": False},
     {"name": "Battery 3 Current", "key": "Bat3Current", "icon": "current-dc", "enable": False},
@@ -232,7 +227,6 @@ current_sensors = [
     {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
 ]
 
-# Sensors with milliampere as unit
 milliampere_sensors = [
     {"name": "R-Phase Grid DC Component", "key": "RGridDCI", "icon": "current-dc", "enable": False},
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
@@ -255,34 +249,24 @@ battery_sensors = [
     {"name": "Battery charge depth", "key": "BatcharDepth", "enable": True},
 ]
 
-
-
-
-# gfci_sensors was integrated into current_sensors
-
 temperature_sensors = [
     {"name": "Inverter Temperature", "key": "SinkTemp", "icon": "thermometer"},
     {"name": "Environment Temperature", "key": "AmbTemp", "icon": "thermometer-lines"},
     {"name": "Battery Temperature", "key": "BatTemp", "icon": "battery-thermometer"},
-    
+
     {"name": "Battery 1 Temperature", "key": "Bat1Temperature", "icon": "thermometer", "enable": True},
     {"name": "Battery 2 Temperature", "key": "Bat2Temperature", "icon": "thermometer", "enable": False},
     {"name": "Battery 3 Temperature", "key": "Bat3Temperature", "icon": "thermometer", "enable": False},
     {"name": "Battery 4 Temperature", "key": "Bat4Temperature", "icon": "thermometer", "enable": False},
-] 
-
-
-
+]
 
 iso_resistance_sensors = [
     {"name": "PV1+ Isolation Resistance", "key": "iso1", "icon": "omega"},
     {"name": "PV2+ Isolation Resistance", "key": "iso2", "icon": "omega"},
-    {"name": "PV3+ Isolation Resistance", "key": "iso3", "icon": "omega", "enable": False},  
-    {"name": "PV4+ Isolation Resistance", "key": "iso4", "icon": "omega", "enable": False},  
- 
+    {"name": "PV3+ Isolation Resistance", "key": "iso3", "icon": "omega", "enable": False},
+    {"name": "PV4+ Isolation Resistance", "key": "iso4", "icon": "omega", "enable": False},
 ]
 
-# Neue Liste für Power Factor Sensoren
 power_factor_sensors = [
     {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": True},
     {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": True},
@@ -308,7 +292,7 @@ information_sensors = [
     {"name": "Direction Battery", "key": "directionBattery", "icon": "arrow-all"},
     {"name": "Direction Grid", "key": "directionGrid", "icon": "arrow-all"},
     {"name": "Direction Ouput", "key": "directionOutput", "icon": "arrow-all"},
-    
+
     {"name": "Battery Number", "key": "BatNum", "icon": "numeric", "enable": True},
     {"name": "Battery Capacity", "key": "BatCapcity", "icon": "battery", "enable": True},
     {"name": "Battery User Capacity", "key": "BatUserCap", "icon": "battery", "enable": True},
@@ -317,7 +301,7 @@ information_sensors = [
     {"name": "Battery 2 Cycle Count", "key": "Bat2CycleNum", "icon": "counter", "enable": False},
     {"name": "Battery 3 Cycle Count", "key": "Bat3CycleNum", "icon": "counter", "enable": False},
     {"name": "Battery 4 Cycle Count", "key": "Bat4CycleNum", "icon": "counter", "enable": False},
-    
+
     {"name": "Battery 1 Fault", "key": "Bat1FaultMSG", "icon": "alert", "enable": True},
     {"name": "Battery 1 Warning", "key": "Bat1WarnMSG", "icon": "alert", "enable": True},
     {"name": "Battery 2 Fault", "key": "Bat2FaultMSG", "icon": "alert", "enable": False},
@@ -328,88 +312,83 @@ information_sensors = [
     {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": False},
     {"name": "App Mode", "key": "AppMode", "icon": "information-outline", "enable": True},
 ]
-    
 
+# Sensors that are always increasing (lifetime totals)
+total_increasing_energy_sensors = [
+    {"name": "Total power generation", "key": "totalenergy", "enable": False, "icon": "solar-power"},
+    {"name": "Battery Total Charge", "key": "bat_total_charge", "enable": False, "icon": "battery-charging-100"},
+    {"name": "Battery Total Discharge", "key": "bat_total_discharge", "enable": False, "icon": "battery-minus"},
+    {"name": "Inverter Total Generation", "key": "inv_total_gen", "enable": False, "icon": "solar-power"},
+    {"name": "Total Load", "key": "total_total_load", "enable": True, "icon": "home-import-outline"},
+    {"name": "Sell Total Energy", "key": "sell_total_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Total Energy 2", "key": "sell_total_energy_2", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Total Energy 3", "key": "sell_total_energy_3", "enable": False, "icon": "solar-power"},
+    {"name": "Feed-in Total Energy", "key": "feedin_total_energy", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Total Energy 2", "key": "feedin_total_energy_2", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Total Energy 3", "key": "feedin_total_energy_3", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Total", "key": "sum_feed_in_total", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Sell Total", "key": "sum_sell_total", "enable": False, "icon": "currency-usd"},
+    {"name": "Backup Total Load", "key": "backup_total_load", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Battery Pack 1 Discharge", "key": "Bat1DischarCap", "icon": "battery", "enable": True},
+    {"name": "Battery Pack 2 Discharge", "key": "Bat2DischarCap", "icon": "battery", "enable": False},
+    {"name": "Battery Pack 3 Discharge", "key": "Bat3DischarCap", "icon": "battery", "enable": False},
+    {"name": "Battery Pack 4 Discharge", "key": "Bat4DischarCap", "icon": "battery", "enable": False},
+    {"name": "Total PV Energy 2", "key": "total_pv_energy2", "enable": False, "icon": "solar-power"},
+    {"name": "Total PV Energy 3", "key": "total_pv_energy3", "enable": False, "icon": "solar-power"},
+]
 
-energy_sensors = [
+# Sensors that reset periodically (daily, monthly, yearly)
+periodic_reset_energy_sensors = [
     {"name": "Power current day", "key": "todayenergy", "enable": True, "icon": "solar-power"},
     {"name": "Power current month", "key": "monthenergy", "enable": False, "icon": "solar-power"},
     {"name": "Power current year", "key": "yearenergy", "enable": False, "icon": "solar-power"},
-    {"name": "Total power generation", "key": "totalenergy", "enable": False, "icon": "solar-power"},
     {"name": "Battery Today Charge", "key": "bat_today_charge", "enable": False, "icon": "battery-charging"},
     {"name": "Battery Month Charge", "key": "bat_month_charge", "enable": False, "icon": "battery-charging"},
     {"name": "Battery Year Charge", "key": "bat_year_charge", "enable": False, "icon": "battery-charging"},
-    {"name": "Battery Total Charge", "key": "bat_total_charge", "enable": False, "icon": "battery-charging-100"},
     {"name": "Battery Today Discharge", "key": "bat_today_discharge", "enable": False, "icon": "battery-minus"},
     {"name": "Battery Month Discharge", "key": "bat_month_discharge", "enable": False, "icon": "battery-minus"},
     {"name": "Battery Year Discharge", "key": "bat_year_discharge", "enable": False, "icon": "battery-minus"},
-    {"name": "Battery Total Discharge", "key": "bat_total_discharge", "enable": False, "icon": "battery-minus"},
     {"name": "Inverter Today Generation", "key": "inv_today_gen", "enable": False, "icon": "solar-power"},
     {"name": "Inverter Month Generation", "key": "inv_month_gen", "enable": False, "icon": "solar-power"},
     {"name": "Inverter Year Generation", "key": "inv_year_gen", "enable": False, "icon": "solar-power"},
-    {"name": "Inverter Total Generation", "key": "inv_total_gen", "enable": False, "icon": "solar-power"},
     {"name": "Total Today Load", "key": "total_today_load", "enable": True, "icon": "home-import-outline"},
     {"name": "Total Month Load", "key": "total_month_load", "enable": False, "icon": "home-import-outline"},
     {"name": "Total Year Load", "key": "total_year_load", "enable": False, "icon": "home-import-outline"},
-    {"name": "Total Load", "key": "total_total_load", "enable": True, "icon": "home-import-outline"},
-    {"name": "Sell Today Energy", "key": "sell_today_energy", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Today Energy", "key": "sell_today_energy", "enable": True, "icon": "solar-power"}, # Enabled this as per user's log
     {"name": "Sell Month Energy", "key": "sell_month_energy", "enable": False, "icon": "solar-power"},
     {"name": "Sell Year Energy", "key": "sell_year_energy", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Total Energy", "key": "sell_total_energy", "enable": False, "icon": "solar-power"},
     {"name": "Sell Today Energy 2", "key": "sell_today_energy_2", "enable": False, "icon": "solar-power"},
     {"name": "Sell Month Energy 2", "key": "sell_month_energy_2", "enable": False, "icon": "solar-power"},
     {"name": "Sell Year Energy 2", "key": "sell_year_energy_2", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Total Energy 2", "key": "sell_total_energy_2", "enable": False, "icon": "solar-power"},
     {"name": "Sell Today Energy 3", "key": "sell_today_energy_3", "enable": False, "icon": "solar-power"},
     {"name": "Sell Month Energy 3", "key": "sell_month_energy_3", "enable": False, "icon": "solar-power"},
     {"name": "Sell Year Energy 3", "key": "sell_year_energy_3", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Total Energy 3", "key": "sell_total_energy_3", "enable": False, "icon": "solar-power"},
     {"name": "Feed-in Today Energy", "key": "feedin_today_energy", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-in Month Energy", "key": "feedin_month_energy", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-in Year Energy", "key": "feedin_year_energy", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-in Total Energy", "key": "feedin_total_energy", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-In Today Energy 2", "key": "feedin_today_energy_2", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-In Month Energy 2", "key": "feedin_month_energy_2", "enable": False, "icon": "calendar-month"},
     {"name": "Feed-In Year Energy 2", "key": "feedin_year_energy_2", "enable": False, "icon": "calendar"},
-    {"name": "Feed-In Total Energy 2", "key": "feedin_total_energy_2", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-In Today Energy 3", "key": "feedin_today_energy_3", "enable": False, "icon": "transmission-tower"},
     {"name": "Feed-In Month Energy 3", "key": "feedin_month_energy_3", "enable": False, "icon": "calendar-month"},
     {"name": "Feed-In Year Energy 3", "key": "feedin_year_energy_3", "enable": False, "icon": "calendar"},
-    {"name": "Feed-In Total Energy 3", "key": "feedin_total_energy_3", "enable": False, "icon": "transmission-tower"},
     {"name": "Sum All Phases Feed-In Today", "key": "sum_feed_in_today", "enable": True, "icon": "transmission-tower"},
     {"name": "Sum All Phases Feed-In Month", "key": "sum_feed_in_month", "enable": False, "icon": "transmission-tower"},
     {"name": "Sum All Phases Feed-In Year", "key": "sum_feed_in_year", "enable": False, "icon": "transmission-tower"},
-    {"name": "Sum All Phases Feed-In Total", "key": "sum_feed_in_total", "enable": False, "icon": "transmission-tower"},
     {"name": "Sum All Phases Sell Today", "key": "sum_sell_today", "enable": True, "icon": "currency-usd"},
     {"name": "Sum All Phases Sell Month", "key": "sum_sell_month", "enable": False, "icon": "currency-usd"},
     {"name": "Sum All Phases Sell Year", "key": "sum_sell_year", "enable": False, "icon": "currency-usd"},
-    {"name": "Sum All Phases Sell Total", "key": "sum_sell_total", "enable": False, "icon": "currency-usd"},
     {"name": "Backup Today Load", "key": "backup_today_load", "enable": False, "icon": "lightning-bolt"},
     {"name": "Backup Month Load", "key": "backup_month_load", "enable": False, "icon": "lightning-bolt"},
     {"name": "Backup Year Load", "key": "backup_year_load", "enable": False, "icon": "lightning-bolt"},
-    {"name": "Backup Total Load", "key": "backup_total_load", "enable": False, "icon": "lightning-bolt"},
-
-    {"name": "Battery Pack 1 Discharge", "key": "Bat1DischarCap", "icon": "battery", "enable": True},
-   
-    {"name": "Battery Pack 2 Discharge", "key": "Bat2DischarCap", "icon": "battery", "enable": False},
-    
-    {"name": "Battery Pack 3 Discharge", "key": "Bat3DischarCap", "icon": "battery", "enable": False},
-  
-    {"name": "Battery Pack 4 Discharge", "key": "Bat4DischarCap", "icon": "battery", "enable": False},
-    
-
     {"name": "Today PV Energy 2", "key": "today_pv_energy2", "enable": False, "icon": "solar-power"},
     {"name": "Month PV Energy 2", "key": "month_pv_energy2", "enable": False, "icon": "solar-power"},
     {"name": "Year PV Energy 2", "key": "year_pv_energy2", "enable": False, "icon": "solar-power"},
-    {"name": "Total PV Energy 2", "key": "total_pv_energy2", "enable": False, "icon": "solar-power"},
     {"name": "Today PV Energy 3", "key": "today_pv_energy3", "enable": False, "icon": "solar-power"},
     {"name": "Month PV Energy 3", "key": "month_pv_energy3", "enable": False, "icon": "solar-power"},
     {"name": "Year PV Energy 3", "key": "year_pv_energy3", "enable": False, "icon": "solar-power"},
-    {"name": "Total PV Energy 3", "key": "total_pv_energy3", "enable": False, "icon": "solar-power"},
 ]
-    
 
-# Define sensors for battery charge/discharge schedule:
 battery_schedule_sensors = [
     {"name": "Charge Start Time", "key": "charge_start_time", "icon": "clock-outline"},
     {"name": "Charge End Time", "key": "charge_end_time", "icon": "clock-outline"},
@@ -443,7 +422,6 @@ battery_schedule_sensors = [
     {"name": "Discharge 7 End Time", "key": "discharge7_end_time", "icon": "clock-outline"},
     {"name": "Discharge 7 Day Mask", "key": "discharge7_day_mask", "icon": "calendar"},
     {"name": "Discharge 7 Power Percent", "key": "discharge7_power_percent", "icon": "flash", "unit_of_measurement": "%"},
-    # Passive charge and discharge sensors
     {"name": "Passive Charge Enable", "key": "Passive_charge_enable", "icon": "power-settings"},
     {"name": "Passive Grid Charge Power", "key": "Passive_GridChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
     {"name": "Passive Grid Discharge Power", "key": "Passive_GridDisChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
@@ -451,14 +429,11 @@ battery_schedule_sensors = [
     {"name": "Passive Battery Discharge Power", "key": "Passive_BatDisChargePower", "icon": "battery", "unit_of_measurement": "%"},
 ]
 
-# Define Anti-Reflux sensors:
 anti_reflux_sensors = [
     {"name": "Anti-Reflux Power Limit", "key": "AntiRefluxPowerLimit", "icon": "flash-outline"},
     {"name": "Anti-Reflux Current Limit", "key": "AntiRefluxCurrentLimit", "icon": "current-dc"},
     {"name": "Anti-Reflux Current Mode", "key": "AntiRefluxCurrentmode", "icon": "cog-outline"},
 ]
-
-
 
 SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
@@ -466,16 +441,16 @@ SENSOR_TYPES = {
     **create_sensor_descriptions(current_sensors_group, current_sensors),
     **create_sensor_descriptions(milliampere_sensors_group, milliampere_sensors),
     **create_sensor_descriptions(temperature_sensors_group, temperature_sensors),
-    **create_sensor_descriptions(energy_sensors_group, energy_sensors),
+    **create_sensor_descriptions(energy_sensors_total_increasing_group, total_increasing_energy_sensors),
+    **create_sensor_descriptions(energy_sensors_periodic_reset_group, periodic_reset_energy_sensors),
     **create_sensor_descriptions(information_sensors_group, information_sensors),
     **create_sensor_descriptions(iso_resistance_sensors_group, iso_resistance_sensors),
-    **create_sensor_descriptions(battery_sensors_group, battery_sensors), 
+    **create_sensor_descriptions(battery_sensors_group, battery_sensors),
     **create_sensor_descriptions(frequency_sensors_group,frequency_sensors),
     **create_sensor_descriptions(schedule_sensors_group, battery_schedule_sensors),
     **create_sensor_descriptions(information_sensors_group, anti_reflux_sensors),
     **create_sensor_descriptions(power_factor_sensors_group, power_factor_sensors),
 }
-
 
 DEVICE_STATUSSES = {
     0: "Initialization",
@@ -526,8 +501,6 @@ FAULT_MESSAGES = {
 		0x80000000: "Reserved (bit 96)",
 },
 
-
-
     1: {
 		0x00000001: "Master Bus Voltage High",
 		0x00000002: "Master Bus Voltage Low",
@@ -563,9 +536,6 @@ FAULT_MESSAGES = {
 		0x80000000: "Lost Communication D <-> C",
     },
 
-    
-    
-        
     2: {
 		0x80000000: "Bus Voltage Balance Error",
 		0x40000000: "ISO Error",
@@ -600,6 +570,4 @@ FAULT_MESSAGES = {
 		0x00000002: "EEPROM Error",
 		0x00000001: "Relay Error",
     },
-
-
 }
