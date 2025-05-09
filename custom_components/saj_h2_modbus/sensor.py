@@ -80,4 +80,5 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self.async_on_remove(
             self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
+
         #_LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
