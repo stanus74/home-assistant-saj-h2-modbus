@@ -238,21 +238,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
 
-    async def _get_state(self, register: int, state_type: str) -> bool:
-        
+    async def _get_power_state(self, state_register: int, state_type: str) -> bool:
         try:
-            regs = await self._read_registers(register)
+            # Read the state register
+            state_regs = await self._read_registers(state_register)
+            state_value = state_regs[0]
             
-            return bool(regs[0])
+            # Read the App-Mode register (0x3647)
+            app_mode_regs = await self._read_registers(0x3647)
+            app_mode_value = app_mode_regs[0]
+            
+            # Return True if both conditions are met
+            return state_value > 0 and app_mode_value == 1
         except Exception as e:
             _LOGGER.error(f"Error reading {state_type} state: {e}")
             return False
             
     async def get_charging_state(self) -> bool:
-        return await self._get_state(0x3604, "Charging")
+        return await self._get_power_state(0x3604, "Charging")
 
     async def get_discharging_state(self) -> bool:
-        return await self._get_state(0x3605, "Discharging")
+        return await self._get_power_state(0x3605, "Discharging")
 
     async def _read_registers(self, address: int, count: int = 1) -> List[int]:
         return await try_read_registers(

@@ -2,8 +2,9 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 import logging
 
 from .const import DOMAIN, SENSOR_TYPES, SajModbusSensorEntityDescription
@@ -36,8 +37,24 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{hub.name} {description.name}"
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
-                
-       
+
+    @property
+    def native_last_reset_time(self):
+        """Return the time when the sensor was last reset, if applicable."""
+        if self.entity_description.state_class == SensorStateClass.TOTAL:
+            key = self.entity_description.key
+            now = dt_util.utcnow()
+            if "_today_" in key or key.startswith("today") or key.endswith("_today") or \
+               "current day" in self.entity_description.name.lower() or \
+               "today " in self.entity_description.name.lower(): # Covers "Power current day", "Sell Today Energy"
+                return now.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif "_month_" in key or key.startswith("month") or key.endswith("_month") or \
+                 "current month" in self.entity_description.name.lower():
+                return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            elif "_year_" in key or key.startswith("year") or key.endswith("_year") or \
+                 "current year" in self.entity_description.name.lower():
+                return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        return None
 
     @property
     def native_value(self):
@@ -63,4 +80,5 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self.async_on_remove(
             self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
+
         #_LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
