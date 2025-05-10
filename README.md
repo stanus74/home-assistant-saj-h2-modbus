@@ -15,7 +15,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 190 registers (power, energy, temperature sensors, battery...)
+- Over 220 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
@@ -23,7 +23,15 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 
 ## Installation
 
-This integration should be available in the HACS default repository. Simply go to HACS and search for "SAJ H2 Inverter Modbus", click it and click "Download". Don't forget to restart Home Assistant. After restart, this integration can be configured through the integration setup UI.
+This integration is NOT available in the HACS default repository. (the inclusion in HACS has been requested)
+
+1. Open HACS and click the three dots in the top right corner.
+2. Select "Custom repositories," then enter the GitHub URL https://github.com/stanus74/home-assistant-saj-h2-modbus
+3. Choose "Integration" and click "Add."
+4. Find "SAJ H2 Inverter Modbus" and click "Install."
+5. Restart Home Assistant.
+6. After reboot of Home-Assistant, this integration can be configured through the integration setup UI
+
 
 ## Configuration
 
@@ -59,29 +67,19 @@ Perfect for zero export or dynamic grid feed-in limitation.
 
 ### Configure Charging and Discharging Time and Power
 
-![Charging Settings](images/saj_h2_modbus/switch.png "Switch to Time-of-Use Mode")
+#### 🚀 Custom Lovelace Card for Charging/Discharging Control
 
-**You can set the Inverter to "Time-of-Use" Mode with this switch.**
+A custom Lovelace card is available to provide a user-friendly interface for controlling charging settings:
 
-Enable this switch to charge/discharge the battery - individually or both.
+![SAJ H2 Charge Card](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/images/saj_h2_modbus/charge.png "SAJ H2 Charge Card")
 
-![Charging Settings](images/saj_h2_modbus/input1.png "Home Assistant SAJ H2 Charging Settings")
+Features:
+- Easy time selection for charge start and end
+- Slider for charge power percentage
+- Checkbox selection for charging days (automatically calculates the day mask)
+- Button to enable/disable charging
 
-
-- **Day Mask**: This is a bitmask to select charging days (e.g., Monday to Sunday = 127, calculated as 1 + 2 + 4 + 8 + 16 + 32 + 64).
-- **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. **Note**: The integration limits charging power to a maximum of 25%.
-
-
-![Charging Settings](images/saj_h2_modbus/input2.png "")
-
-
-**To discharge from the battery, you must enable the 'Export' switch in the SAJ App under 'Working Mode' > 'Time-of-Use'.**
-
-
-<img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
-
-
-### Important! The status of Input-Registers and mode will be updated after 1 interval
+For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
 
 
 
@@ -143,7 +141,6 @@ input_number:
     mode: box
     icon: mdi:information-outline
 ```
-
 
 
 
