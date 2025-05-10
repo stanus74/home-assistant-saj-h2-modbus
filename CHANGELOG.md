@@ -1,3 +1,8 @@
+# Changelog (v2.2.1)
+
+### Fixed
+
+Fixed an issue where enabling multiple sensors caused the Modbus adapter to become unresponsive due to excessive read requests. Removed the custom `async_update` method (sensor.py), using the base class implementation instead. Sensors now update only via the coordinator's regular refresh interval, reducing load and preventing communication failures.
 
 # Changelog (v2.2.0)
 
