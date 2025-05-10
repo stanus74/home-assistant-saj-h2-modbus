@@ -11,6 +11,9 @@ Lock: TypeAlias = asyncio.Lock
 
 _LOGGER = logging.getLogger(__name__)
 
+# Set to True to enable detailed Modbus read attempt logging, False to disable
+ENABLE_DETAILED_MODBUS_READ_LOGGING = True
+
 class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
     pass
@@ -170,11 +173,27 @@ async def try_read_registers(
 
     async def read_once():
         async with lock:
+            # Log the request details before making the call
+            if ENABLE_DETAILED_MODBUS_READ_LOGGING:
+                _LOGGER.debug(f"Attempting to read {count} registers from address {address} (unit: {unit}) for task: Modbus-Read")
             response = await client.read_holding_registers(
                 address=address, count=count, slave=unit
             )
-        if response.isError() or not hasattr(response, "registers"):
-            raise ModbusIOException("Invalid or error response")
+        # Check if response is an error and log details
+        if response.isError():
+            # pymodbus specific: response.exception_code might be available
+            exception_code = getattr(response, 'exception_code', 'N/A')
+            _LOGGER.error(
+                f"Modbus error response received for task 'Modbus-Read' reading address {address}, count {count}. "
+                f"Function code: {response.function_code}, Exception code: {exception_code}"
+            )
+            # The exception message is also made more informative
+            raise ModbusIOException(f"Invalid or error response (FC: {response.function_code}, EC: {exception_code}) for task 'Modbus-Read' addr {address}, count {count}")
+        if not hasattr(response, "registers"):
+            _LOGGER.error(
+                f"Modbus response for task 'Modbus-Read' reading address {address}, count {count} has no 'registers' attribute."
+            )
+            raise ModbusIOException(f"No 'registers' in response for task 'Modbus-Read' addr {address}, count {count}")
         return response.registers  # type: ignore
 
     return await _retry_with_backoff(
