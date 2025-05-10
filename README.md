@@ -67,35 +67,11 @@ Perfect for zero export or dynamic grid feed-in limitation.
 
 ### Configure Charging and Discharging Time and Power
 
-![Charging Settings](images/saj_h2_modbus/switch.png "Switch to Time-of-Use Mode")
-
-**You can set the Inverter to "Time-of-Use" Mode with this switch.**
-
-Enable this switch to charge/discharge the battery - individually or both.
-
-![Charging Settings](images/saj_h2_modbus/input1.png "Home Assistant SAJ H2 Charging Settings")
-
-
-- **Day Mask**: This is a bitmask to select charging days (e.g., Monday to Sunday = 127, calculated as 1 + 2 + 4 + 8 + 16 + 32 + 64).
-- **Charging/Discharging Power**: The power is set as a percentage of the inverter’s maximum capacity. For example, 10% of an 8000-watt inverter equals 800 watts. **Note**: The integration limits charging power to a maximum of 25%.
-
-
-![Charging Settings](images/saj_h2_modbus/input2.png "")
-
-
-**To discharge from the battery, you must enable the 'Export' switch in the SAJ App under 'Working Mode' > 'Time-of-Use'.**
-
-
-<img src="images/saj_h2_modbus/export.jpg" alt="Charging Settings" title="enable discharging from battery" width="400">
-
-
-### Important! The status of Input-Registers and mode will be updated after 1 interval
-
-### 🚀 Custom Lovelace Card for Charging Control
+#### 🚀 Custom Lovelace Card for Charging/Discharging Control
 
 A custom Lovelace card is available to provide a user-friendly interface for controlling charging settings:
 
-![SAJ H2 Charge Card](www/saj-h2-charge-card/screenshot.png "SAJ H2 Charge Card")
+![SAJ H2 Charge Card](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/images/saj_h2_modbus/charge.png "SAJ H2 Charge Card")
 
 Features:
 - Easy time selection for charge start and end
@@ -103,12 +79,7 @@ Features:
 - Checkbox selection for charging days (automatically calculates the day mask)
 - Button to enable/disable charging
 
-To install the card:
-1. Copy the files from the `www/saj-h2-charge-card/` directory to your Home Assistant `/config/www/saj-h2-charge-card/` directory
-2. Add the resource to your Lovelace configuration
-3. Add the card to your dashboard
-
-For detailed installation instructions, see [SAJ H2 Charge Card Installation](www/saj-h2-charge-card/INSTALLATION.md)
+For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
 
 
 
