@@ -1,3 +1,20 @@
+# Changelog (v2.2.2)
+
+### Fix for Sensor Configuration of Periodic Energy Meters
+- **Corrected `state_class`:** Changed `state_class` for periodically resetting energy sensors (e.g., `sensor.saj_sell_today_energy`, `sensor.saj_todayenergy`) from `TOTAL_INCREASING` to `TOTAL`. This resolves Home Assistant log warnings about non-strictly increasing values and ensures accurate sensor interpretation.
+- **Added `native_last_reset_time`:** Introduced `native_last_reset_time` for these sensors, providing Home Assistant with precise reset times for improved Energy Dashboard accuracy and long-term statistics.
+- **Default Activation:** The `sell_today_energy` sensor is now enabled by default.
+
+### Improved Charge/Discharge Switch Status Detection
+- **Enhanced Logic:** Updated the logic for determining the status of charge (register 0x3604) and discharge (register 0x3605) switches by also checking the App-Mode register (0x3647).
+- **New Condition:** A switch is now shown as "active" only if:
+  1. The specific status register indicates an active operation (value > 0).
+  2. The App-Mode register (0x3647) is set to 1, confirming the operational mode for charge/discharge functions.
+- **Benefit:** Prevents incorrect "active" status indications when the overarching App-Mode does not permit charging or discharging.
+
+These changes ensure more accurate energy data representation and reliable switch status reporting in Home Assistant.
+
+
 # Changelog (v2.2.1)
 
 ### Fixed
