@@ -12,7 +12,7 @@ Lock: TypeAlias = asyncio.Lock
 _LOGGER = logging.getLogger(__name__)
 
 # Set to True to enable detailed Modbus read attempt logging, False to disable
-ENABLE_DETAILED_MODBUS_READ_LOGGING = True
+ENABLE_DETAILED_MODBUS_READ_LOGGING = False
 
 class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
