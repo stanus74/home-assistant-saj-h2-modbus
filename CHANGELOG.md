@@ -1,3 +1,27 @@
+# Changelog (v2.2.3)
+
+### Added Battery and Grid Power Limit Controls
+
+Added new input entities for controlling battery and grid power limits:
+
+- **Battery Power Limits**
+  - `SAJ Battery On Grid Discharge Depth (Input)` - Register 0x3644
+  - `SAJ Battery Off Grid Discharge Depth (Input)` - Register 0x3645
+  - `SAJ Battery Capacity Charge Upper Limit (Input)` - Register 0x3646
+  - `SAJ Battery Charge Power Limit (Input)` - Register 0x364D
+  - `SAJ Battery Discharge Power Limit (Input)` - Register 0x364E
+
+- **Grid Power Limits**
+  - `SAJ Grid Max Charge Power (Input)` - Register 0x364F
+  - `SAJ Grid Max Discharge Power (Input)` - Register 0x3650
+
+All power limit entities (0x364D-0x3650) have:
+- Range: 0-1100
+- Step size: 100
+- Default: 1100 
+
+## **Important: 1000 is 100%**
+
 # Changelog (v2.2.2)
 
 ### Fix for Sensor Configuration of Periodic Energy Meters

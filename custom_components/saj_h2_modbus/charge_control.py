@@ -43,6 +43,13 @@ PENDING_FIELDS: List[tuple[str, str]] = [
     ("discharging", "discharging_state"),
     ("app_mode", "app_mode"),
     ("discharge_time_enable", "discharge_time_enable"),
+    ("battery_on_grid_discharge_depth", "battery_on_grid_discharge_depth"),
+    ("battery_off_grid_discharge_depth", "battery_off_grid_discharge_depth"),
+    ("battery_capacity_charge_upper_limit", "battery_capacity_charge_upper_limit"),
+    ("battery_charge_power_limit", "battery_charge_power_limit"),
+    ("battery_discharge_power_limit", "battery_discharge_power_limit"),
+    ("grid_max_charge_power", "grid_max_charge_power"),
+    ("grid_max_discharge_power", "grid_max_discharge_power"),
 ]
 
 # --- Register Definitions ---
@@ -91,6 +98,13 @@ REGISTERS = {
     "app_mode": 0x3647,
     "charging_state": 0x3604,
     "discharging_state": 0x3605,
+    "battery_on_grid_discharge_depth": 0x3644,
+    "battery_off_grid_discharge_depth": 0x3645,
+    "battery_capacity_charge_upper_limit": 0x3646,
+    "battery_charge_power_limit": 0x364D,
+    "battery_discharge_power_limit": 0x364E,
+    "grid_max_charge_power": 0x364F,
+    "grid_max_discharge_power": 0x3650,
 }
 
 
@@ -335,6 +349,69 @@ class ChargeSettingHandler:
             REGISTERS["discharging_state"],
             "discharge time enable",
             lambda: setattr(self._hub, "_pending_discharge_time_enable", None)
+        )
+
+    async def handle_battery_on_grid_discharge_depth(self) -> None:
+        """Handles the Battery On Grid Discharge Depth value"""
+        await self._handle_simple_register(
+            self._hub._pending_battery_on_grid_discharge_depth,
+            REGISTERS["battery_on_grid_discharge_depth"],
+            "battery on grid discharge depth",
+            lambda: setattr(self._hub, "_pending_battery_on_grid_discharge_depth", None)
+        )
+
+    async def handle_battery_off_grid_discharge_depth(self) -> None:
+        """Handles the Battery Off Grid Discharge Depth value"""
+        await self._handle_simple_register(
+            self._hub._pending_battery_off_grid_discharge_depth,
+            REGISTERS["battery_off_grid_discharge_depth"],
+            "battery off grid discharge depth",
+            lambda: setattr(self._hub, "_pending_battery_off_grid_discharge_depth", None)
+        )
+
+    async def handle_battery_capacity_charge_upper_limit(self) -> None:
+        """Handles the Battery Capacity Charge Upper Limit value"""
+        await self._handle_simple_register(
+            self._hub._pending_battery_capacity_charge_upper_limit,
+            REGISTERS["battery_capacity_charge_upper_limit"],
+            "battery capacity charge upper limit",
+            lambda: setattr(self._hub, "_pending_battery_capacity_charge_upper_limit", None)
+        )
+
+    async def handle_battery_charge_power_limit(self) -> None:
+        """Handles the Battery Charge Power Limit value"""
+        await self._handle_simple_register(
+            self._hub._pending_battery_charge_power_limit,
+            REGISTERS["battery_charge_power_limit"],
+            "battery charge power limit",
+            lambda: setattr(self._hub, "_pending_battery_charge_power_limit", None)
+        )
+
+    async def handle_battery_discharge_power_limit(self) -> None:
+        """Handles the Battery Discharge Power Limit value"""
+        await self._handle_simple_register(
+            self._hub._pending_battery_discharge_power_limit,
+            REGISTERS["battery_discharge_power_limit"],
+            "battery discharge power limit",
+            lambda: setattr(self._hub, "_pending_battery_discharge_power_limit", None)
+        )
+
+    async def handle_grid_max_charge_power(self) -> None:
+        """Handles the Grid Max Charge Power value"""
+        await self._handle_simple_register(
+            self._hub._pending_grid_max_charge_power,
+            REGISTERS["grid_max_charge_power"],
+            "grid max charge power",
+            lambda: setattr(self._hub, "_pending_grid_max_charge_power", None)
+        )
+
+    async def handle_grid_max_discharge_power(self) -> None:
+        """Handles the Grid Max Discharge Power value"""
+        await self._handle_simple_register(
+            self._hub._pending_grid_max_discharge_power,
+            REGISTERS["grid_max_discharge_power"],
+            "grid max discharge power",
+            lambda: setattr(self._hub, "_pending_grid_max_discharge_power", None)
         )
 
     async def _handle_simple_register(

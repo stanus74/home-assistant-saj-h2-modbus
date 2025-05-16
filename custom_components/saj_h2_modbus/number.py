@@ -16,7 +16,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SajChargePowerPercentInputEntity(hub),
         SajExportLimitInputEntity(hub),
         SajAppModeInputEntity(hub),
-        SajDischargeTimeEnableInputEntity(hub)
+        SajDischargeTimeEnableInputEntity(hub),
+        SajBatteryOnGridDischargeDepthEntity(hub),
+        SajBatteryOffGridDischargeDepthEntity(hub),
+        SajBatteryCapacityChargeUpperLimitEntity(hub),
+        SajBatteryChargePowerLimitEntity(hub),
+        SajBatteryDischargePowerLimitEntity(hub),
+        SajGridMaxChargePowerEntity(hub),
+        SajGridMaxDischargePowerEntity(hub)
     ]
     
     # Discharge Day Mask Entities (1-7)
@@ -197,4 +204,109 @@ class SajDischargeTimeEnableInputEntity(SajNumberEntity):
         self._attr_native_value = val
         # Use the set_discharge_time_enable method of the Hub
         await self._hub.set_discharge_time_enable(val)
+        self.async_write_ha_state()
+
+class SajBatteryOnGridDischargeDepthEntity(SajNumberEntity):
+    """Entity for Battery On Grid Discharge Depth (0-100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Battery On Grid Discharge Depth (Input)", "saj_battery_on_grid_discharge_depth_input", 0, 100, 1, 20)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 100:
+            _LOGGER.error(f"Invalid battery on grid discharge depth: {val}")
+            return
+        _LOGGER.debug(f"Setting battery on grid discharge depth to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_battery_on_grid_discharge_depth(val)
+        self.async_write_ha_state()
+
+class SajBatteryOffGridDischargeDepthEntity(SajNumberEntity):
+    """Entity for Battery Off Grid Discharge Depth (0-100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Battery Off Grid Discharge Depth (Input)", "saj_battery_off_grid_discharge_depth_input", 0, 100, 1, 20)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 100:
+            _LOGGER.error(f"Invalid battery off grid discharge depth: {val}")
+            return
+        _LOGGER.debug(f"Setting battery off grid discharge depth to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_battery_off_grid_discharge_depth(val)
+        self.async_write_ha_state()
+
+class SajBatteryCapacityChargeUpperLimitEntity(SajNumberEntity):
+    """Entity for Battery Capacity Charge Upper Limit (0-100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Battery Capacity Charge Upper Limit (Input)", "saj_battery_capacity_charge_upper_limit_input", 0, 100, 1, 100)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 100:
+            _LOGGER.error(f"Invalid battery capacity charge upper limit: {val}")
+            return
+        _LOGGER.debug(f"Setting battery capacity charge upper limit to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_battery_capacity_charge_upper_limit(val)
+        self.async_write_ha_state()
+
+class SajBatteryChargePowerLimitEntity(SajNumberEntity):
+    """Entity for Battery Charge Power Limit (0-1100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Battery Charge Power Limit (Input)", "saj_battery_charge_power_limit_input", 0, 1100, 100, 1100)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 1100:
+            _LOGGER.error(f"Invalid battery charge power limit: {val}")
+            return
+        _LOGGER.debug(f"Setting battery charge power limit to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_battery_charge_power_limit(val)
+        self.async_write_ha_state()
+
+class SajBatteryDischargePowerLimitEntity(SajNumberEntity):
+    """Entity for Battery Discharge Power Limit (0-1100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Battery Discharge Power Limit (Input)", "saj_battery_discharge_power_limit_input", 0, 1100, 100, 1100)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 1100:
+            _LOGGER.error(f"Invalid battery discharge power limit: {val}")
+            return
+        _LOGGER.debug(f"Setting battery discharge power limit to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_battery_discharge_power_limit(val)
+        self.async_write_ha_state()
+
+class SajGridMaxChargePowerEntity(SajNumberEntity):
+    """Entity for Grid Max Charge Power (0-1100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Grid Max Charge Power (Input)", "saj_grid_max_charge_power_input", 0, 1100, 100, 1100)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 1100:
+            _LOGGER.error(f"Invalid grid max charge power: {val}")
+            return
+        _LOGGER.debug(f"Setting grid max charge power to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_grid_max_charge_power(val)
+        self.async_write_ha_state()
+
+class SajGridMaxDischargePowerEntity(SajNumberEntity):
+    """Entity for Grid Max Discharge Power (0-1100)."""
+    def __init__(self, hub):
+        super().__init__(hub, "SAJ Grid Max Discharge Power (Input)", "saj_grid_max_discharge_power_input", 0, 1100, 100, 1100)
+
+    async def async_set_native_value(self, value):
+        val = int(value)
+        if not 0 <= val <= 1100:
+            _LOGGER.error(f"Invalid grid max discharge power: {val}")
+            return
+        _LOGGER.debug(f"Setting grid max discharge power to: {val}")
+        self._attr_native_value = val
+        await self._hub.set_grid_max_discharge_power(val)
         self.async_write_ha_state()

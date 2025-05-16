@@ -85,8 +85,36 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_discharging_state: Optional[bool] = None
         self._pending_app_mode: Optional[int] = None
         self._pending_discharge_time_enable: Optional[int] = None
+        self._pending_battery_on_grid_discharge_depth: Optional[int] = None
+        self._pending_battery_off_grid_discharge_depth: Optional[int] = None
+        self._pending_battery_capacity_charge_upper_limit: Optional[int] = None
+        self._pending_battery_charge_power_limit: Optional[int] = None
+        self._pending_battery_discharge_power_limit: Optional[int] = None
+        self._pending_grid_max_charge_power: Optional[int] = None
+        self._pending_grid_max_discharge_power: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
+
+    async def set_battery_charge_power_limit(self, value: int) -> None:
+        self._pending_battery_charge_power_limit = value
+
+    async def set_battery_discharge_power_limit(self, value: int) -> None:
+        self._pending_battery_discharge_power_limit = value
+
+    async def set_grid_max_charge_power(self, value: int) -> None:
+        self._pending_grid_max_charge_power = value
+
+    async def set_grid_max_discharge_power(self, value: int) -> None:
+        self._pending_grid_max_discharge_power = value
+
+    async def set_battery_on_grid_discharge_depth(self, value: int) -> None:
+        self._pending_battery_on_grid_discharge_depth = value
+
+    async def set_battery_off_grid_discharge_depth(self, value: int) -> None:
+        self._pending_battery_off_grid_discharge_depth = value
+
+    async def set_battery_capacity_charge_upper_limit(self, value: int) -> None:
+        self._pending_battery_capacity_charge_upper_limit = value
 
     for _name, _suffix in PENDING_FIELDS:
         locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
@@ -185,6 +213,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     (True, self._setting_handler.handle_export_limit),
                     (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
                     (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
+                    (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
+                    (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
+                    (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
+                    (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
+                    (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
+                    (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
+                    (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
                 ]
                 
                 for condition, handler in pending_handlers:
