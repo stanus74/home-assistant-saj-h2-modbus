@@ -118,9 +118,9 @@ frequency_sensors_group = SensorGroup(
 )
 
 power_factor_sensors_group = SensorGroup(
-    unit_of_measurement=None,  # Power Factor hat keine Einheit
-    device_class=None,  # Es gibt keine spezifische device_class für Power Factor
-    state_class=SensorStateClass.MEASUREMENT,  # Wichtig für die Chart-Darstellung
+    unit_of_measurement=None,  # Power Factor has no unit
+    device_class=None,  # There is no specific device_class for Power Factor
+    state_class=SensorStateClass.MEASUREMENT,  # Important for chart display
     icon="mdi:power-plug",
 )
 

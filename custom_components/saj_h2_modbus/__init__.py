@@ -23,7 +23,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     return True
 
-# Definitionen der input_number Entitäten
+# Definitions of input_number entities
 INPUT_NUMBERS = [
     {
         "name": "SAJ Charge Day Mask",
@@ -106,7 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "input_number_mapping": {}
     }
 
-    # Erstellen der input_number Entitäten
+    # Create input_number entities
     await _create_input_numbers(hass, entry, hub)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -114,21 +114,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def _create_input_numbers(hass, entry, hub):
-    """Registriert Event-Listener für input_number Entitäten."""
+    """Registers event listeners for input_number entities."""
     
-    # Speichere die Zuordnung zwischen input_number und NumberEntity
+    # Store the mapping between input_number and NumberEntity
     for input_def in INPUT_NUMBERS:
         input_number_entity_id = f"input_number.{input_def['id']}"
         hass.data[DOMAIN][entry.entry_id]["input_number_mapping"][input_number_entity_id] = input_def["entity_id"]
         
-        # Prüfe, ob die Entität existiert und setze den initialen Wert
+        # Check if the entity exists and set the initial value
         if hass.states.get(input_number_entity_id):
             _LOGGER.info(f"Found input_number entity: {input_number_entity_id}")
             
-            # Hole den aktuellen Wert der NumberEntity
+            # Get the current value of the NumberEntity
             number_entity = hass.states.get(input_def["entity_id"])
             if number_entity:
-                # Setze den Wert der input_number Entität
+                # Set the value of the input_number entity
                 try:
                     await hass.services.async_call(
                         INPUT_NUMBER_DOMAIN,
@@ -156,27 +156,27 @@ input_number:
     icon: {input_def['icon']}
 """)
     
-    # Registrieren der Listener für Änderungen an den input_number Entitäten
+    # Register listeners for changes to input_number entities
     @callback
     def handle_input_number_change(event):
-        """Behandelt Änderungen an input_number Entitäten."""
+        """Handles changes to input_number entities."""
         entity_id = event.data.get("entity_id")
         value = event.data.get("value")
         
         _LOGGER.debug(f"Input number change event: {entity_id} = {value}")
         
-        # Prüfe, ob die Entität zu unserer Integration gehört
+        # Check if the entity belongs to our integration
         mapping = hass.data[DOMAIN][entry.entry_id].get("input_number_mapping", {})
         if entity_id in mapping:
             number_entity_id = mapping[entity_id]
             _LOGGER.info(f"Handling input_number change: {entity_id} -> {number_entity_id} = {value}")
             
-            # Rufe die entsprechende Methode im Hub auf
+            # Call the corresponding method in the hub
             try:
-                # Verwende einen Thread-sicheren Ansatz
-                # Erstelle eine Funktion, die im Event-Loop ausgeführt werden soll
+            # Use a thread-safe approach
+            # Create a function to be executed in the event loop
                 async def update_entity():
-                    # Rufe die entsprechende Methode im Hub auf
+                    # Call the corresponding method in the hub
                     if "charge_day_mask" in entity_id:
                         await hub.set_charge_day_mask(int(value))
                     elif "charge_power_percent" in entity_id:
@@ -190,14 +190,14 @@ input_number:
                     elif "app_mode" in entity_id:
                         await hub.set_app_mode(int(value))
                     
-                    # Aktualisiere auch die NumberEntity
+                    # Also update the NumberEntity
                     number_entity = hass.states.get(number_entity_id)
                     if number_entity:
-                        # Finde die Entität im Entity Registry
+                        # Find the entity in the Entity Registry
                         entity_registry = er.async_get(hass)
                         entity = entity_registry.async_get(number_entity_id)
                         if entity and entity.platform == DOMAIN:
-                            # Setze den Wert der NumberEntity
+                            # Set the value of the NumberEntity
                             for component in hass.data.get("entity_components", {}).values():
                                 for entity_obj in component.entities:
                                     if entity_obj.entity_id == number_entity_id:
@@ -206,23 +206,23 @@ input_number:
                                         entity_obj.async_write_ha_state()
                                         break
                 
-                # Plane die Ausführung im Event-Loop
+                # Schedule execution in the event loop
                 hass.loop.call_soon_threadsafe(
                     lambda: hass.create_task(update_entity())
                 )
             except Exception as e:
                 _LOGGER.error(f"Error handling input_number change: {e}")
     
-    # Speichere den Event-Handler in hass.data
+    # Store the event handler in hass.data
     hass.data[DOMAIN][entry.entry_id]["handle_input_number_change"] = handle_input_number_change
     
-    # Registriere den Event-Listener für verschiedene mögliche Event-Namen
+    # Register the event listener for various possible event names
     hass.bus.async_listen("state_changed", lambda event: _handle_state_changed(event, hass, entry, hub))
     hass.bus.async_listen(f"{INPUT_NUMBER_DOMAIN}.change", handle_input_number_change)
 
-# Hilfsfunktion zum Behandeln von state_changed Events
+# Helper function for handling state_changed events
 def _handle_state_changed(event, hass, entry, hub):
-    """Behandelt state_changed Events für input_number Entitäten."""
+    """Handles state_changed events for input_number entities."""
     entity_id = event.data.get("entity_id")
     if not entity_id or not entity_id.startswith("input_number.saj_"):
         return
@@ -235,12 +235,12 @@ def _handle_state_changed(event, hass, entry, hub):
     
     _LOGGER.debug(f"State changed for {entity_id}: {old_state.state} -> {new_state.state}")
     
-    # Erstelle ein Event-Objekt für den input_number.change Handler
+    # Create an Event object for the input_number.change handler
     class EventData:
         def __init__(self, entity_id, value):
             self.data = {"entity_id": entity_id, "value": value}
     
-    # Rufe den input_number.change Handler auf
+    # Call the input_number.change handler
     handle_input_number_change = hass.data[DOMAIN][entry.entry_id].get("handle_input_number_change")
     if handle_input_number_change:
         handle_input_number_change(EventData(entity_id, float(new_state.state)))

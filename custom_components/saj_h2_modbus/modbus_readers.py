@@ -73,7 +73,7 @@ async def _read_modbus_data(
         return new_data
 
     except ValueError as ve:
-        # Bekannter Fehler, z. B. Exception 131/0
+        # Known error, e.g. Exception 131/0
         _LOGGER.info(f"Unsupported Modbus register for {data_key}: {ve}")
         return {}
 
