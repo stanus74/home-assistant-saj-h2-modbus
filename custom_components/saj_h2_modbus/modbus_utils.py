@@ -169,31 +169,30 @@ async def try_read_registers(
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> List[int]:
     await _ensure_connected(client, "read")
-    should_retry, on_retry = _create_retry_handlers(client, "read")
+
+    def should_retry(e: Exception) -> bool:
+        # Nur bei echten IO- oder Verbindungsfehlern erneut versuchen
+        return isinstance(e, (ConnectionException, ModbusIOException))
+
+    async def on_retry(attempt: int, e: Exception) -> None:
+        _LOGGER.warning(f"[Modbus-Read] Retry {attempt} after error: {e}")
 
     async def read_once():
         async with lock:
-            # Log the request details before making the call
-            if ENABLE_DETAILED_MODBUS_READ_LOGGING:
-                _LOGGER.debug(f"Attempting to read {count} registers from address {address} (unit: {unit}) for task: Modbus-Read")
             response = await client.read_holding_registers(
                 address=address, count=count, slave=unit
             )
-        # Check if response is an error and log details
+
+        # Erkenne spezifischen Ausnahmefehler frühzeitig
         if response.isError():
-            # pymodbus specific: response.exception_code might be available
-            exception_code = getattr(response, 'exception_code', 'N/A')
-            _LOGGER.error(
-                f"Modbus error response received for task 'Modbus-Read' reading address {address}, count {count}. "
-                f"Function code: {response.function_code}, Exception code: {exception_code}"
-            )
-            # The exception message is also made more informative
-            raise ModbusIOException(f"Invalid or error response (FC: {response.function_code}, EC: {exception_code}) for task 'Modbus-Read' addr {address}, count {count}")
+            exc_code = getattr(response, "exception_code", None)
+            if exc_code == 1:  # Illegal Function (Exception Code 1)
+                raise ValueError("Unsupported register (Exception response 131 / 0)")
+            raise ModbusIOException("General Modbus read error")
+
         if not hasattr(response, "registers"):
-            _LOGGER.error(
-                f"Modbus response for task 'Modbus-Read' reading address {address}, count {count} has no 'registers' attribute."
-            )
-            raise ModbusIOException(f"No 'registers' in response for task 'Modbus-Read' addr {address}, count {count}")
+            raise ModbusIOException("No registers in response")
+
         return response.registers  # type: ignore
 
     return await _retry_with_backoff(
@@ -205,6 +204,7 @@ async def try_read_registers(
         on_retry=on_retry,
         task_name="Modbus-Read"
     )
+
 
 async def try_write_registers(
     client: ModbusClient,

@@ -24,15 +24,15 @@ async def _read_modbus_data(
     decode_instructions: List[tuple],
     data_key: str,
     default_decoder: str = "16u",
-    default_factor: float = 0.01
+    default_factor: float = 0.01,
+    log_level_on_error: int = logging.ERROR
 ) -> DataDict:
     """Helper function to read and decode Modbus data."""
     try:
-        
         regs = await try_read_registers(client, _MODBUS_READ_LOCK, 1, start_address, count)
 
         if not regs:
-            _LOGGER.error(f"Error reading modbus data: No response for {data_key}")
+            _LOGGER.log(log_level_on_error, f"Error reading modbus data: No response for {data_key}")
             return {}
 
         new_data = {}
@@ -43,7 +43,7 @@ async def _read_modbus_data(
             method = method or default_decoder
 
             if method == "skip_bytes":
-                index += factor // 2  # Each register is 2 bytes in size
+                index += factor // 2
                 continue
 
             if not key:
@@ -59,23 +59,28 @@ async def _read_modbus_data(
                 elif method == "32u":
                     if index + 1 < len(regs):
                         value = client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
-                        index += 1  # 32-bit values occupy two registers
+                        index += 1
                     else:
                         value = 0
                 else:
-                    value = raw_value  # Default value if no conversion is necessary
+                    value = raw_value
 
                 new_data[key] = round(value * factor, 2) if factor != 1 else value
                 index += 1
 
             except Exception as e:
-                _LOGGER.error(f"Error decoding {key}: {e}")
+                _LOGGER.log(log_level_on_error, f"Error decoding {key}: {e}")
                 return {}
 
         return new_data
 
+    except ValueError as ve:
+        # Bekannter Fehler, z. B. Exception 131/0
+        _LOGGER.info(f"Unsupported Modbus register for {data_key}: {ve}")
+        return {}
+
     except Exception as e:
-        _LOGGER.error(f"Error reading modbus data: {e}")
+        _LOGGER.log(log_level_on_error, f"Error reading modbus data: {e}")
         return {}
 
 async def read_modbus_inverter_data(client: ModbusClient) -> DataDict:
@@ -202,40 +207,43 @@ async def read_additional_modbus_data_2_part_2(client: ModbusClient) -> DataDict
 
 async def read_additional_modbus_data_3(client: ModbusClient) -> DataDict:
     """Reads additional operating data (Set 3) - first part."""
-    data_keys_part_3 = [
-        "today_pv_energy2", "month_pv_energy2", "year_pv_energy2",
-        "total_pv_energy2", "today_pv_energy3", "month_pv_energy3",
-        "year_pv_energy3", "total_pv_energy3", "sell_today_energy_2",
-        "sell_month_energy_2", "sell_year_energy_2", "sell_total_energy_2",
-        "sell_today_energy_3", "sell_month_energy_3", "sell_year_energy_3"
+    decode_instructions_part_3 = [
+        ("today_pv_energy2", "32u", 0.01), ("month_pv_energy2", "32u", 0.01),
+        ("year_pv_energy2", "32u", 0.01), ("total_pv_energy2", "32u", 0.01),
+        ("today_pv_energy3", "32u", 0.01), ("month_pv_energy3", "32u", 0.01),
+        ("year_pv_energy3", "32u", 0.01), ("total_pv_energy3", "32u", 0.01),
+        ("sell_today_energy_2", "32u", 0.01), ("sell_month_energy_2", "32u", 0.01),
+        ("sell_year_energy_2", "32u", 0.01), ("sell_total_energy_2", "32u", 0.01),
+        ("sell_today_energy_3", "32u", 0.01), ("sell_month_energy_3", "32u", 0.01),
+        ("sell_year_energy_3", "32u", 0.01)
     ]
-    decode_instructions_part_3 = [(key, "32u", 0.01) for key in data_keys_part_3]
-    
-    try:
-        return await _read_modbus_data(client, 16695, 30, decode_instructions_part_3, 'additional_data_3')
-    except Exception as e:
-        _LOGGER.warning(f"Error reading additional data 3 (first part): {e}. This may be normal if your device doesn't support these registers.")
-        # Add empty values for the missing keys
-        return {key: 0 for key in data_keys_part_3}
+
+    return await _read_modbus_data(
+        client, 16695, 30, decode_instructions_part_3, 
+        'additional_data_3', 
+        log_level_on_error=logging.WARNING
+    )
 
 async def read_additional_modbus_data_3_2(client: ModbusClient) -> DataDict:
     """Reads additional operating data (Set 3) - second part."""
-    data_keys_part_3_2 = [
-        "sell_total_energy_3", "feedin_today_energy_2", "feedin_month_energy_2",
-        "feedin_year_energy_2", "feedin_total_energy_2", "feedin_today_energy_3",
-        "feedin_month_energy_3", "feedin_year_energy_3", "feedin_total_energy_3",
-        "sum_feed_in_today", "sum_feed_in_month", "sum_feed_in_year",
-        "sum_feed_in_total", "sum_sell_today", "sum_sell_month",
-        "sum_sell_year", "sum_sell_total"
+    decode_instructions_part_3_2 = [
+        ("sell_total_energy_3", "32u", 0.01), ("feedin_today_energy_2", "32u", 0.01),
+        ("feedin_month_energy_2", "32u", 0.01), ("feedin_year_energy_2", "32u", 0.01),
+        ("feedin_total_energy_2", "32u", 0.01), ("feedin_today_energy_3", "32u", 0.01),
+        ("feedin_month_energy_3", "32u", 0.01), ("feedin_year_energy_3", "32u", 0.01),
+        ("feedin_total_energy_3", "32u", 0.01), ("sum_feed_in_today", "32u", 0.01),
+        ("sum_feed_in_month", "32u", 0.01), ("sum_feed_in_year", "32u", 0.01),
+        ("sum_feed_in_total", "32u", 0.01), ("sum_sell_today", "32u", 0.01),
+        ("sum_sell_month", "32u", 0.01), ("sum_sell_year", "32u", 0.01),
+        ("sum_sell_total", "32u", 0.01)
     ]
-    decode_instructions_part_3_2 = [(key, "32u", 0.01) for key in data_keys_part_3_2]
-    
-    try:
-        return await _read_modbus_data(client, 16725, 34, decode_instructions_part_3_2, 'additional_data_3_2')
-    except Exception as e:
-        _LOGGER.warning(f"Error reading additional data 3 (second part): {e}. This may be normal if your device doesn't support these registers.")
-        # Add empty values for the missing keys
-        return {key: 0 for key in data_keys_part_3_2}
+
+    return await _read_modbus_data(
+        client, 16725, 34, decode_instructions_part_3_2, 
+        'additional_data_3_2', 
+        log_level_on_error=logging.WARNING
+    )
+
 
 async def read_additional_modbus_data_4(client: ModbusClient) -> DataDict:
     """Reads data for grid parameters (R, S, and T phase)."""
