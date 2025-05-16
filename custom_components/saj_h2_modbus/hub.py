@@ -229,14 +229,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:
                     self.inverter_data.update(
-                        await modbus_readers.read_modbus_inverter_data(self._client)
+                        await modbus_readers.read_modbus_inverter_data(self._client, self._read_lock)
                     )
                 combined_data.update(self.inverter_data)
 
                 async def execute_reader_method(method):
                     """Helper function to execute a reader method with error handling."""
                     try:
-                        result = await method(self._client)
+                        result = await method(self._client, self._read_lock)
                         combined_data.update(result)
                     except ReconnectionNeededError as e:
                         _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
