@@ -160,16 +160,16 @@ class SajDischargePowerPercentInputEntity(SajNumberEntity):
         self.async_write_ha_state()
 
 class SajExportLimitInputEntity(SajNumberEntity):
-    """Entity for Export Limit (0-1000 )."""
+    """Entity for Export Limit (0-1100)."""
     def __init__(self, hub):
-        super().__init__(hub, "SAJ Export Limit (Input)", "saj_export_limit_input", 0, 1000, 100, 0)
+        super().__init__(hub, "SAJ Export Limit (Input)", "saj_export_limit_input", 0, 1100, 100, 0)
 
     async def async_set_native_value(self, value):
         val = int(value)
-        if not 0 <= val <= 1000:
+        if not 0 <= val <= 1100:
             _LOGGER.error(f"Invalid export limit: {val}")
             return
-        _LOGGER.debug(f"Setting export limit to: {val}")
+        _LOGGER.debug(f"Setting export limit to: {int(val)}")
         self._attr_native_value = val
         await self._hub.set_export_limit(val)
         self.async_write_ha_state()
@@ -261,7 +261,7 @@ class SajBatteryChargePowerLimitEntity(SajNumberEntity):
         if not 0 <= val <= 1100:
             _LOGGER.error(f"Invalid battery charge power limit: {val}")
             return
-        _LOGGER.debug(f"Setting battery charge power limit to: {val}")
+        _LOGGER.debug(f"Setting battery charge power limit to: {int(val)}")
         self._attr_native_value = val
         await self._hub.set_battery_charge_power_limit(val)
         self.async_write_ha_state()
@@ -276,7 +276,7 @@ class SajBatteryDischargePowerLimitEntity(SajNumberEntity):
         if not 0 <= val <= 1100:
             _LOGGER.error(f"Invalid battery discharge power limit: {val}")
             return
-        _LOGGER.debug(f"Setting battery discharge power limit to: {val}")
+        _LOGGER.debug(f"Setting battery discharge power limit to: {int(val)}")
         self._attr_native_value = val
         await self._hub.set_battery_discharge_power_limit(val)
         self.async_write_ha_state()
@@ -291,7 +291,7 @@ class SajGridMaxChargePowerEntity(SajNumberEntity):
         if not 0 <= val <= 1100:
             _LOGGER.error(f"Invalid grid max charge power: {val}")
             return
-        _LOGGER.debug(f"Setting grid max charge power to: {val}")
+        _LOGGER.debug(f"Setting grid max charge power to: {int(val)}")
         self._attr_native_value = val
         await self._hub.set_grid_max_charge_power(val)
         self.async_write_ha_state()
@@ -306,7 +306,7 @@ class SajGridMaxDischargePowerEntity(SajNumberEntity):
         if not 0 <= val <= 1100:
             _LOGGER.error(f"Invalid grid max discharge power: {val}")
             return
-        _LOGGER.debug(f"Setting grid max discharge power to: {val}")
+        _LOGGER.debug(f"Setting grid max discharge power to: {int(val)}")
         self._attr_native_value = val
         await self._hub.set_grid_max_discharge_power(val)
         self.async_write_ha_state()

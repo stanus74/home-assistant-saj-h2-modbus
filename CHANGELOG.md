@@ -18,7 +18,7 @@ Added new input entities for controlling battery and grid power limits:
 All power limit entities (0x364D-0x3650) have:
 - Range: 0-1100
 - Step size: 100
-- Default: 1100 
+- Default: 1100
 
 ## **Important: 1000 is 100%**
 
