@@ -38,7 +38,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.updating_settings = False
         self.inverter_data: Dict[str, Any] = {}
 
-        self._closing = False
         self._reconnecting = False
         self._max_retries = 2
         self._retry_delay = 1
@@ -130,6 +129,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return client
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
+        """Update connection settings from config entry options."""
         async with self._connection_lock:
             self.updating_settings = True
             try:
@@ -144,6 +144,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     self._client = self._create_client()
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
+
+                # Log the updated configuration
+                _LOGGER.debug(
+                    "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
+                    self._host,
+                    self._port,
+                    scan_interval
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to update connection settings: %s", e)
+                raise
             finally:
                 self.updating_settings = False
 

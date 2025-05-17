@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 
 from .hub import SAJModbusHub
-from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL
+from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL, DEFAULT_PORT
 from homeassistant.helpers import config_validation as cv
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -47,15 +47,19 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update options."""
     await hass.config_entries.async_reload(entry.entry_id)
 
+def _get_config_value(entry: ConfigEntry, key: str, default=None):
+    """Get config value with fallback from options to data."""
+    return entry.options.get(key, entry.data.get(key, default))
+
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
     """Helper function to create the SAJ Modbus hub."""
     try:
         hub = SAJModbusHub(
             hass,
-            entry.data[CONF_NAME],
-            entry.data[CONF_HOST],
-            entry.data[CONF_PORT],
-            entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            entry.data[CONF_NAME],  # Name is always in data, not in options
+            _get_config_value(entry, CONF_HOST),
+            _get_config_value(entry, CONF_PORT, DEFAULT_PORT),
+            _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         )
         await hub.async_config_entry_first_refresh()
         return hub

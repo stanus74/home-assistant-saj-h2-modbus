@@ -1,3 +1,29 @@
+# Changelog (v2.2.4)
+
+### Code Improvements
+
+- **Configuration Options Management**
+  - **Changed:** Options are now stored in config_entry.options instead of config_entry.data
+  - **Added:** Fallback mechanism to read values from data if not present in options
+  - **Affected:** config_flow.py and __init__.py were modified to handle options correctly
+  - **Benefit:** Better adherence to Home Assistant standards for configuration management
+
+- **Unified unique_id Generation**
+  - **Consistent Base:** All entities now use the hub name as the base for their unique_ids
+  - **Affected:** number.py and text.py were modified to use the dynamic hub name instead of the fixed "saj_" prefix
+  - **Benefit:** Better distinction between multiple instances and more consistent entity identification
+
+- **Device Info Support**
+  - **Added:** device_info is now set for all entities (number and text entities)
+  - **Affected:** Base classes in number.py and text.py were modified to include device_info
+  - **Benefit:** Proper device grouping and identification in Home Assistant
+
+
+### Code Optimizations
+
+- **Simplified Reset Time Logic:** Introduced `reset_period` attribute in `SajModbusSensorEntityDescription` to simplify `native_last_reset_time` logic. This makes the code more maintainable and less error-prone.
+- **Code Cleanup:** Removed unused variable `self._closing` from SAJModbusHub class.
+
 # Changelog (v2.2.3)
 
 ### Added Battery and Grid Power Limit Controls

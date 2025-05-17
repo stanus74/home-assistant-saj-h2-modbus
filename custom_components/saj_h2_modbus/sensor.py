@@ -42,17 +42,12 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     def native_last_reset_time(self):
         """Return the time when the sensor was last reset, if applicable."""
         if self.entity_description.state_class == SensorStateClass.TOTAL:
-            key = self.entity_description.key
             now = dt_util.utcnow()
-            if "_today_" in key or key.startswith("today") or key.endswith("_today") or \
-               "current day" in self.entity_description.name.lower() or \
-               "today " in self.entity_description.name.lower(): # Covers "Power current day", "Sell Today Energy"
+            if self.entity_description.reset_period == "daily":
                 return now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif "_month_" in key or key.startswith("month") or key.endswith("_month") or \
-                 "current month" in self.entity_description.name.lower():
+            elif self.entity_description.reset_period == "monthly":
                 return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            elif "_year_" in key or key.startswith("year") or key.endswith("_year") or \
-                 "current year" in self.entity_description.name.lower():
+            elif self.entity_description.reset_period == "yearly":
                 return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         return None
 

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Literal
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -38,6 +38,7 @@ class SensorGroup:
 @dataclass
 class SajModbusSensorEntityDescription(SensorEntityDescription):
     """A class that describes SAJ H2 sensor entities."""
+    reset_period: Optional[Literal["daily", "monthly", "yearly"]] = None
 
 
 power_sensors_group = SensorGroup(
@@ -143,6 +144,18 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
         enable = sensor.get("enable", True)
         native_unit = sensor.get("unit_of_measurement", group.unit_of_measurement)
 
+        # Bestimme reset_period basierend auf dem Sensor-Namen und Key
+        reset_period = None
+        if group.state_class == SensorStateClass.TOTAL:
+            key = sensor["key"]
+            name = sensor["name"].lower()
+            if "_today_" in key or key.startswith("today") or key.endswith("_today") or "current day" in name or "today " in name:
+                reset_period = "daily"
+            elif "_month_" in key or key.startswith("month") or key.endswith("_month") or "current month" in name:
+                reset_period = "monthly"
+            elif "_year_" in key or key.startswith("year") or key.endswith("_year") or "current year" in name:
+                reset_period = "yearly"
+
         descriptions[sensor["key"]] = SajModbusSensorEntityDescription(
             name=sensor["name"],
             key=sensor["key"],
@@ -151,7 +164,8 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
             device_class=group.device_class,
             state_class=group.state_class,
             entity_registry_enabled_default=enable,
-            force_update=group.force_update
+            force_update=group.force_update,
+            reset_period=reset_period
         )
     return descriptions
 
