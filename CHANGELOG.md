@@ -1,5 +1,16 @@
 # Changelog (v2.2.4)
 
+### Added New Battery and Grid Power Limit Sensors
+
+- **Added new sensors for monitoring power limits:**
+  - Battery Charge Power Limit (Register 364Dh)
+  - Battery Discharge Power Limit (Register 364Eh)
+  - Grid Charge Power Limit (Register 364Fh)
+  - Grid Discharge Power Limit (Register 3650h)
+  - All sensors use a factor of 0.1 to display percentage values
+  - Added to battery_sensors group with appropriate icons
+  - Enabled by default for easy monitoring
+
 ### Code Improvements
 
 - **Configuration Options Management**

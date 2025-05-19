@@ -419,10 +419,15 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
         ("BatOffGridDisDepth", "16u", 1),
         ("BatcharDepth", "16u", 1),
         ("AppMode", "16u", 1),
+        (None, "skip_bytes", 10),  # Skip registers between AppMode (3647h) and BatChargePower (364Dh)
+        ("BatChargePower", "16u"),  # Register 364Dh
+        ("BatDischargePower", "16u"),  # Register 364Eh
+        ("GridChargePower", "16u"),  # Register 364Fh
+        ("GridDischargePower", "16u"),  # Register 3650h
     ]
 
     try:
-        data = await _read_modbus_data(client, lock, 0x3636, 18, decode_instructions, "passive_battery_data", default_factor=0.1)
+        data = await _read_modbus_data(client, lock, 0x3636, 27, decode_instructions, "passive_battery_data", default_factor=0.1)
         return data
     except Exception as e:
         _LOGGER.error(f"Error reading Passive Battery data: {e}")

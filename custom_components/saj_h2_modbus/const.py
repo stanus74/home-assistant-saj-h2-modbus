@@ -261,6 +261,10 @@ battery_sensors = [
     {"name": "Battary on grid discharge depth", "key": "BatOnGridDisDepth", "enable": True},
     {"name": "Battery offgrid discharge depth", "key": "BatOffGridDisDepth", "enable": True},
     {"name": "Battery charge depth", "key": "BatcharDepth", "enable": True},
+    {"name": "Battery Charge Power Limit", "key": "BatChargePower", "icon": "battery-charging", "enable": True},
+    {"name": "Battery Discharge Power Limit", "key": "BatDischargePower", "icon": "battery", "enable": True},
+    {"name": "Grid Charge Power Limit", "key": "GridChargePower", "icon": "transmission-tower", "enable": True},
+    {"name": "Grid Discharge Power Limit", "key": "GridDischargePower", "icon": "transmission-tower", "enable": True},
 ]
 
 temperature_sensors = [
