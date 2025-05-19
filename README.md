@@ -86,60 +86,7 @@ For detailed installation instructions, see [SAJ H2 Charge Card Installation](ht
 
 This integration supports the use of `input_number` entities to provide a better user interface for numeric settings. These entities can be displayed directly in your dashboard and are easier to use than navigating through the entities view.
 
-### With Input Number Entities (Recommended)
 
-To use `input_number` entities, add the following to your `configuration.yaml`:
-
-```yaml
-input_number:
-  saj_charge_day_mask:
-    name: SAJ Charge Day Mask
-    min: 0
-    max: 127
-    step: 1
-    mode: box
-    icon: mdi:calendar
-    
-  saj_charge_power_percent:
-    name: SAJ Charge Power Percent
-    min: 0
-    max: 25
-    step: 1
-    mode: box
-    icon: mdi:flash
-    
-  saj_discharge_day_mask:
-    name: SAJ Discharge Day Mask
-    min: 0
-    max: 127
-    step: 1
-    mode: box
-    icon: mdi:calendar
-    
-  saj_discharge_power_percent:
-    name: SAJ Discharge Power Percent
-    min: 0
-    max: 100
-    step: 1
-    mode: box
-    icon: mdi:flash
-    
-  saj_export_limit:
-    name: SAJ Export Limit
-    min: 0
-    max: 1000
-    step: 100
-    mode: box
-    icon: mdi:flash-outline
-    
-  saj_app_mode:
-    name: SAJ App Mode
-    min: 0
-    max: 3
-    step: 1
-    mode: box
-    icon: mdi:information-outline
-```
 
 
 
