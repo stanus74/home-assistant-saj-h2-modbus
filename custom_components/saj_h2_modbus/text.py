@@ -19,23 +19,24 @@ async def async_setup_entry(
 ) -> None:
     """Set up the writable time entities for Charge and Discharge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
+    device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
     
     entities = [
-        SajChargeStartTimeTextEntity(hub),
-        SajChargeEndTimeTextEntity(hub),
+        SajChargeStartTimeTextEntity(hub, device_info),
+        SajChargeEndTimeTextEntity(hub, device_info),
     ]
     
     # Discharge Start/End Time Entities (1-7)
     for i in range(1, 8):
-        entities.append(SajDischargeStartTimeTextEntity(hub, i))
-        entities.append(SajDischargeEndTimeTextEntity(hub, i))
+        entities.append(SajDischargeStartTimeTextEntity(hub, i, device_info))
+        entities.append(SajDischargeEndTimeTextEntity(hub, i, device_info))
     
     async_add_entities(entities)
 
 class SajTimeTextEntity(TextEntity):
     """Base class for SAJ writable time entities."""
 
-    def __init__(self, hub, name, unique_id, set_method):
+    def __init__(self, hub, name, unique_id, set_method, device_info):
         """Initialize the entity."""
         self._hub = hub
         self._attr_name = name
@@ -45,6 +46,7 @@ class SajTimeTextEntity(TextEntity):
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"
         self.set_method = set_method
+        self._attr_device_info = device_info
 
     async def async_update(self) -> None:
         """Update is not used here to avoid additional Modbus requests."""
@@ -71,53 +73,55 @@ class SajTimeTextEntity(TextEntity):
 class SajChargeStartTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Charge Start Time (Format HH:MM)."""
 
-    def __init__(self, hub):
+    def __init__(self, hub, device_info):
         """Initialize the entity."""
         super().__init__(
             hub, 
             "SAJ Charge Start Time (Time)", 
-            "saj_charge_start_time", 
-            hub.set_charge_start
+            f"{hub.name}_charge_start_time", 
+            hub.set_charge_start,
+            device_info
         )
 
 class SajChargeEndTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Charge End Time (Format HH:MM)."""
 
-    def __init__(self, hub):
+    def __init__(self, hub, device_info):
         """Initialize the entity."""
         super().__init__(
             hub, 
             "SAJ Charge End Time (Time)", 
-            "saj_charge_end_time", 
-            hub.set_charge_end
+            f"{hub.name}_charge_end_time", 
+            hub.set_charge_end,
+            device_info
         )
 
 class SajDischargeStartTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Discharge Start Time (Format HH:MM)."""
 
-    def __init__(self, hub, index=1):
+    def __init__(self, hub, index=1, device_info=None):
         """Initialize the entity."""
         prefix = "" if index == 1 else str(index)
         name = f"SAJ Discharge{prefix} Start Time (Time)"
-        unique_id = f"saj_discharge{prefix}_start_time"
+        unique_id = f"{hub.name}_discharge{prefix}_start_time"
         
         # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_start"
         set_method = getattr(hub, method_name)
         
-        super().__init__(hub, name, unique_id, set_method)
+        super().__init__(hub, name, unique_id, set_method, device_info)
 
 class SajDischargeEndTimeTextEntity(SajTimeTextEntity):
     """Writable time entity for Discharge End Time (Format HH:MM)."""
 
-    def __init__(self, hub, index=1):
+    def __init__(self, hub, index=1, device_info=None):
         """Initialize the entity."""
         prefix = "" if index == 1 else str(index)
         name = f"SAJ Discharge{prefix} End Time (Time)"
-        unique_id = f"saj_discharge{prefix}_end_time"
+        unique_id = f"{hub.name}_discharge{prefix}_end_time"
         
         # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_end"
         set_method = getattr(hub, method_name)
         
-        super().__init__(hub, name, unique_id, set_method)
+        super().__init__(hub, name, unique_id, set_method, device_info)

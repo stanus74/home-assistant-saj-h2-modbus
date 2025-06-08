@@ -1,3 +1,40 @@
+# Changelog (v2.2.4)
+
+### Added New Battery and Grid Power Limit Sensors
+
+- **Added new sensors for monitoring power limits:**
+  - Battery Charge Power Limit (Register 364Dh)
+  - Battery Discharge Power Limit (Register 364Eh)
+  - Grid Charge Power Limit (Register 364Fh)
+  - Grid Discharge Power Limit (Register 3650h)
+  - All sensors use a factor of 0.1 to display percentage values
+  - Added to battery_sensors group with appropriate icons
+  - Enabled by default for easy monitoring
+
+### Code Improvements
+
+- **Configuration Options Management**
+  - **Changed:** Options are now stored in config_entry.options instead of config_entry.data
+  - **Added:** Fallback mechanism to read values from data if not present in options
+  - **Affected:** config_flow.py and __init__.py were modified to handle options correctly
+  - **Benefit:** Better adherence to Home Assistant standards for configuration management
+
+- **Unified unique_id Generation**
+  - **Consistent Base:** All entities now use the hub name as the base for their unique_ids
+  - **Affected:** number.py and text.py were modified to use the dynamic hub name instead of the fixed "saj_" prefix
+  - **Benefit:** Better distinction between multiple instances and more consistent entity identification
+
+- **Device Info Support**
+  - **Added:** device_info is now set for all entities (number and text entities)
+  - **Affected:** Base classes in number.py and text.py were modified to include device_info
+  - **Benefit:** Proper device grouping and identification in Home Assistant
+
+
+### Code Optimizations
+
+- **Simplified Reset Time Logic:** Introduced `reset_period` attribute in `SajModbusSensorEntityDescription` to simplify `native_last_reset_time` logic. This makes the code more maintainable and less error-prone.
+- **Code Cleanup:** Removed unused variable `self._closing` from SAJModbusHub class.
+
 # Changelog (v2.2.3)
 
 ### Added Battery and Grid Power Limit Controls
@@ -18,7 +55,7 @@ Added new input entities for controlling battery and grid power limits:
 All power limit entities (0x364D-0x3650) have:
 - Range: 0-1100
 - Step size: 100
-- Default: 1100 
+- Default: 1100
 
 ## **Important: 1000 is 100%**
 

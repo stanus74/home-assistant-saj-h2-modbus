@@ -225,7 +225,7 @@ class ChargeSettingHandler:
         try:
             registers = REGISTERS[mode]
             
-            # Startzeit setzen
+            # Set start time
             if start_time is not None:
                 await self._write_time_register(
                     registers["start_time"],
@@ -233,7 +233,7 @@ class ChargeSettingHandler:
                     f"{label} start time",
                 )
 
-            # Endzeit setzen
+            # Set end time
             if end_time is not None:
                 await self._write_time_register(
                     registers["end_time"],
@@ -241,7 +241,7 @@ class ChargeSettingHandler:
                     f"{label} end time",
                 )
 
-            # Tagesmaske und Leistungsprozent setzen
+            # Set day mask and power percentage
             if day_mask is not None or power_percent is not None:
                 await self._update_day_mask_and_power(
                     registers["day_mask_power"],
@@ -252,7 +252,7 @@ class ChargeSettingHandler:
         except Exception as e:
             _LOGGER.error(f"Error writing {label} settings: {e}")
         finally:
-            # Zurücksetzen der Pending-Werte
+            # Reset pending values
             self._reset_pending_values(mode)
 
     async def _update_day_mask_and_power(

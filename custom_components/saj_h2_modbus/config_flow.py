@@ -96,12 +96,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     user_input[CONF_SCAN_INTERVAL]
                 )
 
-                # Save the new options in the configuration entry
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data={**self.config_entry.data, **user_input},
-                )
-
+                # Save the new options in config_entry.options
                 return self.async_create_entry(title="", data=user_input)
             except Exception as e:
                 _LOGGER.error(f"Error updating SAJ Modbus configuration: {str(e)}")
@@ -111,8 +106,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_HOST, default=self.config_entry.data.get(CONF_HOST, '')): str,
-                vol.Required(CONF_PORT, default=self.config_entry.data.get(CONF_PORT, 502)): int,
-                vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.data.get(CONF_SCAN_INTERVAL, 30)): int,
+                vol.Required(CONF_HOST, default=self.config_entry.options.get(CONF_HOST, self.config_entry.data.get(CONF_HOST, ''))): str,
+                vol.Required(CONF_PORT, default=self.config_entry.options.get(CONF_PORT, self.config_entry.data.get(CONF_PORT, 502))): int,
+                vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, 30))): int,
             }),
         )

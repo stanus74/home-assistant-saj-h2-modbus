@@ -38,7 +38,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.updating_settings = False
         self.inverter_data: Dict[str, Any] = {}
 
-        self._closing = False
         self._reconnecting = False
         self._max_retries = 2
         self._retry_delay = 1
@@ -130,6 +129,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return client
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
+        """Update connection settings from config entry options."""
         async with self._connection_lock:
             self.updating_settings = True
             try:
@@ -144,6 +144,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     self._client = self._create_client()
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
+
+                # Log the updated configuration
+                _LOGGER.debug(
+                    "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
+                    self._host,
+                    self._port,
+                    scan_interval
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to update connection settings: %s", e)
+                raise
             finally:
                 self.updating_settings = False
 
@@ -229,14 +240,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:
                     self.inverter_data.update(
-                        await modbus_readers.read_modbus_inverter_data(self._client)
+                        await modbus_readers.read_modbus_inverter_data(self._client, self._read_lock)
                     )
                 combined_data.update(self.inverter_data)
 
                 async def execute_reader_method(method):
                     """Helper function to execute a reader method with error handling."""
                     try:
-                        result = await method(self._client)
+                        result = await method(self._client, self._read_lock)
                         combined_data.update(result)
                     except ReconnectionNeededError as e:
                         _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
