@@ -86,11 +86,11 @@ class SajDischargeDayMaskInputEntity(SajNumberEntity):
 
 class SajChargePowerPercentInputEntity(SajNumberEntity):
     def __init__(self, hub, device_info):
-        super().__init__(hub, "SAJ Charge Power Percent (Input)", f"{hub.name}_charge_power_percent_input", 0, 25, 1, 5, device_info)
+        super().__init__(hub, "SAJ Charge Power Percent (Input)", f"{hub.name}_charge_power_percent_input", 0, 100, 1, 5, device_info)
 
     async def async_set_native_value(self, value):
         val = int(value)
-        if not 0 <= val <= 25:
+        if not 0 <= val <= 100:
             _LOGGER.error(f"Invalid percent: {val}")
             return
         self._attr_native_value = val
