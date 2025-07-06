@@ -52,6 +52,13 @@ power_sensors_group = SensorGroup(
 
 )
 
+apparent_power_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfApparentPower.VOLT_AMPERE,
+    device_class=SensorDeviceClass.APPARENT_POWER,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:flash-outline",
+)
+
 voltage_sensors_group = SensorGroup(
     unit_of_measurement=UnitOfElectricPotential.VOLT,
     device_class=SensorDeviceClass.VOLTAGE,
@@ -187,39 +194,42 @@ power_sensors = [
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
 
     {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
-    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "icon": "flash-outline", "enable": False},
-    {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "icon": "flash", "enable": False},
     {"name": "Backup Total Load Power Watt", "key": "BackupTotalLoadPowerWatt", "icon": "home-lightning-bolt", "enable": False},
-    {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "icon": "home-lightning-bolt-outline", "enable": False},
     {"name": "R-Phase Grid Power Watt", "key": "RGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "S-Phase Grid Power Watt", "key": "SGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "T-Phase Grid Power Watt", "key": "TGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "Meter A Real Power 1", "key": "Meter_A_PowerW", "icon": "flash", "enable": False},
-    {"name": "Meter A Apparent Power 1", "key": "Meter_A_PowerV", "icon": "flash-outline", "enable": False},
     {"name": "Meter A Real Power 2", "key": "Meter_A_PowerW_2", "icon": "flash", "enable": False},
-    {"name": "Meter A Apparent Power 2", "key": "Meter_A_PowerV_2", "icon": "flash-outline", "enable": False},
     {"name": "Meter A Real Power 3", "key": "Meter_A_PowerW_3", "icon": "flash", "enable": False},
-    {"name": "Meter A Apparent Power 3", "key": "Meter_A_PowerV_3", "icon": "flash-outline", "enable": False},
     {"name": "R-Phase Inverter Power Watt", "key": "RInvPowerWatt", "icon": "flash", "enable": True},
-    {"name": "R-Phase Inverter Power VA", "key": "RInvPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "S-Phase Inverter Power Watt", "key": "SInvPowerWatt", "icon": "flash", "enable": True},
-    {"name": "S-Phase Inverter Power VA", "key": "SInvPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "T-Phase Inverter Power Watt", "key": "TInvPowerWatt", "icon": "flash", "enable": True},
-    {"name": "T-Phase Inverter Power VA", "key": "TInvPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "R-Phase Off-Grid Power Watt", "key": "ROutPowerWatt", "icon": "flash", "enable": True},
-    {"name": "R-Phase Off-Grid Power VA", "key": "ROutPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "S-Phase Off-Grid Power Watt", "key": "SOutPowerWatt", "icon": "flash", "enable": True},
-    {"name": "S-Phase Off-Grid Power VA", "key": "SOutPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "T-Phase Off-Grid Power Watt", "key": "TOutPowerWatt", "icon": "flash", "enable": True},
-    {"name": "T-Phase Off-Grid Power VA", "key": "TOutPowerVA", "icon": "flash-outline", "enable": True},
     {"name": "R-Phase On-Grid Output Power Watt", "key": "ROnGridOutPowerWatt", "icon": "flash", "enable": True},
     {"name": "S-Phase On-Grid Output Power Watt", "key": "SOnGridOutPowerWatt", "icon": "flash", "enable": True},
     {"name": "T-Phase On-Grid Output Power Watt", "key": "TOnGridOutPowerWatt", "icon": "flash", "enable": True},
+]
+
+apparent_power_sensors = [
+    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "enable": False},
+    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "enable": False},
+    {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "enable": False},
+    {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "enable": False},
+    {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "enable": False},
+    {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "enable": False},
+    {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "enable": False},
+    {"name": "Meter A Apparent Power 1", "key": "Meter_A_PowerV", "enable": False},
+    {"name": "Meter A Apparent Power 2", "key": "Meter_A_PowerV_2", "enable": False},
+    {"name": "Meter A Apparent Power 3", "key": "Meter_A_PowerV_3", "enable": False},
+    {"name": "R-Phase Inverter Power VA", "key": "RInvPowerVA", "enable": True},
+    {"name": "S-Phase Inverter Power VA", "key": "SInvPowerVA", "enable": True},
+    {"name": "T-Phase Inverter Power VA", "key": "TInvPowerVA", "enable": True},
+    {"name": "R-Phase Off-Grid Power VA", "key": "ROutPowerVA", "enable": True},
+    {"name": "S-Phase Off-Grid Power VA", "key": "SOutPowerVA", "enable": True},
+    {"name": "T-Phase Off-Grid Power VA", "key": "TOutPowerVA", "enable": True},
 ]
 
 voltage_sensors = [
@@ -518,6 +528,7 @@ anti_reflux_sensors = [
 
 SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
+    **create_sensor_descriptions(apparent_power_sensors_group, apparent_power_sensors),
     **create_sensor_descriptions(voltage_sensors_group, voltage_sensors),
     **create_sensor_descriptions(current_sensors_group, current_sensors),
     **create_sensor_descriptions(milliampere_sensors_group, milliampere_sensors),
