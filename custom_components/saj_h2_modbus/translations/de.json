@@ -7,7 +7,7 @@
           "host": "Die IP-Adresse Ihres SAJ-Wechselrichter-Modbus-Geräts",
           "name": "Das Präfix, das für Ihre SAJ-Wechselrichter-Sensoren verwendet werden soll",
           "port": "Der TCP-Port, über den eine Verbindung zum SAJ-Wechselrichter hergestellt werden soll",
-          "scan_interval": "Die Abfragehäufigkeit der Modbus-Register in Sekunden"
+          "scan_interval": "Die Abfragehäufigkeit der Modbus-Register in Sekunden. Mindestens 60"
         }
       }
     },
