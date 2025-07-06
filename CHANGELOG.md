@@ -2,7 +2,6 @@
 
 ### New Sensors
 
-
 - **Added Smart Meter Sensors:**
   - New sensors for R, S, and T phase Meter voltage, current, frequency, power-factor, real-power and apparent-power (Registers `A03Dh` - `A04Eh`).
 - **Added Inverter Phase Data Sensors:**
