@@ -265,10 +265,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_additional_modbus_data_3_2,
                     modbus_readers.read_additional_modbus_data_4,
                     modbus_readers.read_battery_data,
+                    modbus_readers.read_inverter_phase_data,
+                    modbus_readers.read_offgrid_output_data,
+                    modbus_readers.read_side_net_data,
                     modbus_readers.read_charge_data,
                     modbus_readers.read_discharge_data,  # Reads all discharges at once
                     modbus_readers.read_anti_reflux_data,
                     modbus_readers.read_passive_battery_data,
+                    modbus_readers.read_meter_a_data,
                 ]
                 
                 for method in reader_methods:
