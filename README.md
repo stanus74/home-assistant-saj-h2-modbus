@@ -23,14 +23,12 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 
 ## Installation
 
-This integration is NOT available in the HACS default repository. (the inclusion in HACS has been requested)
+This integration is available in the HACS default repository. 
 
-1. Open HACS and click the three dots in the top right corner.
-2. Select "Custom repositories," then enter the GitHub URL https://github.com/stanus74/home-assistant-saj-h2-modbus
-3. Choose "Integration" and click "Add."
-4. Find "SAJ H2 Inverter Modbus" and click "Install."
-5. Restart Home Assistant.
-6. After reboot of Home-Assistant, this integration can be configured through the integration setup UI
+1. Open HACS 
+2. Find "SAJ H2 Inverter Modbus" and click "Install."
+3. Restart Home Assistant.
+4. After reboot of Home-Assistant, this integration can be configured through the integration setup UI
 
 
 ## Configuration
@@ -39,7 +37,6 @@ This integration is NOT available in the HACS default repository. (the inclusion
 2. Enter the IP Address and Interval.
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 4. Set charging values in Home Assistant, see below
-5. (optional) set input_numbers in configuration.yaml > see in Section "***Using Input Number Entities**"
 
 ---
 
@@ -62,7 +59,7 @@ see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob
 - **SAJ Anti-Reflux Current Limit** (`365BH`)
 - **SAJ Anti-Reflux Current Mode** (`365CH`)
 
-Perfect for zero export or dynamic grid feed-in limitation.
+#### Perfect for zero export or dynamic grid feed-in limitation.
 
 
 ### Configure Charging and Discharging Time and Power
@@ -80,14 +77,6 @@ Features:
 - Button to enable/disable charging
 
 For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
-
-
-## Using Input Number Entities
-
-This integration supports the use of `input_number` entities to provide a better user interface for numeric settings. These entities can be displayed directly in your dashboard and are easier to use than navigating through the entities view.
-
-
-
 
 
 ## Additional Information
