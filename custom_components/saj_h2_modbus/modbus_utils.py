@@ -171,7 +171,7 @@ async def try_read_registers(
     await _ensure_connected(client, "read")
 
     def should_retry(e: Exception) -> bool:
-        # Nur bei echten IO- oder Verbindungsfehlern erneut versuchen
+        # Only retry on real IO or connection errors
         return isinstance(e, (ConnectionException, ModbusIOException))
 
     async def on_retry(attempt: int, e: Exception) -> None:
@@ -183,7 +183,7 @@ async def try_read_registers(
                 address=address, count=count, slave=unit
             )
 
-        # Erkenne spezifischen Ausnahmefehler frühzeitig
+        # Detect specific exception error early
         if response.isError():
             exc_code = getattr(response, "exception_code", None)
             if exc_code == 1:  # Illegal Function (Exception Code 1)
