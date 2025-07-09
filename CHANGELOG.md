@@ -12,6 +12,11 @@
   - New sensors for R, S, and T phase on-grid side-net voltage, current, frequency, and power (Registers `408Dh` - `4094h`).
 
 
+### Bug Fixes
+
+- **Apparent Power Sensor Unit Fix:**
+  - Corrected unit of measurement for **all** apparent power sensors (VA) to ensure proper categorization with the `APPARENT_POWER` device class. This resolves unit mismatch errors and enables Home Assistant to store long-term statistics correctly.
+
 # Changelog (v2.2.4)
 
 ### Added New Battery and Grid Power Limit Sensors
