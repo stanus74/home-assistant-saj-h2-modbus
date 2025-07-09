@@ -1,3 +1,17 @@
+# Changelog (v2.3.0)
+
+### New Sensors
+
+- **Added Smart Meter Sensors:**
+  - New sensors for R, S, and T phase Meter voltage, current, frequency, power-factor, real-power and apparent-power (Registers `A03Dh` - `A04Eh`).
+- **Added Inverter Phase Data Sensors:**
+  - New sensors for R, S, and T phase inverter voltage, current, frequency, and power (Registers `4046h` - `4054h`).
+- **Added Off-Grid Output Data Sensors:**
+  - New sensors for R, S, and T phase off-grid output voltage, current, frequency, power, and DVI (Registers `4055h` - `4066h`).
+- **Added Side-Net Data Sensors:**
+  - New sensors for R, S, and T phase on-grid side-net voltage, current, frequency, and power (Registers `408Dh` - `4094h`).
+
+
 # Changelog (v2.2.4)
 
 ### Added New Battery and Grid Power Limit Sensors

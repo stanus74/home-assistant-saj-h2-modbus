@@ -466,7 +466,7 @@ class ChargeSettingHandler:
         if state is not None:
             other_state = await get_other_state()
             try:
-                # App-Modus-Register setzen (0x3647)
+                # Set app mode register (0x3647)
                 app_mode_value = 1 if state or other_state else 0
                 success_app_mode = await self._hub._write_register(REGISTERS["app_mode"], app_mode_value)
                 if success_app_mode:
@@ -474,7 +474,7 @@ class ChargeSettingHandler:
                 else:
                     _LOGGER.error(f"Failed to set {label} state (0x3647)")
 
-                # Zustandsregister setzen
+                # Set state register
                 reg_value = 1 if state else 0
                 success_state = await self._hub._write_register(state_register, reg_value)
                 if success_state:

@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    UnitOfReactivePower,  # Replace the import for the deprecated constant
+    UnitOfApparentPower,  # Replace the import for the deprecated constant
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -39,6 +39,8 @@ class SensorGroup:
 class SajModbusSensorEntityDescription(SensorEntityDescription):
     """A class that describes SAJ H2 sensor entities."""
     reset_period: Optional[Literal["daily", "monthly", "yearly"]] = None
+    native_precision: Optional[int] = None
+    suggested_display_precision: Optional[int] = None
 
 
 power_sensors_group = SensorGroup(
@@ -48,6 +50,13 @@ power_sensors_group = SensorGroup(
     icon="mdi:solar-power",
     force_update=True  # enable force_update for the entire group
 
+)
+
+apparent_power_sensors_group = SensorGroup(
+    unit_of_measurement=UnitOfApparentPower.VOLT_AMPERE,
+    device_class=SensorDeviceClass.APPARENT_POWER,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:flash-outline",
 )
 
 voltage_sensors_group = SensorGroup(
@@ -165,7 +174,9 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
             state_class=group.state_class,
             entity_registry_enabled_default=enable,
             force_update=group.force_update,
-            reset_period=reset_period
+            reset_period=reset_period,
+            native_precision=sensor.get("native_precision", None),
+            suggested_display_precision=sensor.get("suggested_display_precision", None)
         )
     return descriptions
 
@@ -183,18 +194,42 @@ power_sensors = [
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
 
     {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
-    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "icon": "flash-outline", "enable": False},
-    {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "icon": "flash", "enable": False},
     {"name": "Backup Total Load Power Watt", "key": "BackupTotalLoadPowerWatt", "icon": "home-lightning-bolt", "enable": False},
-    {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "icon": "home-lightning-bolt-outline", "enable": False},
     {"name": "R-Phase Grid Power Watt", "key": "RGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "S-Phase Grid Power Watt", "key": "SGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "icon": "flash-outline", "enable": False},
     {"name": "T-Phase Grid Power Watt", "key": "TGridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "icon": "flash-outline", "enable": False},
+    {"name": "Meter A Real Power 1", "key": "Meter_A_PowerW", "icon": "flash", "enable": False},
+    {"name": "Meter A Real Power 2", "key": "Meter_A_PowerW_2", "icon": "flash", "enable": False},
+    {"name": "Meter A Real Power 3", "key": "Meter_A_PowerW_3", "icon": "flash", "enable": False},
+    {"name": "R-Phase Inverter Power Watt", "key": "RInvPowerWatt", "icon": "flash", "enable": True},
+    {"name": "S-Phase Inverter Power Watt", "key": "SInvPowerWatt", "icon": "flash", "enable": True},
+    {"name": "T-Phase Inverter Power Watt", "key": "TInvPowerWatt", "icon": "flash", "enable": True},
+    {"name": "R-Phase Off-Grid Power Watt", "key": "ROutPowerWatt", "icon": "flash", "enable": True},
+    {"name": "S-Phase Off-Grid Power Watt", "key": "SOutPowerWatt", "icon": "flash", "enable": True},
+    {"name": "T-Phase Off-Grid Power Watt", "key": "TOutPowerWatt", "icon": "flash", "enable": True},
+    {"name": "R-Phase On-Grid Output Power Watt", "key": "ROnGridOutPowerWatt", "icon": "flash", "enable": True},
+    {"name": "S-Phase On-Grid Output Power Watt", "key": "SOnGridOutPowerWatt", "icon": "flash", "enable": True},
+    {"name": "T-Phase On-Grid Output Power Watt", "key": "TOnGridOutPowerWatt", "icon": "flash", "enable": True},
+]
+
+apparent_power_sensors = [
+    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "enable": False},
+    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "enable": False},
+    {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "enable": False},
+    {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "enable": False},
+    {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "enable": False},
+    {"name": "S-Phase Grid Power VA", "key": "SGridPowerVA", "enable": False},
+    {"name": "T-Phase Grid Power VA", "key": "TGridPowerVA", "enable": False},
+    {"name": "Meter A Apparent Power 1", "key": "Meter_A_PowerV", "enable": False},
+    {"name": "Meter A Apparent Power 2", "key": "Meter_A_PowerV_2", "enable": False},
+    {"name": "Meter A Apparent Power 3", "key": "Meter_A_PowerV_3", "enable": False},
+    {"name": "R-Phase Inverter Power VA", "key": "RInvPowerVA", "enable": True},
+    {"name": "S-Phase Inverter Power VA", "key": "SInvPowerVA", "enable": True},
+    {"name": "T-Phase Inverter Power VA", "key": "TInvPowerVA", "enable": True},
+    {"name": "R-Phase Off-Grid Power VA", "key": "ROutPowerVA", "enable": True},
+    {"name": "S-Phase Off-Grid Power VA", "key": "SOutPowerVA", "enable": True},
+    {"name": "T-Phase Off-Grid Power VA", "key": "TOutPowerVA", "enable": True},
 ]
 
 voltage_sensors = [
@@ -215,12 +250,34 @@ voltage_sensors = [
     {"name": "Battery Voltage Low Warning", "key": "BatProtLow", "icon": "alert", "enable": False},
     {"name": "Battery Charge Voltage", "key": "Bat_Chargevoltage", "icon": "battery-charging", "enable": False},
     {"name": "Battery Discharge Cut-off Voltage", "key": "Bat_DisCutOffVolt", "icon": "battery", "enable": False},
+    {"name": "Meter A Voltage 1", "key": "Meter_A_Volt1", "icon": "sine-wave", "enable": False},
+    {"name": "Meter A Voltage 2", "key": "Meter_A_Volt2", "icon": "sine-wave", "enable": False},
+    {"name": "Meter A Voltage 3", "key": "Meter_A_Volt3", "icon": "sine-wave", "enable": False},
+    {"name": "R-Phase Inverter Voltage", "key": "RInvVolt", "icon": "sine-wave", "enable": True},
+    {"name": "S-Phase Inverter Voltage", "key": "SInvVolt", "icon": "sine-wave", "enable": True},
+    {"name": "T-Phase Inverter Voltage", "key": "TInvVolt", "icon": "sine-wave", "enable": True},
+    {"name": "R-Phase Off-Grid Voltage", "key": "ROutVolt", "icon": "sine-wave", "enable": True},
+    {"name": "S-Phase Off-Grid Voltage", "key": "SOutVolt", "icon": "sine-wave", "enable": True},
+    {"name": "T-Phase Off-Grid Voltage", "key": "TOutVolt", "icon": "sine-wave", "enable": True},
+    {"name": "R-Phase On-Grid Output Voltage", "key": "ROnGridOutVolt", "icon": "sine-wave", "enable": True},
+    {"name": "S-Phase On-Grid Output Voltage", "key": "SOnGridOutVolt", "icon": "sine-wave", "enable": True},
+    {"name": "T-Phase On-Grid Output Voltage", "key": "TOnGridOutVolt", "icon": "sine-wave", "enable": True},
 ]
 
 frequency_sensors = [
-    {"name": "R-Phase Grid Frequency", "key": "RGridFreq", "icon": "sine-wave", "enable": False},
-    {"name": "S-Phase Grid Frequency", "key": "SGridFreq", "icon": "sine-wave", "enable": False},
-    {"name": "T-Phase Grid Frequency", "key": "TGridFreq", "icon": "sine-wave", "enable": False},
+    {"name": "R-Phase Grid Frequency", "key": "RGridFreq", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "S-Phase Grid Frequency", "key": "SGridFreq", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "T-Phase Grid Frequency", "key": "TGridFreq", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "Meter A Frequency 1", "key": "Meter_A_Freq1", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "Meter A Frequency 2", "key": "Meter_A_Freq2", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "Meter A Frequency 3", "key": "Meter_A_Freq3", "icon": "sine-wave", "enable": False, "suggested_display_precision": 2},
+    {"name": "R-Phase Inverter Frequency", "key": "RInvFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "S-Phase Inverter Frequency", "key": "SInvFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "T-Phase Inverter Frequency", "key": "TInvFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "R-Phase Off-Grid Frequency", "key": "ROutFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "S-Phase Off-Grid Frequency", "key": "SOutFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "T-Phase Off-Grid Frequency", "key": "TOutFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
+    {"name": "R-Phase On-Grid Output Frequency", "key": "ROnGridOutFreq", "icon": "sine-wave", "enable": True, "suggested_display_precision": 2},
 ]
 
 current_sensors = [
@@ -239,6 +296,16 @@ current_sensors = [
     {"name": "Battery 4 Current", "key": "Bat4Current", "icon": "current-dc", "enable": False},
     {"name": "Battery Discharge Current Limit", "key": "BatDisCurrLimit", "icon": "battery", "enable": True},
     {"name": "Battery Charge Current Limit", "key": "BatChaCurrLimit", "icon": "battery-charging", "enable": True},
+    {"name": "Meter A Current 1", "key": "Meter_A_Curr1", "icon": "current-dc", "enable": False},
+    {"name": "Meter A Current 2", "key": "Meter_A_Curr2", "icon": "current-dc", "enable": False},
+    {"name": "Meter A Current 3", "key": "Meter_A_Curr3", "icon": "current-dc", "enable": False},
+    {"name": "R-Phase Inverter Current", "key": "RInvCurr", "icon": "current-dc", "enable": True},
+    {"name": "S-Phase Inverter Current", "key": "SInvCurr", "icon": "current-dc", "enable": True},
+    {"name": "T-Phase Inverter Current", "key": "TInvCurr", "icon": "current-dc", "enable": True},
+    {"name": "R-Phase Off-Grid Current", "key": "ROutCurr", "icon": "current-dc", "enable": True},
+    {"name": "S-Phase Off-Grid Current", "key": "SOutCurr", "icon": "current-dc", "enable": True},
+    {"name": "T-Phase Off-Grid Current", "key": "TOutCurr", "icon": "current-dc", "enable": True},
+    {"name": "R-Phase On-Grid Output Current", "key": "ROnGridOutCurr", "icon": "current-dc", "enable": True},
 ]
 
 milliampere_sensors = [
@@ -246,6 +313,9 @@ milliampere_sensors = [
     {"name": "S-Phase Grid DC Component", "key": "SGridDCI", "icon": "current-dc", "enable": False},
     {"name": "T-Phase Grid DC Component", "key": "TGridDCI", "icon": "current-dc", "enable": False},
     {"name": "GFCI", "key": "gfci", "icon": "current-dc", "enable": False},
+    {"name": "R-Phase Off-Grid DVI", "key": "ROutDVI", "icon": "current-dc", "enable": True},
+    {"name": "S-Phase Off-Grid DVI", "key": "SOutDVI", "icon": "current-dc", "enable": True},
+    {"name": "T-Phase Off-Grid DVI", "key": "TOutDVI", "icon": "current-dc", "enable": True},
 ]
 
 battery_sensors = [
@@ -289,6 +359,9 @@ power_factor_sensors = [
     {"name": "R-Phase Grid Power Factor", "key": "RGridPowerPF", "icon": "power-plug", "enable": True},
     {"name": "S-Phase Grid Power Factor", "key": "SGridPowerPF", "icon": "power-plug", "enable": True},
     {"name": "T-Phase Grid Power Factor", "key": "TGridPowerPF", "icon": "power-plug", "enable": True},
+    {"name": "Meter A Power Factor 1", "key": "Meter_A_PowerFa", "icon": "power-plug", "enable": False},
+    {"name": "Meter A Power Factor 2", "key": "Meter_A_PowerFa_2", "icon": "power-plug", "enable": False},
+    {"name": "Meter A Power Factor 3", "key": "Meter_A_PowerFa_3", "icon": "power-plug", "enable": False},
 ]
 
 information_sensors = [
@@ -455,6 +528,7 @@ anti_reflux_sensors = [
 
 SENSOR_TYPES = {
     **create_sensor_descriptions(power_sensors_group, power_sensors),
+    **create_sensor_descriptions(apparent_power_sensors_group, apparent_power_sensors),
     **create_sensor_descriptions(voltage_sensors_group, voltage_sensors),
     **create_sensor_descriptions(current_sensors_group, current_sensors),
     **create_sensor_descriptions(milliampere_sensors_group, milliampere_sensors),

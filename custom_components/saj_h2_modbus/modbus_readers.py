@@ -259,6 +259,68 @@ async def read_additional_modbus_data_4(client: ModbusClient, lock: Lock) -> Dat
     
     return await _read_modbus_data(client, lock, 16433, 21, decode_instructions, "grid_phase_data", default_factor=0.001)
 
+async def read_inverter_phase_data(client: ModbusClient, lock: Lock) -> DataDict:
+    """Reads data for inverter phase parameters (R, S, and T phase)."""
+    decode_instructions = [
+        ("RInvVolt", "16u", 0.1),
+        ("RInvCurr", "16i", 0.01),
+        ("RInvFreq", "16u", 0.01),
+        ("RInvPowerWatt", "16i", 1),
+        ("RInvPowerVA", "16u", 1),
+        ("SInvVolt", "16u", 0.1),
+        ("SInvCurr", "16i", 0.01),
+        ("SInvFreq", "16u", 0.01),
+        ("SInvPowerWatt", "16i", 1),
+        ("SInvPowerVA", "16u", 1),
+        ("TInvVolt", "16u", 0.1),
+        ("TInvCurr", "16i", 0.01),
+        ("TInvFreq", "16u", 0.01),
+        ("TInvPowerWatt", "16i", 1),
+        ("TInvPowerVA", "16u", 1),
+    ]
+    
+    return await _read_modbus_data(client, lock, 16454, 15, decode_instructions, "inverter_phase_data", default_factor=1)
+
+async def read_offgrid_output_data(client: ModbusClient, lock: Lock) -> DataDict:
+    """Reads data for offgrid output parameters (R, S, and T phase)."""
+    decode_instructions = [
+        ("ROutVolt", "16u", 0.1),
+        ("ROutCurr", "16u", 0.01),
+        ("ROutFreq", "16u", 0.01),
+        ("ROutDVI", "16i", 1),
+        ("ROutPowerWatt", "16u", 1),
+        ("ROutPowerVA", "16u", 1),
+        ("SOutVolt", "16u", 0.1),
+        ("SOutCurr", "16u", 0.01),
+        ("SOutFreq", "16u", 0.01),
+        ("SOutDVI", "16i", 1),
+        ("SOutPowerWatt", "16u", 1),
+        ("SOutPowerVA", "16u", 1),
+        ("TOutVolt", "16u", 0.1),
+        ("TOutCurr", "16u", 0.01),
+        ("TOutFreq", "16u", 0.01),
+        ("TOutDVI", "16i", 1),
+        ("TOutPowerWatt", "16u", 1),
+        ("TOutPowerVA", "16u", 1),
+    ]
+    
+    return await _read_modbus_data(client, lock, 16469, 18, decode_instructions, "offgrid_output_data")
+
+async def read_side_net_data(client: ModbusClient, lock: Lock) -> DataDict:
+    """Reads data for side-net parameters."""
+    decode_instructions = [
+        ("ROnGridOutVolt", "16u", 0.1),
+        ("ROnGridOutCurr", "16u", 0.01),
+        ("ROnGridOutFreq", "16u", 0.01),
+        ("ROnGridOutPowerWatt", "16u", 1),
+        ("SOnGridOutVolt", "16u", 0.1),
+        ("SOnGridOutPowerWatt", "16u", 1),
+        ("TOnGridOutVolt", "16u", 0.1),
+        ("TOnGridOutPowerWatt", "16u", 1),
+    ]
+    
+    return await _read_modbus_data(client, lock, 16525, 8, decode_instructions, "side_net_data")
+
 async def read_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads battery data from registers 40960 to 41015."""
     decode_instructions = [
@@ -432,3 +494,28 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
     except Exception as e:
         _LOGGER.error(f"Error reading Passive Battery data: {e}")
         return {}
+
+async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
+    """Reads Meter A data."""
+    decode_instructions = [
+        ("Meter_A_Volt1", "16u", 0.1),
+        ("Meter_A_Curr1", "16i", 0.01),
+        ("Meter_A_PowerW", "16i", 1),
+        ("Meter_A_PowerV", "16u", 1),
+        ("Meter_A_PowerFa", "16i", 0.001),
+        ("Meter_A_Freq1", "16u", 0.01),
+        ("Meter_A_Volt2", "16u", 0.1),
+        ("Meter_A_Curr2", "16i", 0.01),
+        ("Meter_A_PowerW_2", "16i", 1),
+        ("Meter_A_PowerV_2", "16u", 1),
+        ("Meter_A_PowerFa_2", "16i", 0.001),
+        ("Meter_A_Freq2", "16u", 0.01),
+        ("Meter_A_Volt3", "16u", 0.1),
+        ("Meter_A_Curr3", "16i", 0.01),
+        ("Meter_A_PowerW_3", "16i", 1),
+        ("Meter_A_PowerV_3", "16u", 1),
+        ("Meter_A_PowerFa_3", "16i", 0.001),
+        ("Meter_A_Freq3", "16u", 0.01),
+    ]
+
+    return await _read_modbus_data(client, lock, 0xA03D, 18, decode_instructions, "meter_a_data")

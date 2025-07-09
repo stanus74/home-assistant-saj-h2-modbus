@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Defina a sua ligação Modbus ao inversor SAJ",
+        "data": {
+          "host": "O endereço IP do seu inversor SAJ com Modbus",
+          "name": "O prefixo a ser usado para os sensores do seu inversor SAJ",
+          "port": "A porta TCP para a ligação ao inversor SAJ",
+          "scan_interval": "A frequência de consulta (polling) dos registos Modbus em segundos"
+        }
+      }
+    }
+  },
+  "error": {
+    "already_configured": "O dispositivo já se encontra configurado"
+  },
+  "abort": {
+    "already_configured": "O dispositivo já se encontra configurado"
+  }
+}
