@@ -1,4 +1,5 @@
-from typing import Optional, Literal
+import asyncio
+from typing import Optional, Literal, TypeAlias, Dict, NamedTuple, Any
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -6,7 +7,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
-    UnitOfApparentPower,  # Replace the import for the deprecated constant
+    UnitOfApparentPower,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -15,9 +16,11 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
+from pymodbus.client import AsyncModbusTcpClient
 
-from typing import Dict, NamedTuple, Any
-
+# Type aliases for Modbus client and lock
+ModbusClient: TypeAlias = AsyncModbusTcpClient
+Lock: TypeAlias = asyncio.Lock
 
 DOMAIN = "saj_h2_modbus"
 DEFAULT_NAME = "SAJ"

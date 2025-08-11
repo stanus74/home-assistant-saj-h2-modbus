@@ -1,13 +1,11 @@
 import asyncio
 import logging
 import inspect
-from typing import Any, Awaitable, Callable, List, Optional, TypeAlias, Union
+from typing import Any, Awaitable, Callable, List, Optional, Union
 
-from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
-ModbusClient: TypeAlias = AsyncModbusTcpClient
-Lock: TypeAlias = asyncio.Lock
+from .const import ModbusClient, Lock
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,6 +156,23 @@ def _create_retry_handlers(client: ModbusClient, operation_name: str):
     
     return should_retry, on_retry
 
+async def _perform_modbus_operation(
+    client: ModbusClient,
+    lock: Lock,
+    unit: int,
+    operation: Callable[..., Awaitable[Any]],
+    *args: Any,
+    **kwargs: Any
+) -> Any:
+    """
+    Performs a Modbus operation, setting the unit_id on the client.
+    This is a workaround for Home Assistant's ModbusClientMixin,
+    as 'slave'/'device_id' keyword arguments are not accepted in method calls.
+    """
+    async with lock:
+        client.unit_id = unit
+        return await operation(*args, **kwargs)
+
 async def try_read_registers(
     client: ModbusClient,
     lock: Lock,
@@ -178,10 +193,9 @@ async def try_read_registers(
         _LOGGER.warning(f"[Modbus-Read] Retry {attempt} after error: {e}")
 
     async def read_once():
-        async with lock:
-            response = await client.read_holding_registers(
-                address=address, count=count, slave=unit
-            )
+        response = await _perform_modbus_operation(
+            client, lock, unit, client.read_holding_registers, address=address, count=count
+        )
 
         # Detect specific exception error early
         if response.isError():
@@ -222,15 +236,14 @@ async def try_write_registers(
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
-        async with lock:
-            if is_single:
-                result = await client.write_register(
-                    address=address, value=values, slave=unit
-                )
-            else:
-                result = await client.write_registers(
-                    address=address, values=values, slave=unit
-                )
+        if is_single:
+            result = await _perform_modbus_operation(
+                client, lock, unit, client.write_register, address=address, value=values
+            )
+        else:
+            result = await _perform_modbus_operation(
+                client, lock, unit, client.write_registers, address=address, values=values
+            )
         if result.isError():
             raise ModbusIOException("Write response error")
         return True

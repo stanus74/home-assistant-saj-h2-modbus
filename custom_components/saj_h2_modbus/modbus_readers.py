@@ -1,15 +1,12 @@
 import asyncio
 import logging
 import struct
+import asyncio
 from typing import Dict, Any, List, Optional, TypeAlias
-from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
-from .const import DEVICE_STATUSSES, FAULT_MESSAGES
+from .const import DEVICE_STATUSSES, FAULT_MESSAGES, ModbusClient, Lock
 from .modbus_utils import try_read_registers
 
-# Type aliases to make function signatures more compact
-ModbusClient: TypeAlias = AsyncModbusTcpClient
-Lock: TypeAlias = asyncio.Lock
 DataDict: TypeAlias = Dict[str, Any]
 
 _LOGGER = logging.getLogger(__name__)
