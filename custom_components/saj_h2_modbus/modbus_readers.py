@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import struct
-import asyncio
 from typing import Dict, Any, List, Optional, TypeAlias
 from pymodbus.client.mixin import ModbusClientMixin
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES, ModbusClient, Lock
