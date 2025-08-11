@@ -185,13 +185,8 @@ async def try_read_registers(
 ) -> List[int]:
     await _ensure_connected(client, "read")
 
-    def should_retry(e: Exception) -> bool:
-        # Only retry on real IO or connection errors
-        return isinstance(e, (ConnectionException, ModbusIOException))
-
-    async def on_retry(attempt: int, e: Exception) -> None:
-        _LOGGER.warning(f"[Modbus-Read] Retry {attempt} after error: {e}")
-
+    should_retry, on_retry = _create_retry_handlers(client, "read")
+    
     async def read_once():
         response = await _perform_modbus_operation(
             client, lock, unit, client.read_holding_registers, address=address, count=count
@@ -208,6 +203,10 @@ async def try_read_registers(
             raise ModbusIOException("No registers in response")
 
         return response.registers  # type: ignore
+    
+    async def on_read_retry(attempt: int, e: Exception) -> None:
+        _LOGGER.warning(f"[Modbus-Read] Retry {attempt} after error: {e}")
+        await on_retry(attempt, e)
 
     return await _retry_with_backoff(
         func=read_once,
@@ -215,7 +214,7 @@ async def try_read_registers(
         retries=max_retries,
         base_delay=base_delay,
         cap=cap_delay,
-        on_retry=on_retry,
+        on_retry=on_read_retry,
         task_name="Modbus-Read"
     )
 

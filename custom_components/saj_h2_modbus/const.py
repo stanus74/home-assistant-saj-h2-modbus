@@ -156,17 +156,8 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
         enable = sensor.get("enable", True)
         native_unit = sensor.get("unit_of_measurement", group.unit_of_measurement)
 
-        # Bestimme reset_period basierend auf dem Sensor-Namen und Key
-        reset_period = None
-        if group.state_class == SensorStateClass.TOTAL:
-            key = sensor["key"]
-            name = sensor["name"].lower()
-            if "_today_" in key or key.startswith("today") or key.endswith("_today") or "current day" in name or "today " in name:
-                reset_period = "daily"
-            elif "_month_" in key or key.startswith("month") or key.endswith("_month") or "current month" in name:
-                reset_period = "monthly"
-            elif "_year_" in key or key.startswith("year") or key.endswith("_year") or "current year" in name:
-                reset_period = "yearly"
+        # Determine reset_period from sensor config
+        reset_period = sensor.get("reset_period")
 
         descriptions[sensor["key"]] = SajModbusSensorEntityDescription(
             name=sensor["name"],
@@ -433,54 +424,54 @@ total_increasing_energy_sensors = [
 
 # Sensors that reset periodically (daily, monthly, yearly)
 periodic_reset_energy_sensors = [
-    {"name": "Power current day", "key": "todayenergy", "enable": True, "icon": "solar-power"},
-    {"name": "Power current month", "key": "monthenergy", "enable": False, "icon": "solar-power"},
-    {"name": "Power current year", "key": "yearenergy", "enable": False, "icon": "solar-power"},
-    {"name": "Battery Today Charge", "key": "bat_today_charge", "enable": False, "icon": "battery-charging"},
-    {"name": "Battery Month Charge", "key": "bat_month_charge", "enable": False, "icon": "battery-charging"},
-    {"name": "Battery Year Charge", "key": "bat_year_charge", "enable": False, "icon": "battery-charging"},
-    {"name": "Battery Today Discharge", "key": "bat_today_discharge", "enable": False, "icon": "battery-minus"},
-    {"name": "Battery Month Discharge", "key": "bat_month_discharge", "enable": False, "icon": "battery-minus"},
-    {"name": "Battery Year Discharge", "key": "bat_year_discharge", "enable": False, "icon": "battery-minus"},
-    {"name": "Inverter Today Generation", "key": "inv_today_gen", "enable": False, "icon": "solar-power"},
-    {"name": "Inverter Month Generation", "key": "inv_month_gen", "enable": False, "icon": "solar-power"},
-    {"name": "Inverter Year Generation", "key": "inv_year_gen", "enable": False, "icon": "solar-power"},
-    {"name": "Total Today Load", "key": "total_today_load", "enable": True, "icon": "home-import-outline"},
-    {"name": "Total Month Load", "key": "total_month_load", "enable": False, "icon": "home-import-outline"},
-    {"name": "Total Year Load", "key": "total_year_load", "enable": False, "icon": "home-import-outline"},
-    {"name": "Sell Today Energy", "key": "sell_today_energy", "enable": True, "icon": "solar-power"}, # Enabled this as per user's log
-    {"name": "Sell Month Energy", "key": "sell_month_energy", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Year Energy", "key": "sell_year_energy", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Today Energy 2", "key": "sell_today_energy_2", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Month Energy 2", "key": "sell_month_energy_2", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Year Energy 2", "key": "sell_year_energy_2", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Today Energy 3", "key": "sell_today_energy_3", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Month Energy 3", "key": "sell_month_energy_3", "enable": False, "icon": "solar-power"},
-    {"name": "Sell Year Energy 3", "key": "sell_year_energy_3", "enable": False, "icon": "solar-power"},
-    {"name": "Feed-in Today Energy", "key": "feedin_today_energy", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-in Month Energy", "key": "feedin_month_energy", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-in Year Energy", "key": "feedin_year_energy", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-In Today Energy 2", "key": "feedin_today_energy_2", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-In Month Energy 2", "key": "feedin_month_energy_2", "enable": False, "icon": "calendar-month"},
-    {"name": "Feed-In Year Energy 2", "key": "feedin_year_energy_2", "enable": False, "icon": "calendar"},
-    {"name": "Feed-In Today Energy 3", "key": "feedin_today_energy_3", "enable": False, "icon": "transmission-tower"},
-    {"name": "Feed-In Month Energy 3", "key": "feedin_month_energy_3", "enable": False, "icon": "calendar-month"},
-    {"name": "Feed-In Year Energy 3", "key": "feedin_year_energy_3", "enable": False, "icon": "calendar"},
-    {"name": "Sum All Phases Feed-In Today", "key": "sum_feed_in_today", "enable": True, "icon": "transmission-tower"},
-    {"name": "Sum All Phases Feed-In Month", "key": "sum_feed_in_month", "enable": False, "icon": "transmission-tower"},
-    {"name": "Sum All Phases Feed-In Year", "key": "sum_feed_in_year", "enable": False, "icon": "transmission-tower"},
-    {"name": "Sum All Phases Sell Today", "key": "sum_sell_today", "enable": True, "icon": "currency-usd"},
-    {"name": "Sum All Phases Sell Month", "key": "sum_sell_month", "enable": False, "icon": "currency-usd"},
-    {"name": "Sum All Phases Sell Year", "key": "sum_sell_year", "enable": False, "icon": "currency-usd"},
-    {"name": "Backup Today Load", "key": "backup_today_load", "enable": False, "icon": "lightning-bolt"},
-    {"name": "Backup Month Load", "key": "backup_month_load", "enable": False, "icon": "lightning-bolt"},
-    {"name": "Backup Year Load", "key": "backup_year_load", "enable": False, "icon": "lightning-bolt"},
-    {"name": "Today PV Energy 2", "key": "today_pv_energy2", "enable": False, "icon": "solar-power"},
-    {"name": "Month PV Energy 2", "key": "month_pv_energy2", "enable": False, "icon": "solar-power"},
-    {"name": "Year PV Energy 2", "key": "year_pv_energy2", "enable": False, "icon": "solar-power"},
-    {"name": "Today PV Energy 3", "key": "today_pv_energy3", "enable": False, "icon": "solar-power"},
-    {"name": "Month PV Energy 3", "key": "month_pv_energy3", "enable": False, "icon": "solar-power"},
-    {"name": "Year PV Energy 3", "key": "year_pv_energy3", "enable": False, "icon": "solar-power"},
+    {"name": "Power current day", "key": "todayenergy", "reset_period": "daily", "enable": True, "icon": "solar-power"},
+    {"name": "Power current month", "key": "monthenergy", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Power current year", "key": "yearenergy", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Battery Today Charge", "key": "bat_today_charge", "reset_period": "daily", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Month Charge", "key": "bat_month_charge", "reset_period": "monthly", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Year Charge", "key": "bat_year_charge", "reset_period": "yearly", "enable": False, "icon": "battery-charging"},
+    {"name": "Battery Today Discharge", "key": "bat_today_discharge", "reset_period": "daily", "enable": False, "icon": "battery-minus"},
+    {"name": "Battery Month Discharge", "key": "bat_month_discharge", "reset_period": "monthly", "enable": False, "icon": "battery-minus"},
+    {"name": "Battery Year Discharge", "key": "bat_year_discharge", "reset_period": "yearly", "enable": False, "icon": "battery-minus"},
+    {"name": "Inverter Today Generation", "key": "inv_today_gen", "reset_period": "daily", "enable": False, "icon": "solar-power"},
+    {"name": "Inverter Month Generation", "key": "inv_month_gen", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Inverter Year Generation", "key": "inv_year_gen", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Total Today Load", "key": "total_today_load", "reset_period": "daily", "enable": True, "icon": "home-import-outline"},
+    {"name": "Total Month Load", "key": "total_month_load", "reset_period": "monthly", "enable": False, "icon": "home-import-outline"},
+    {"name": "Total Year Load", "key": "total_year_load", "reset_period": "yearly", "enable": False, "icon": "home-import-outline"},
+    {"name": "Sell Today Energy", "key": "sell_today_energy", "reset_period": "daily", "enable": True, "icon": "solar-power"},
+    {"name": "Sell Month Energy", "key": "sell_month_energy", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy", "key": "sell_year_energy", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Today Energy 2", "key": "sell_today_energy_2", "reset_period": "daily", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Month Energy 2", "key": "sell_month_energy_2", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy 2", "key": "sell_year_energy_2", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Today Energy 3", "key": "sell_today_energy_3", "reset_period": "daily", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Month Energy 3", "key": "sell_month_energy_3", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Sell Year Energy 3", "key": "sell_year_energy_3", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Feed-in Today Energy", "key": "feedin_today_energy", "reset_period": "daily", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-in Month Energy", "key": "feedin_month_energy", "reset_period": "monthly", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-in Year Energy", "key": "feedin_year_energy", "reset_period": "yearly", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Today Energy 2", "key": "feedin_today_energy_2", "reset_period": "daily", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Month Energy 2", "key": "feedin_month_energy_2", "reset_period": "monthly", "enable": False, "icon": "calendar-month"},
+    {"name": "Feed-In Year Energy 2", "key": "feedin_year_energy_2", "reset_period": "yearly", "enable": False, "icon": "calendar"},
+    {"name": "Feed-In Today Energy 3", "key": "feedin_today_energy_3", "reset_period": "daily", "enable": False, "icon": "transmission-tower"},
+    {"name": "Feed-In Month Energy 3", "key": "feedin_month_energy_3", "reset_period": "monthly", "enable": False, "icon": "calendar-month"},
+    {"name": "Feed-In Year Energy 3", "key": "feedin_year_energy_3", "reset_period": "yearly", "enable": False, "icon": "calendar"},
+    {"name": "Sum All Phases Feed-In Today", "key": "sum_feed_in_today", "reset_period": "daily", "enable": True, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Month", "key": "sum_feed_in_month", "reset_period": "monthly", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Feed-In Year", "key": "sum_feed_in_year", "reset_period": "yearly", "enable": False, "icon": "transmission-tower"},
+    {"name": "Sum All Phases Sell Today", "key": "sum_sell_today", "reset_period": "daily", "enable": True, "icon": "currency-usd"},
+    {"name": "Sum All Phases Sell Month", "key": "sum_sell_month", "reset_period": "monthly", "enable": False, "icon": "currency-usd"},
+    {"name": "Sum All Phases Sell Year", "key": "sum_sell_year", "reset_period": "yearly", "enable": False, "icon": "currency-usd"},
+    {"name": "Backup Today Load", "key": "backup_today_load", "reset_period": "daily", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Backup Month Load", "key": "backup_month_load", "reset_period": "monthly", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Backup Year Load", "key": "backup_year_load", "reset_period": "yearly", "enable": False, "icon": "lightning-bolt"},
+    {"name": "Today PV Energy 2", "key": "today_pv_energy2", "reset_period": "daily", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 2", "key": "month_pv_energy2", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 2", "key": "year_pv_energy2", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
+    {"name": "Today PV Energy 3", "key": "today_pv_energy3", "reset_period": "daily", "enable": False, "icon": "solar-power"},
+    {"name": "Month PV Energy 3", "key": "month_pv_energy3", "reset_period": "monthly", "enable": False, "icon": "solar-power"},
+    {"name": "Year PV Energy 3", "key": "year_pv_energy3", "reset_period": "yearly", "enable": False, "icon": "solar-power"},
 ]
 
 battery_schedule_sensors = [
