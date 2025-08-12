@@ -1,3 +1,18 @@
+# Changelog (v2.3.1)
+
+### Bug Fixes
+
+- **Modbus Client Compatibility Fix:**
+  - Addressed `TypeError` in `ModbusClientMixin.read_holding_registers()` (and write operations) caused by unexpected `slave`/`device_id` keyword arguments in some Home Assistant environments.
+  - Implemented a workaround by setting `client.unit_id` directly on the client object before each Modbus read/write operation.
+
+### Code Improvements & Optimizations
+
+- **Refactored Modbus Operation Logic:**
+  - Consolidated common Modbus operation logic into a new helper function `_perform_modbus_operation` in `modbus_utils.py`. This makes `read_once` and `write_once` functions more compact and readable.
+- **Centralized Type Aliases:**
+  - Moved `ModbusClient` and `Lock` type aliases to `custom_components/saj_h2_modbus/const.py` for better code organization and maintainability.
+
 # Changelog (v2.3.0)
 
 ### New Sensors
