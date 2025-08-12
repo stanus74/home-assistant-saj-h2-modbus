@@ -266,6 +266,17 @@ class ChargeSettingHandler:
             finally:
                 reset_callback()
 
+    async def handle_discharge_time_enable(self) -> None:
+        """Handles the discharge time enable setting."""
+        value = self._hub.get_pending_setting("discharge_time_enable")
+        if value is not None:
+            await self._handle_simple_register_internal(
+                value,
+                REGISTERS["discharge_time_enable"],
+                "discharge time enable",
+                lambda: self._hub.reset_pending_setting("discharge_time_enable"),
+            )
+
     async def _write_time_register(
         self, address: int, time_str: str, label: str
     ) -> None:

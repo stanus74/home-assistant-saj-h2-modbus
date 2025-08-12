@@ -314,23 +314,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             async with ModbusConnection(self._client, self._host, self._port):
 
-                
-                # Generate pending handlers dynamically
-                pending_handlers = []
-                for key in self._pending_settings:
-                    if key in ["charging_state", "discharging_state"]: # Handle charging/discharging states first
-                        pending_handlers.append(lambda: self._setting_handler.handle_power_state_settings())
-                    elif "charge" in key and "discharge" not in key:
-                        pending_handlers.append(lambda: self._setting_handler.handle_power_settings("charge"))
-                    elif key.startswith("discharge"):
-                        mode = key.split("_")[0]
-                        pending_handlers.append(lambda mode=mode: self._setting_handler.handle_power_settings(mode))
-                    else:
-                        pending_handlers.append(lambda key=key: self._setting_handler.handle_simple_register(key))
+                # Group pending settings to minimize Modbus accesses
+                pending_settings = self._pending_settings.copy()
+                self._pending_settings.clear()
 
-                # Execute unique handlers
-                for handler in set(pending_handlers):
-                    await handler()
+                for key, value in pending_settings.items():
+                    if key in ["charging_state", "discharging_state"]:
+                        await self._setting_handler.handle_power_state_settings()
+                    elif key == "discharge_time_enable":
+                        await self.handle_discharge_time_enable()
+                    else:
+                        await self._setting_handler.handle_simple_register(key)
 
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:
@@ -369,7 +363,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_passive_battery_data,
                     modbus_readers.read_meter_a_data,
                 ]
-                
+
                 for method in reader_methods:
                     await execute_reader_method(method)
 
@@ -377,7 +371,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 combined_data["discharging_enabled"] = await self.get_discharging_state()
 
                 duration_total = time.monotonic() - start_total
-                
+
                 return combined_data
         except Exception as e:
             _LOGGER.error(f"Unexpected error during update: {e}")
@@ -422,3 +416,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             address,
             value,
         )
+
+    async def handle_discharge_time_enable(self) -> None:
+        """Handles the discharge time enable setting."""
+        value = self._pending_discharge_time_enable
+        if value is not None:
+            success = await self._write_register(0x3605, value)
+            if success:
+                _LOGGER.info(f"Successfully set discharge time enable to: {value}")
+            else:
+                _LOGGER.error(f"Failed to write discharge time enable to register 0x3605")
+            self._pending_discharge_time_enable = None
