@@ -66,7 +66,7 @@ class SajTimeTextEntity(TextEntity):
             )
             return
 
-        await self.set_method(value)
+        await self.set_method(value) # Corrected line
         self._attr_native_value = value
         self.async_write_ha_state()
 
@@ -107,7 +107,7 @@ class SajDischargeStartTimeTextEntity(SajTimeTextEntity):
         
         # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_start"
-        set_method = getattr(hub, method_name)
+        set_method = getattr(hub, method_name) # Corrected line
         
         super().__init__(hub, name, unique_id, set_method, device_info)
 
@@ -122,6 +122,6 @@ class SajDischargeEndTimeTextEntity(SajTimeTextEntity):
         
         # Dynamically select the correct Hub method
         method_name = f"set_discharge{prefix}_end"
-        set_method = getattr(hub, method_name)
+        set_method = getattr(hub, method_name) # Corrected line
         
         super().__init__(hub, name, unique_id, set_method, device_info)

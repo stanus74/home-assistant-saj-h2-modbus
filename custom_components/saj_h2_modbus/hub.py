@@ -17,7 +17,7 @@ from .modbus_utils import (
 )
 
 # Import of the Pending-Setter Factory and Fields
-from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_setter
+from .charge_control import ChargeSettingHandler, PENDING_FIELDS # Removed make_pending_setter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,80 +44,209 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._operation_timeout = 30
 
         # Pending settings
-        self._pending_charge_start: Optional[str] = None
-        self._pending_charge_end: Optional[str] = None
-        self._pending_charge_day_mask: Optional[int] = None
-        self._pending_charge_power_percent: Optional[int] = None
-        self._pending_discharge_start: Optional[str] = None
-        self._pending_discharge_end: Optional[str] = None
-        self._pending_discharge_day_mask: Optional[int] = None
-        self._pending_discharge_power_percent: Optional[int] = None
-        
-        # Pending settings for additional discharge times
-        self._pending_discharge2_start: Optional[str] = None
-        self._pending_discharge2_end: Optional[str] = None
-        self._pending_discharge2_day_mask: Optional[int] = None
-        self._pending_discharge2_power_percent: Optional[int] = None
-        self._pending_discharge3_start: Optional[str] = None
-        self._pending_discharge3_end: Optional[str] = None
-        self._pending_discharge3_day_mask: Optional[int] = None
-        self._pending_discharge3_power_percent: Optional[int] = None
-        self._pending_discharge4_start: Optional[str] = None
-        self._pending_discharge4_end: Optional[str] = None
-        self._pending_discharge4_day_mask: Optional[int] = None
-        self._pending_discharge4_power_percent: Optional[int] = None
-        self._pending_discharge5_start: Optional[str] = None
-        self._pending_discharge5_end: Optional[str] = None
-        self._pending_discharge5_day_mask: Optional[int] = None
-        self._pending_discharge5_power_percent: Optional[int] = None
-        self._pending_discharge6_start: Optional[str] = None
-        self._pending_discharge6_end: Optional[str] = None
-        self._pending_discharge6_day_mask: Optional[int] = None
-        self._pending_discharge6_power_percent: Optional[int] = None
-        self._pending_discharge7_start: Optional[str] = None
-        self._pending_discharge7_end: Optional[str] = None
-        self._pending_discharge7_day_mask: Optional[int] = None
-        self._pending_discharge7_power_percent: Optional[int] = None
-        
-        self._pending_export_limit: Optional[int] = None
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
-        self._pending_app_mode: Optional[int] = None
-        self._pending_discharge_time_enable: Optional[int] = None
-        self._pending_battery_on_grid_discharge_depth: Optional[int] = None
-        self._pending_battery_off_grid_discharge_depth: Optional[int] = None
-        self._pending_battery_capacity_charge_upper_limit: Optional[int] = None
-        self._pending_battery_charge_power_limit: Optional[int] = None
-        self._pending_battery_discharge_power_limit: Optional[int] = None
-        self._pending_grid_max_charge_power: Optional[int] = None
-        self._pending_grid_max_discharge_power: Optional[int] = None
+        self._pending_settings: Dict[str, Any] = {}
 
         self._setting_handler = ChargeSettingHandler(self)
 
-    async def set_battery_charge_power_limit(self, value: int) -> None:
-        self._pending_battery_charge_power_limit = value
+        # Explicitly define setter methods
+        async def set_charge_start(self, value: Any) -> None:
+            self._pending_settings["charge_start"] = value
+        self.set_charge_start = set_charge_start.__get__(self, self.__class__)
 
-    async def set_battery_discharge_power_limit(self, value: int) -> None:
-        self._pending_battery_discharge_power_limit = value
+        async def set_charge_end(self, value: Any) -> None:
+            self._pending_settings["charge_end"] = value
+        self.set_charge_end = set_charge_end.__get__(self, self.__class__)
 
-    async def set_grid_max_charge_power(self, value: int) -> None:
-        self._pending_grid_max_charge_power = value
+        async def set_charge_day_mask(self, value: Any) -> None:
+            self._pending_settings["charge_day_mask"] = value
+        self.set_charge_day_mask = set_charge_day_mask.__get__(self, self.__class__)
 
-    async def set_grid_max_discharge_power(self, value: int) -> None:
-        self._pending_grid_max_discharge_power = value
+        async def set_charge_power_percent(self, value: Any) -> None:
+            self._pending_settings["charge_power_percent"] = value
+        self.set_charge_power_percent = set_charge_power_percent.__get__(self, self.__class__)
 
-    async def set_battery_on_grid_discharge_depth(self, value: int) -> None:
-        self._pending_battery_on_grid_discharge_depth = value
+        async def set_discharge_start(self, value: Any) -> None:
+            self._pending_settings["discharge_start"] = value
+        self.set_discharge_start = set_discharge_start.__get__(self, self.__class__)
 
-    async def set_battery_off_grid_discharge_depth(self, value: int) -> None:
-        self._pending_battery_off_grid_discharge_depth = value
+        async def set_discharge_end(self, value: Any) -> None:
+            self._pending_settings["discharge_end"] = value
+        self.set_discharge_end = set_discharge_end.__get__(self, self.__class__)
 
-    async def set_battery_capacity_charge_upper_limit(self, value: int) -> None:
-        self._pending_battery_capacity_charge_upper_limit = value
+        async def set_discharge_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge_day_mask"] = value
+        self.set_discharge_day_mask = set_discharge_day_mask.__get__(self, self.__class__)
 
-    for _name, _suffix in PENDING_FIELDS:
-        locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
-    del _name, _suffix
+        async def set_discharge_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge_power_percent"] = value
+        self.set_discharge_power_percent = set_discharge_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge2_start(self, value: Any) -> None:
+            self._pending_settings["discharge2_start"] = value
+        self.set_discharge2_start = set_discharge2_start.__get__(self, self.__class__)
+
+        async def set_discharge2_end(self, value: Any) -> None:
+            self._pending_settings["discharge2_end"] = value
+        self.set_discharge2_end = set_discharge2_end.__get__(self, self.__class__)
+
+        async def set_discharge2_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge2_day_mask"] = value
+        self.set_discharge2_day_mask = set_discharge2_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge2_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge2_power_percent"] = value
+        self.set_discharge2_power_percent = set_discharge2_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge3_start(self, value: Any) -> None:
+            self._pending_settings["discharge3_start"] = value
+        self.set_discharge3_start = set_discharge3_start.__get__(self, self.__class__)
+
+        async def set_discharge3_end(self, value: Any) -> None:
+            self._pending_settings["discharge3_end"] = value
+        self.set_discharge3_end = set_discharge3_end.__get__(self, self.__class__)
+
+        async def set_discharge3_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge3_day_mask"] = value
+        self.set_discharge3_day_mask = set_discharge3_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge3_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge3_power_percent"] = value
+        self.set_discharge3_power_percent = set_discharge3_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge4_start(self, value: Any) -> None:
+            self._pending_settings["discharge4_start"] = value
+        self.set_discharge4_start = set_discharge4_start.__get__(self, self.__class__)
+
+        async def set_discharge4_end(self, value: Any) -> None:
+            self._pending_settings["discharge4_end"] = value
+        self.set_discharge4_end = set_discharge4_end.__get__(self, self.__class__)
+
+        async def set_discharge4_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge4_day_mask"] = value
+        self.set_discharge4_day_mask = set_discharge4_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge4_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge4_power_percent"] = value
+        self.set_discharge4_power_percent = set_discharge4_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge5_start(self, value: Any) -> None:
+            self._pending_settings["discharge5_start"] = value
+        self.set_discharge5_start = set_discharge5_start.__get__(self, self.__class__)
+
+        async def set_discharge5_end(self, value: Any) -> None:
+            self._pending_settings["discharge5_end"] = value
+        self.set_discharge5_end = set_discharge5_end.__get__(self, self.__class__)
+
+        async def set_discharge5_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge5_day_mask"] = value
+        self.set_discharge5_day_mask = set_discharge5_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge5_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge5_power_percent"] = value
+        self.set_discharge5_power_percent = set_discharge5_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge6_start(self, value: Any) -> None:
+            self._pending_settings["discharge6_start"] = value
+        self.set_discharge6_start = set_discharge6_start.__get__(self, self.__class__)
+
+        async def set_discharge6_end(self, value: Any) -> None:
+            self._pending_settings["discharge6_end"] = value
+        self.set_discharge6_end = set_discharge6_end.__get__(self, self.__class__)
+
+        async def set_discharge6_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge6_day_mask"] = value
+        self.set_discharge6_day_mask = set_discharge6_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge6_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge6_power_percent"] = value
+        self.set_discharge6_power_percent = set_discharge6_power_percent.__get__(self, self.__class__)
+
+        async def set_discharge7_start(self, value: Any) -> None:
+            self._pending_settings["discharge7_start"] = value
+        self.set_discharge7_start = set_discharge7_start.__get__(self, self.__class__)
+
+        async def set_discharge7_end(self, value: Any) -> None:
+            self._pending_settings["discharge7_end"] = value
+        self.set_discharge7_end = set_discharge7_end.__get__(self, self.__class__)
+
+        async def set_discharge7_day_mask(self, value: Any) -> None:
+            self._pending_settings["discharge7_day_mask"] = value
+        self.set_discharge7_day_mask = set_discharge7_day_mask.__get__(self, self.__class__)
+
+        async def set_discharge7_power_percent(self, value: Any) -> None:
+            self._pending_settings["discharge7_power_percent"] = value
+        self.set_discharge7_power_percent = set_discharge7_power_percent.__get__(self, self.__class__)
+
+        async def set_export_limit(self, value: Any) -> None:
+            self._pending_settings["export_limit"] = value
+        self.set_export_limit = set_export_limit.__get__(self, self.__class__)
+
+        async def set_charging(self, value: Any) -> None:
+            self._pending_settings["charging"] = value
+        self.set_charging = set_charging.__get__(self, self.__class__)
+
+        async def set_discharging(self, value: Any) -> None:
+            self._pending_settings["discharging"] = value
+        self.set_discharging = set_discharging.__get__(self, self.__class__)
+
+        async def set_app_mode(self, value: Any) -> None:
+            self._pending_settings["app_mode"] = value
+        self.set_app_mode = set_app_mode.__get__(self, self.__class__)
+
+        async def set_discharge_time_enable(self, value: Any) -> None:
+            self._pending_settings["discharge_time_enable"] = value
+        self.set_discharge_time_enable = set_discharge_time_enable.__get__(self, self.__class__)
+
+        async def set_battery_on_grid_discharge_depth(self, value: Any) -> None:
+            self._pending_settings["battery_on_grid_discharge_depth"] = value
+        self.set_battery_on_grid_discharge_depth = set_battery_on_grid_discharge_depth.__get__(self, self.__class__)
+
+        async def set_battery_off_grid_discharge_depth(self, value: Any) -> None:
+            self._pending_settings["battery_off_grid_discharge_depth"] = value
+        self.set_battery_off_grid_discharge_depth = set_battery_off_grid_discharge_depth.__get__(self, self.__class__)
+
+        async def set_battery_capacity_charge_upper_limit(self, value: Any) -> None:
+            self._pending_settings["battery_capacity_charge_upper_limit"] = value
+        self.set_battery_capacity_charge_upper_limit = set_battery_capacity_charge_upper_limit.__get__(self, self.__class__)
+
+        async def set_battery_charge_power_limit(self, value: Any) -> None:
+            self._pending_settings["battery_charge_power_limit"] = value
+        self.set_battery_charge_power_limit = set_battery_charge_power_limit.__get__(self, self.__class__)
+
+        async def set_battery_discharge_power_limit(self, value: Any) -> None:
+            self._pending_settings["battery_discharge_power_limit"] = value
+        self.set_battery_discharge_power_limit = set_battery_discharge_power_limit.__get__(self, self.__class__)
+
+        async def set_grid_max_charge_power(self, value: Any) -> None:
+            self._pending_settings["grid_max_charge_power"] = value
+        self.set_grid_max_charge_power = set_grid_max_charge_power.__get__(self, self.__class__)
+
+        async def set_grid_max_discharge_power(self, value: Any) -> None:
+            self._pending_settings["grid_max_discharge_power"] = value
+        self.set_grid_max_discharge_power = set_grid_max_discharge_power.__get__(self, self.__class__)
+
+
+    def get_pending_setting(self, key: str) -> Optional[Any]:
+        """Get a pending setting value."""
+        return self._pending_settings.get(key)
+
+    def get_pending_settings(self, mode: str) -> Dict[str, Any]:
+        """Get all pending settings for a given mode."""
+        settings = {}
+        for key, value in self._pending_settings.items():
+            if key.startswith(mode):
+                settings[key.replace(f"{mode}_", "")] = value
+        return settings
+
+    def reset_pending_setting(self, key: str) -> None:
+        """Reset a pending setting."""
+        self._pending_settings.pop(key, None)
+
+    def reset_pending_settings(self, mode: str) -> None:
+        """Reset all pending settings for a given mode."""
+        keys_to_remove = [key for key in self._pending_settings if key.startswith(mode)]
+        for key in keys_to_remove:
+            self._pending_settings.pop(key)
 
     def _create_client(self) -> AsyncModbusTcpClient:
         client = AsyncModbusTcpClient(
@@ -186,56 +315,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             async with ModbusConnection(self._client, self._host, self._port):
 
                 
-                pending_handlers = [
-                    (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
-                    (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
-                    (True, self._setting_handler.handle_charge_settings),
-                    (True, self._setting_handler.handle_discharge_settings),
-                    (self._pending_discharge2_start is not None or 
-                     self._pending_discharge2_end is not None or 
-                     self._pending_discharge2_day_mask is not None or 
-                     self._pending_discharge2_power_percent is not None, 
-                     self._setting_handler.handle_discharge2_settings),
-                    (self._pending_discharge3_start is not None or 
-                     self._pending_discharge3_end is not None or 
-                     self._pending_discharge3_day_mask is not None or 
-                     self._pending_discharge3_power_percent is not None, 
-                     self._setting_handler.handle_discharge3_settings),
-                    (self._pending_discharge4_start is not None or 
-                     self._pending_discharge4_end is not None or 
-                     self._pending_discharge4_day_mask is not None or 
-                     self._pending_discharge4_power_percent is not None, 
-                     self._setting_handler.handle_discharge4_settings),
-                    (self._pending_discharge5_start is not None or 
-                     self._pending_discharge5_end is not None or 
-                     self._pending_discharge5_day_mask is not None or 
-                     self._pending_discharge5_power_percent is not None, 
-                     self._setting_handler.handle_discharge5_settings),
-                    (self._pending_discharge6_start is not None or 
-                     self._pending_discharge6_end is not None or 
-                     self._pending_discharge6_day_mask is not None or 
-                     self._pending_discharge6_power_percent is not None, 
-                     self._setting_handler.handle_discharge6_settings),
-                    (self._pending_discharge7_start is not None or 
-                     self._pending_discharge7_end is not None or 
-                     self._pending_discharge7_day_mask is not None or 
-                     self._pending_discharge7_power_percent is not None, 
-                     self._setting_handler.handle_discharge7_settings),
-                    (True, self._setting_handler.handle_export_limit),
-                    (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
-                    (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
-                    (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
-                    (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
-                    (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
-                    (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
-                    (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
-                    (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
-                    (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
-                ]
-                
-                for condition, handler in pending_handlers:
-                    if condition:
-                        await handler()
+                # Generate pending handlers dynamically
+                pending_handlers = []
+                for key in self._pending_settings:
+                    if "charge" in key and "discharge" not in key:
+                        pending_handlers.append(lambda: self._setting_handler.handle_power_settings("charge"))
+                    elif key.startswith("discharge"):
+                        mode = key.split("_")[0]
+                        pending_handlers.append(lambda mode=mode: self._setting_handler.handle_power_settings(mode))
+                    elif key in ["charging_state", "discharging_state"]:
+                        pending_handlers.append(self._setting_handler.handle_power_state_settings)
+                    else:
+                        pending_handlers.append(lambda key=key: self._setting_handler.handle_simple_register(key))
+
+                # Execute unique handlers
+                for handler in set(pending_handlers):
+                    await handler()
 
                 combined_data: Dict[str, Any] = {}
                 if not self.inverter_data:

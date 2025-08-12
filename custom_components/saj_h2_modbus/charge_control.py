@@ -108,152 +108,52 @@ REGISTERS = {
 }
 
 
-def make_pending_setter(setter_name: str, attr_suffix: str):
-    """
-    Factory: returns an async method that sets self._pending_<attr_suffix> = value.
-    """
-    async def setter(self, value: Any) -> None:
-        setattr(self, f"_pending_{attr_suffix}", value)
-    setter.__name__ = f"set_{setter_name}"
-    return setter
-
-
 class ChargeSettingHandler:
     def __init__(self, hub):
         self._hub = hub
 
-    async def handle_charge_settings(self) -> None:
-        """Handles the charge settings"""
-        await self._handle_power_settings(
-            "charge",
-            self._hub._pending_charge_start,
-            self._hub._pending_charge_end,
-            self._hub._pending_charge_day_mask,
-            self._hub._pending_charge_power_percent,
-            "charge"
-        )
+    async def handle_power_settings(self, mode: str) -> None:
+        """Handles the power settings for a given mode (charge or discharge)."""
+        pending_settings = self._hub.get_pending_settings(mode)
+        if not pending_settings:
+            return
 
-    async def handle_discharge_settings(self) -> None:
-        """Handles the discharge settings"""
-        await self._handle_power_settings(
-            "discharge",
-            self._hub._pending_discharge_start,
-            self._hub._pending_discharge_end,
-            self._hub._pending_discharge_day_mask,
-            self._hub._pending_discharge_power_percent,
-            "discharge"
-        )
-        
-    async def handle_discharge2_settings(self) -> None:
-        """Handles the discharge settings for Discharge 2"""
-        await self._handle_power_settings(
-            "discharge2",
-            self._hub._pending_discharge2_start,
-            self._hub._pending_discharge2_end,
-            self._hub._pending_discharge2_day_mask,
-            self._hub._pending_discharge2_power_percent,
-            "discharge2"
-        )
-        
-    async def handle_discharge3_settings(self) -> None:
-        """Handles the discharge settings for Discharge 3"""
-        await self._handle_power_settings(
-            "discharge3",
-            self._hub._pending_discharge3_start,
-            self._hub._pending_discharge3_end,
-            self._hub._pending_discharge3_day_mask,
-            self._hub._pending_discharge3_power_percent,
-            "discharge3"
-        )
-        
-    async def handle_discharge4_settings(self) -> None:
-        """Handles the discharge settings for Discharge 4"""
-        await self._handle_power_settings(
-            "discharge4",
-            self._hub._pending_discharge4_start,
-            self._hub._pending_discharge4_end,
-            self._hub._pending_discharge4_day_mask,
-            self._hub._pending_discharge4_power_percent,
-            "discharge4"
-        )
-        
-    async def handle_discharge5_settings(self) -> None:
-        """Handles the discharge settings for Discharge 5"""
-        await self._handle_power_settings(
-            "discharge5",
-            self._hub._pending_discharge5_start,
-            self._hub._pending_discharge5_end,
-            self._hub._pending_discharge5_day_mask,
-            self._hub._pending_discharge5_power_percent,
-            "discharge5"
-        )
-        
-    async def handle_discharge6_settings(self) -> None:
-        """Handles the discharge settings for Discharge 6"""
-        await self._handle_power_settings(
-            "discharge6",
-            self._hub._pending_discharge6_start,
-            self._hub._pending_discharge6_end,
-            self._hub._pending_discharge6_day_mask,
-            self._hub._pending_discharge6_power_percent,
-            "discharge6"
-        )
-        
-    async def handle_discharge7_settings(self) -> None:
-        """Handles the discharge settings for Discharge 7"""
-        await self._handle_power_settings(
-            "discharge7",
-            self._hub._pending_discharge7_start,
-            self._hub._pending_discharge7_end,
-            self._hub._pending_discharge7_day_mask,
-            self._hub._pending_discharge7_power_percent,
-            "discharge7"
-        )
+        await self._handle_power_settings_internal(mode, pending_settings)
 
-    async def _handle_power_settings(
-        self, 
-        mode: str, 
-        start_time: Optional[str], 
-        end_time: Optional[str],
-        day_mask: Optional[int],
-        power_percent: Optional[int],
-        label: str
-    ) -> None:
-        """
-        Common method for handling charge and discharge settings
-        """
+    async def _handle_power_settings_internal(self, mode: str, settings: Dict[str, Any]) -> None:
+        """Internal handler for power settings."""
         try:
             registers = REGISTERS[mode]
             
             # Set start time
-            if start_time is not None:
+            if "start" in settings:
                 await self._write_time_register(
                     registers["start_time"],
-                    start_time,
-                    f"{label} start time",
+                    settings["start"],
+                    f"{mode} start time",
                 )
 
             # Set end time
-            if end_time is not None:
+            if "end" in settings:
                 await self._write_time_register(
                     registers["end_time"],
-                    end_time,
-                    f"{label} end time",
+                    settings["end"],
+                    f"{mode} end time",
                 )
 
             # Set day mask and power percentage
-            if day_mask is not None or power_percent is not None:
+            if "day_mask" in settings or "power_percent" in settings:
                 await self._update_day_mask_and_power(
                     registers["day_mask_power"],
-                    day_mask,
-                    power_percent,
-                    label
+                    settings.get("day_mask"),
+                    settings.get("power_percent"),
+                    mode,
                 )
         except Exception as e:
-            _LOGGER.error(f"Error writing {label} settings: {e}")
+            _LOGGER.error(f"Error writing {mode} settings: {e}")
         finally:
             # Reset pending values
-            self._reset_pending_values(mode)
+            self._hub.reset_pending_settings(mode)
 
     async def _update_day_mask_and_power(
         self, 
@@ -281,178 +181,58 @@ class ChargeSettingHandler:
         else:
             _LOGGER.error(f"Failed to write {label} power time")
 
-    def _reset_pending_values(self, mode: str) -> None:
-        """Resets the pending values"""
-        if mode == "charge":
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_day_mask = None
-            self._hub._pending_charge_power_percent = None
-        elif mode == "discharge":
-            self._hub._pending_discharge_start = None
-            self._hub._pending_discharge_end = None
-            self._hub._pending_discharge_day_mask = None
-            self._hub._pending_discharge_power_percent = None
-        elif mode == "discharge2":
-            self._hub._pending_discharge2_start = None
-            self._hub._pending_discharge2_end = None
-            self._hub._pending_discharge2_day_mask = None
-            self._hub._pending_discharge2_power_percent = None
-        elif mode == "discharge3":
-            self._hub._pending_discharge3_start = None
-            self._hub._pending_discharge3_end = None
-            self._hub._pending_discharge3_day_mask = None
-            self._hub._pending_discharge3_power_percent = None
-        elif mode == "discharge4":
-            self._hub._pending_discharge4_start = None
-            self._hub._pending_discharge4_end = None
-            self._hub._pending_discharge4_day_mask = None
-            self._hub._pending_discharge4_power_percent = None
-        elif mode == "discharge5":
-            self._hub._pending_discharge5_start = None
-            self._hub._pending_discharge5_end = None
-            self._hub._pending_discharge5_day_mask = None
-            self._hub._pending_discharge5_power_percent = None
-        elif mode == "discharge6":
-            self._hub._pending_discharge6_start = None
-            self._hub._pending_discharge6_end = None
-            self._hub._pending_discharge6_day_mask = None
-            self._hub._pending_discharge6_power_percent = None
-        elif mode == "discharge7":
-            self._hub._pending_discharge7_start = None
-            self._hub._pending_discharge7_end = None
-            self._hub._pending_discharge7_day_mask = None
-            self._hub._pending_discharge7_power_percent = None
-
-    async def handle_export_limit(self) -> None:
-        """Handles the export limit"""
-        await self._handle_simple_register(
-            self._hub._pending_export_limit,
-            REGISTERS["export_limit"],
-            "export limit",
-            lambda: setattr(self._hub, "_pending_export_limit", None)
-        )
-                
-    async def handle_app_mode(self) -> None:
-        """Handles the app mode"""
-        await self._handle_simple_register(
-            self._hub._pending_app_mode,
-            REGISTERS["app_mode"],
-            "app mode",
-            lambda: setattr(self._hub, "_pending_app_mode", None)
-        )
-        
-    async def handle_discharge_time_enable(self) -> None:
-        """Handles the Discharge Time Enable value"""
-        await self._handle_simple_register(
-            self._hub._pending_discharge_time_enable,
-            REGISTERS["discharging_state"],
-            "discharge time enable",
-            lambda: setattr(self._hub, "_pending_discharge_time_enable", None)
-        )
-
-    async def handle_battery_on_grid_discharge_depth(self) -> None:
-        """Handles the Battery On Grid Discharge Depth value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_on_grid_discharge_depth,
-            REGISTERS["battery_on_grid_discharge_depth"],
-            "battery on grid discharge depth",
-            lambda: setattr(self._hub, "_pending_battery_on_grid_discharge_depth", None)
-        )
-
-    async def handle_battery_off_grid_discharge_depth(self) -> None:
-        """Handles the Battery Off Grid Discharge Depth value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_off_grid_discharge_depth,
-            REGISTERS["battery_off_grid_discharge_depth"],
-            "battery off grid discharge depth",
-            lambda: setattr(self._hub, "_pending_battery_off_grid_discharge_depth", None)
-        )
-
-    async def handle_battery_capacity_charge_upper_limit(self) -> None:
-        """Handles the Battery Capacity Charge Upper Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_capacity_charge_upper_limit,
-            REGISTERS["battery_capacity_charge_upper_limit"],
-            "battery capacity charge upper limit",
-            lambda: setattr(self._hub, "_pending_battery_capacity_charge_upper_limit", None)
-        )
-
-    async def handle_battery_charge_power_limit(self) -> None:
-        """Handles the Battery Charge Power Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_charge_power_limit,
-            REGISTERS["battery_charge_power_limit"],
-            "battery charge power limit",
-            lambda: setattr(self._hub, "_pending_battery_charge_power_limit", None)
-        )
-
-    async def handle_battery_discharge_power_limit(self) -> None:
-        """Handles the Battery Discharge Power Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_discharge_power_limit,
-            REGISTERS["battery_discharge_power_limit"],
-            "battery discharge power limit",
-            lambda: setattr(self._hub, "_pending_battery_discharge_power_limit", None)
-        )
-
-    async def handle_grid_max_charge_power(self) -> None:
-        """Handles the Grid Max Charge Power value"""
-        await self._handle_simple_register(
-            self._hub._pending_grid_max_charge_power,
-            REGISTERS["grid_max_charge_power"],
-            "grid max charge power",
-            lambda: setattr(self._hub, "_pending_grid_max_charge_power", None)
-        )
-
-    async def handle_grid_max_discharge_power(self) -> None:
-        """Handles the Grid Max Discharge Power value"""
-        await self._handle_simple_register(
-            self._hub._pending_grid_max_discharge_power,
-            REGISTERS["grid_max_discharge_power"],
-            "grid max discharge power",
-            lambda: setattr(self._hub, "_pending_grid_max_discharge_power", None)
-        )
-
-    async def _handle_simple_register(
-        self, 
-        value: Optional[Any], 
-        address: int, 
-        label: str,
-        reset_callback: Callable[[], None]
-    ) -> None:
-        """Handles simple register write operations"""
+    async def handle_simple_register(self, setting_key: str) -> None:
+        """Handles a simple register setting."""
+        value = self._hub.get_pending_setting(setting_key)
         if value is not None:
-            try:
-                success = await self._hub._write_register(address, value)
-                if success:
-                    _LOGGER.info(f"Successfully set {label} to: {value}")
-                else:
-                    _LOGGER.error(f"Failed to write {label}")
-            except Exception as e:
-                _LOGGER.error(f"Error writing {label}: {e}")
-            finally:
-                reset_callback()
+            await self._handle_simple_register_internal(
+                value,
+                REGISTERS[setting_key],
+                setting_key.replace("_", " "),
+                lambda: self._hub.reset_pending_setting(setting_key),
+            )
 
-    async def handle_pending_charging_state(self) -> None:
-        """Handles the pending charging state"""
-        await self._handle_power_state(
-            self._hub._pending_charging_state,
-            self._hub.get_discharging_state,
-            REGISTERS["charging_state"],
-            "charging",
-            lambda: setattr(self._hub, "_pending_charging_state", None)
-        )
+    async def _handle_simple_register_internal(
+        self,
+        value: Any,
+        address: int,
+        label: str,
+        reset_callback: Callable[[], None],
+    ) -> None:
+        """Internal handler for simple register write operations."""
+        try:
+            success = await self._hub._write_register(address, value)
+            if success:
+                _LOGGER.info(f"Successfully set {label} to: {value}")
+            else:
+                _LOGGER.error(f"Failed to write {label}")
+        except Exception as e:
+            _LOGGER.error(f"Error writing {label}: {e}")
+        finally:
+            reset_callback()
 
-    async def handle_pending_discharging_state(self) -> None:
-        """Handles the pending discharging state"""
-        await self._handle_power_state(
-            self._hub._pending_discharging_state,
-            self._hub.get_charging_state,
-            REGISTERS["discharging_state"],
-            "discharging",
-            lambda: setattr(self._hub, "_pending_discharging_state", None)
-        )
+    async def handle_power_state_settings(self) -> None:
+        """Handles the power state settings for charging and discharging."""
+        pending_charging = self._hub.get_pending_setting("charging_state")
+        pending_discharging = self._hub.get_pending_setting("discharging_state")
+
+        if pending_charging is not None:
+            await self._handle_power_state(
+                pending_charging,
+                self._hub.get_discharging_state,
+                REGISTERS["charging_state"],
+                "charging",
+                lambda: self._hub.reset_pending_setting("charging_state"),
+            )
+        
+        if pending_discharging is not None:
+            await self._handle_power_state(
+                pending_discharging,
+                self._hub.get_charging_state,
+                REGISTERS["discharging_state"],
+                "discharging",
+                lambda: self._hub.reset_pending_setting("discharging_state"),
+            )
 
     async def _handle_power_state(
         self, 
