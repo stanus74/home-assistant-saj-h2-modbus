@@ -182,11 +182,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.set_export_limit = set_export_limit.__get__(self, self.__class__)
 
         async def set_charging(self, value: Any) -> None:
-            self._pending_settings["charging"] = value
+            self._pending_settings["charging_state"] = value
         self.set_charging = set_charging.__get__(self, self.__class__)
 
         async def set_discharging(self, value: Any) -> None:
-            self._pending_settings["discharging"] = value
+            self._pending_settings["discharging_state"] = value
         self.set_discharging = set_discharging.__get__(self, self.__class__)
 
         async def set_app_mode(self, value: Any) -> None:
@@ -318,13 +318,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 # Generate pending handlers dynamically
                 pending_handlers = []
                 for key in self._pending_settings:
-                    if "charge" in key and "discharge" not in key:
+                    if key in ["charging_state", "discharging_state"]: # Handle charging/discharging states first
+                        pending_handlers.append(lambda: self._setting_handler.handle_power_state_settings())
+                    elif "charge" in key and "discharge" not in key:
                         pending_handlers.append(lambda: self._setting_handler.handle_power_settings("charge"))
                     elif key.startswith("discharge"):
                         mode = key.split("_")[0]
                         pending_handlers.append(lambda mode=mode: self._setting_handler.handle_power_settings(mode))
-                    elif key in ["charging_state", "discharging_state"]:
-                        pending_handlers.append(self._setting_handler.handle_power_state_settings)
                     else:
                         pending_handlers.append(lambda key=key: self._setting_handler.handle_simple_register(key))
 

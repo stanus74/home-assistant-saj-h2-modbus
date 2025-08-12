@@ -44,7 +44,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def extra_state_attributes(self):
-        pending = getattr(self._hub, f"_pending_{self._switch_type}_state", None)
+        pending = self._hub.get_pending_setting(f"{self._switch_type}_state")
         return {
             "pending_write": pending is not None
         }
