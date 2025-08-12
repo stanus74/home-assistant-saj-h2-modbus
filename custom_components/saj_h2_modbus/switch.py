@@ -14,9 +14,11 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ switches."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
+    device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
+
+    switch_types = ["charging", "discharging"]
     async_add_entities([
-        SajChargingSwitch(hub, hass.data[DOMAIN][entry.entry_id]["device_info"]),
-        SajDischargingSwitch(hub, hass.data[DOMAIN][entry.entry_id]["device_info"])
+        BaseSajSwitch(hub, device_info, switch_type) for switch_type in switch_types
     ])
     _LOGGER.info("Added SAJ switches")
 
@@ -91,11 +93,3 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             _LOGGER.warning(f"Time lock active! Wait {remaining}s before switching {self._switch_type} again.")
             return False
         return True
-
-class SajChargingSwitch(BaseSajSwitch):
-    def __init__(self, hub: SAJModbusHub, device_info):
-        super().__init__(hub, device_info, "charging")
-
-class SajDischargingSwitch(BaseSajSwitch):
-    def __init__(self, hub: SAJModbusHub, device_info):
-        super().__init__(hub, device_info, "discharging")

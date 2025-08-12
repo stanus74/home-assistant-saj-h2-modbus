@@ -20,17 +20,42 @@ async def async_setup_entry(
     """Set up the writable time entities for Charge and Discharge."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
-    
+
     entities = [
-        SajChargeStartTimeTextEntity(hub, device_info),
-        SajChargeEndTimeTextEntity(hub, device_info),
+        SajTimeTextEntity(
+            hub,
+            "SAJ Charge Start Time (Time)",
+            f"{hub.name}_charge_start_time",
+            hub.set_charge_start,
+            device_info
+        ),
+        SajTimeTextEntity(
+            hub,
+            "SAJ Charge End Time (Time)",
+            f"{hub.name}_charge_end_time",
+            hub.set_charge_end,
+            device_info
+        ),
     ]
-    
+
     # Discharge Start/End Time Entities (1-7)
     for i in range(1, 8):
-        entities.append(SajDischargeStartTimeTextEntity(hub, i, device_info))
-        entities.append(SajDischargeEndTimeTextEntity(hub, i, device_info))
-    
+        prefix = "" if i == 1 else str(i)
+        entities.append(SajTimeTextEntity(
+            hub,
+            f"SAJ Discharge{prefix} Start Time (Time)",
+            f"{hub.name}_discharge{prefix}_start_time",
+            getattr(hub, f"set_discharge{prefix}_start"),
+            device_info
+        ))
+        entities.append(SajTimeTextEntity(
+            hub,
+            f"SAJ Discharge{prefix} End Time (Time)",
+            f"{hub.name}_discharge{prefix}_end_time",
+            getattr(hub, f"set_discharge{prefix}_end"),
+            device_info
+        ))
+
     async_add_entities(entities)
 
 class SajTimeTextEntity(TextEntity):
@@ -69,59 +94,3 @@ class SajTimeTextEntity(TextEntity):
         await self.set_method(value)
         self._attr_native_value = value
         self.async_write_ha_state()
-
-class SajChargeStartTimeTextEntity(SajTimeTextEntity):
-    """Writable time entity for Charge Start Time (Format HH:MM)."""
-
-    def __init__(self, hub, device_info):
-        """Initialize the entity."""
-        super().__init__(
-            hub, 
-            "SAJ Charge Start Time (Time)", 
-            f"{hub.name}_charge_start_time", 
-            hub.set_charge_start,
-            device_info
-        )
-
-class SajChargeEndTimeTextEntity(SajTimeTextEntity):
-    """Writable time entity for Charge End Time (Format HH:MM)."""
-
-    def __init__(self, hub, device_info):
-        """Initialize the entity."""
-        super().__init__(
-            hub, 
-            "SAJ Charge End Time (Time)", 
-            f"{hub.name}_charge_end_time", 
-            hub.set_charge_end,
-            device_info
-        )
-
-class SajDischargeStartTimeTextEntity(SajTimeTextEntity):
-    """Writable time entity for Discharge Start Time (Format HH:MM)."""
-
-    def __init__(self, hub, index=1, device_info=None):
-        """Initialize the entity."""
-        prefix = "" if index == 1 else str(index)
-        name = f"SAJ Discharge{prefix} Start Time (Time)"
-        unique_id = f"{hub.name}_discharge{prefix}_start_time"
-        
-        # Dynamically select the correct Hub method
-        method_name = f"set_discharge{prefix}_start"
-        set_method = getattr(hub, method_name)
-        
-        super().__init__(hub, name, unique_id, set_method, device_info)
-
-class SajDischargeEndTimeTextEntity(SajTimeTextEntity):
-    """Writable time entity for Discharge End Time (Format HH:MM)."""
-
-    def __init__(self, hub, index=1, device_info=None):
-        """Initialize the entity."""
-        prefix = "" if index == 1 else str(index)
-        name = f"SAJ Discharge{prefix} End Time (Time)"
-        unique_id = f"{hub.name}_discharge{prefix}_end_time"
-        
-        # Dynamically select the correct Hub method
-        method_name = f"set_discharge{prefix}_end"
-        set_method = getattr(hub, method_name)
-        
-        super().__init__(hub, name, unique_id, set_method, device_info)
