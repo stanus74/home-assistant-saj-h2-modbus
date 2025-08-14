@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from .const import DOMAIN

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Literal, TypeAlias, Dict, NamedTuple, Any
+from typing import Optional, Literal, TypeAlias
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -14,7 +14,6 @@ from homeassistant.const import (
     UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
-    UnitOfTime,
 )
 from pymodbus.client import AsyncModbusTcpClient
 
@@ -147,13 +146,11 @@ schedule_sensors_group = SensorGroup(
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
     for sensor in sensors:
-
         icon = sensor.get("icon", group.icon)
         if icon and not icon.startswith("mdi:"):
             icon = f"mdi:{icon}"
 
-
-        enable = sensor.get("enable", True)
+        enable = sensor.get("enable", True)  # Default to True if not specified
         native_unit = sensor.get("unit_of_measurement", group.unit_of_measurement)
 
         # Determine reset_period from sensor config
@@ -166,7 +163,7 @@ def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
             icon=icon,
             device_class=group.device_class,
             state_class=group.state_class,
-            entity_registry_enabled_default=enable,
+            entity_registry_enabled_default=enable,  # Correctly map enable to entity_registry_enabled_default
             force_update=group.force_update,
             reset_period=reset_period,
             native_precision=sensor.get("native_precision", None),

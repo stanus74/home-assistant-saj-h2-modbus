@@ -51,39 +51,29 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             "pending_write": pending is not None
         }
 
-    async def async_turn_on(self, **kwargs) -> None:
-        if self.is_on:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} already on")
+    async def _set_state(self, desired_state: bool) -> None:
+        """Set the switch state with shared logic."""
+        if self.is_on == desired_state:
+            _LOGGER.debug(f"{self._switch_type.capitalize()} already {'on' if desired_state else 'off'}")
             return
 
         if not self._allow_switch():
             return
 
         try:
-            await getattr(self._hub, f"set_{self._switch_type}")(True)
+            await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
-            _LOGGER.debug(f"{self._switch_type.capitalize()} turned ON")
+            _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
             self.async_write_ha_state()
         except Exception as e:
-            _LOGGER.error(f"Turn on failed: {e}")
+            _LOGGER.error(f"Failed to turn {'on' if desired_state else 'off'}: {e}")
             raise
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set_state(True)
 
     async def async_turn_off(self, **kwargs) -> None:
-        if not self.is_on:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} already off")
-            return
-
-        if not self._allow_switch():
-            return
-
-        try:
-            await getattr(self._hub, f"set_{self._switch_type}")(False)
-            self._last_switch_time = time.time()
-            _LOGGER.debug(f"{self._switch_type.capitalize()} turned OFF")
-            self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error(f"Turn off failed: {e}")
-            raise
+        await self._set_state(False)
 
     def _allow_switch(self) -> bool:
         current_time = time.time()

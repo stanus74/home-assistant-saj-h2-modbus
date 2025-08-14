@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant, callback
 import logging
 
 from .const import DEFAULT_NAME, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .hub import SAJModbusHub
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,11 +18,6 @@ DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
 })
 
-OPTIONS_SCHEMA = vol.Schema({
-    vol.Required(CONF_HOST): str,
-    vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
-})
 
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"

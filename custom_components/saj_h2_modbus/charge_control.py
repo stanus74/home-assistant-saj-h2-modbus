@@ -1,6 +1,5 @@
 import logging
 from typing import Optional, Any, List, Dict, Tuple, Callable, Awaitable
-from .modbus_utils import try_read_registers, try_write_registers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,70 +143,16 @@ class ChargeSettingHandler:
             "discharge"
         )
         
-    async def handle_discharge2_settings(self) -> None:
-        """Handles the discharge settings for Discharge 2"""
+    async def handle_discharge_settings_by_index(self, index: int) -> None:
+        """Handles the discharge settings for a specific index."""
+        mode = f"discharge{index}"
         await self._handle_power_settings(
-            "discharge2",
-            self._hub._pending_discharge2_start,
-            self._hub._pending_discharge2_end,
-            self._hub._pending_discharge2_day_mask,
-            self._hub._pending_discharge2_power_percent,
-            "discharge2"
-        )
-        
-    async def handle_discharge3_settings(self) -> None:
-        """Handles the discharge settings for Discharge 3"""
-        await self._handle_power_settings(
-            "discharge3",
-            self._hub._pending_discharge3_start,
-            self._hub._pending_discharge3_end,
-            self._hub._pending_discharge3_day_mask,
-            self._hub._pending_discharge3_power_percent,
-            "discharge3"
-        )
-        
-    async def handle_discharge4_settings(self) -> None:
-        """Handles the discharge settings for Discharge 4"""
-        await self._handle_power_settings(
-            "discharge4",
-            self._hub._pending_discharge4_start,
-            self._hub._pending_discharge4_end,
-            self._hub._pending_discharge4_day_mask,
-            self._hub._pending_discharge4_power_percent,
-            "discharge4"
-        )
-        
-    async def handle_discharge5_settings(self) -> None:
-        """Handles the discharge settings for Discharge 5"""
-        await self._handle_power_settings(
-            "discharge5",
-            self._hub._pending_discharge5_start,
-            self._hub._pending_discharge5_end,
-            self._hub._pending_discharge5_day_mask,
-            self._hub._pending_discharge5_power_percent,
-            "discharge5"
-        )
-        
-    async def handle_discharge6_settings(self) -> None:
-        """Handles the discharge settings for Discharge 6"""
-        await self._handle_power_settings(
-            "discharge6",
-            self._hub._pending_discharge6_start,
-            self._hub._pending_discharge6_end,
-            self._hub._pending_discharge6_day_mask,
-            self._hub._pending_discharge6_power_percent,
-            "discharge6"
-        )
-        
-    async def handle_discharge7_settings(self) -> None:
-        """Handles the discharge settings for Discharge 7"""
-        await self._handle_power_settings(
-            "discharge7",
-            self._hub._pending_discharge7_start,
-            self._hub._pending_discharge7_end,
-            self._hub._pending_discharge7_day_mask,
-            self._hub._pending_discharge7_power_percent,
-            "discharge7"
+            mode,
+            getattr(self._hub, f"_pending_{mode}_start"),
+            getattr(self._hub, f"_pending_{mode}_end"),
+            getattr(self._hub, f"_pending_{mode}_day_mask"),
+            getattr(self._hub, f"_pending_{mode}_power_percent"),
+            mode
         )
 
     async def _handle_power_settings(
