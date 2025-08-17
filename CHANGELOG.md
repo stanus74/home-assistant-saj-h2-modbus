@@ -2,7 +2,7 @@
 
 ## Big Code improvement and reducing
 
-## Code was shortened by 380 lines or reduced by 16Kbytes.
+## Code was shortened by 380 lines or reduced by 17Kbytes.
 
 ### Updated
 
