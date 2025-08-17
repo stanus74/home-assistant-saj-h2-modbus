@@ -5,38 +5,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # --- Definitions for Pending Setter ---
 PENDING_FIELDS: List[tuple[str, str]] = [
-    ("charge_start", "charge_start"),
-    ("charge_end", "charge_end"),
-    ("charge_day_mask", "charge_day_mask"),
-    ("charge_power_percent", "charge_power_percent"),
-    ("discharge_start", "discharge_start"),
-    ("discharge_end", "discharge_end"),
-    ("discharge_day_mask", "discharge_day_mask"),
-    ("discharge_power_percent", "discharge_power_percent"),
-    ("discharge2_start", "discharge2_start"),
-    ("discharge2_end", "discharge2_end"),
-    ("discharge2_day_mask", "discharge2_day_mask"),
-    ("discharge2_power_percent", "discharge2_power_percent"),
-    ("discharge3_start", "discharge3_start"),
-    ("discharge3_end", "discharge3_end"),
-    ("discharge3_day_mask", "discharge3_day_mask"),
-    ("discharge3_power_percent", "discharge3_power_percent"),
-    ("discharge4_start", "discharge4_start"),
-    ("discharge4_end", "discharge4_end"),
-    ("discharge4_day_mask", "discharge4_day_mask"),
-    ("discharge4_power_percent", "discharge4_power_percent"),
-    ("discharge5_start", "discharge5_start"),
-    ("discharge5_end", "discharge5_end"),
-    ("discharge5_day_mask", "discharge5_day_mask"),
-    ("discharge5_power_percent", "discharge5_power_percent"),
-    ("discharge6_start", "discharge6_start"),
-    ("discharge6_end", "discharge6_end"),
-    ("discharge6_day_mask", "discharge6_day_mask"),
-    ("discharge6_power_percent", "discharge6_power_percent"),
-    ("discharge7_start", "discharge7_start"),
-    ("discharge7_end", "discharge7_end"),
-    ("discharge7_day_mask", "discharge7_day_mask"),
-    ("discharge7_power_percent", "discharge7_power_percent"),
+    (f"charge_{suffix}", f"charge_{suffix}") for suffix in ["start", "end", "day_mask", "power_percent"]
+] + [
+    (f"discharge{i}_{suffix}", f"discharges[{i-1}][{suffix}]") for i in range(1, 8) for suffix in ["start", "end", "day_mask", "power_percent"]
+] + [
     ("export_limit", "export_limit"),
     ("charging", "charging_state"),
     ("discharging", "discharging_state"),
@@ -58,7 +30,7 @@ REGISTERS = {
         "end_time": 0x3607,
         "day_mask_power": 0x3608,
     },
-    "discharge": {
+    "discharge1": {
         "start_time": 0x361B,
         "end_time": 0x361C,
         "day_mask_power": 0x361D,
@@ -107,167 +79,142 @@ REGISTERS = {
 }
 
 
-def make_pending_setter(setter_name: str, attr_suffix: str):
+def make_pending_setter(attr_path: str):
     """
-    Factory: returns an async method that sets self._pending_<attr_suffix> = value.
+    Factory: returns an async method that sets a nested attribute on the hub.
+    The returned function is a proper async method that will be bound to the hub instance.
     """
     async def setter(self, value: Any) -> None:
-        setattr(self, f"_pending_{attr_suffix}", value)
-    setter.__name__ = f"set_{setter_name}"
-    return setter
+        """Sets a pending value on the hub."""
+        try:
+            # This logic handles both simple attributes and nested dictionary attributes
+            if '[' in attr_path:
+                # Handle nested dictionary access like "discharges[0][start]"
+                parts = attr_path.replace(']', '').split('[')
+                obj = getattr(self, f"_pending_{parts[0]}")
+                for i, key in enumerate(parts[1:]):
+                    if i == len(parts) - 2:
+                        obj[int(key) if key.isdigit() else key] = value
+                        break
+                    obj = obj[int(key) if key.isdigit() else key]
+            else:
+                # Handle simple attribute access like "charge_start"
+                setattr(self, f"_pending_{attr_path}", value)
+        except Exception as e:
+            _LOGGER.error(f"Error setting pending attribute '{attr_path}': {e}", exc_info=True)
 
+    return setter
 
 class ChargeSettingHandler:
     def __init__(self, hub):
         self._hub = hub
 
+    async def handle_settings(self, mode: str, pending_attrs: List[str], label: str) -> None:
+        """Handles settings dynamically based on mode and pending attributes."""
+        try:
+            registers = REGISTERS[mode]
+            
+            # Handle start_time and end_time
+            for attr in ["start", "end"]:
+                if mode.startswith("discharge"):
+                    index = int(mode.replace("discharge", "")) - 1
+                    value = self._hub._pending_discharges[index][attr]
+                else:
+                    value = getattr(self._hub, f"_pending_{mode}_{attr}", None)
+
+                if value is not None:
+                    reg_key = f"{attr}_time"
+                    await self._write_time_register(registers[reg_key], value, f"{label} {attr}")
+
+            # Handle day_mask and power_percent as a combined register
+            # Handle day_mask and power_percent as a combined register
+            day_mask_value = None
+            power_percent_value = None
+
+            if mode.startswith("discharge"):
+                index = int(mode.replace("discharge", "")) - 1
+                day_mask_value = self._hub._pending_discharges[index]["day_mask"]
+                power_percent_value = self._hub._pending_discharges[index]["power_percent"]
+            else:
+                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", None)
+                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent", None)
+
+            # Always call _update_day_mask_and_power for modes that have it
+            # The _update_day_mask_and_power method handles reading current values and applying defaults
+            if "day_mask_power" in registers:
+                await self._update_day_mask_and_power(
+                    registers["day_mask_power"],
+                    day_mask_value,
+                    power_percent_value,
+                    label
+                )
+
+        except Exception as e:
+            _LOGGER.error(f"Error handling {label} settings: {e}")
+        finally:
+            self._reset_pending_values(mode)
+
     async def handle_charge_settings(self) -> None:
-        """Handles the charge settings"""
-        await self._handle_power_settings(
-            "charge",
-            self._hub._pending_charge_start,
-            self._hub._pending_charge_end,
-            self._hub._pending_charge_day_mask,
-            self._hub._pending_charge_power_percent,
-            "charge"
-        )
+        await self.handle_settings("charge", ["start", "end", "day_mask", "power_percent"], "charge")
 
-    async def handle_discharge_settings(self) -> None:
-        """Handles the discharge settings"""
-        await self._handle_power_settings(
-            "discharge",
-            self._hub._pending_discharge_start,
-            self._hub._pending_discharge_end,
-            self._hub._pending_discharge_day_mask,
-            self._hub._pending_discharge_power_percent,
-            "discharge"
-        )
-        
     async def handle_discharge_settings_by_index(self, index: int) -> None:
-        """Handles the discharge settings for a specific index."""
         mode = f"discharge{index}"
-        await self._handle_power_settings(
-            mode,
-            getattr(self._hub, f"_pending_{mode}_start"),
-            getattr(self._hub, f"_pending_{mode}_end"),
-            getattr(self._hub, f"_pending_{mode}_day_mask"),
-            getattr(self._hub, f"_pending_{mode}_power_percent"),
-            mode
-        )
+        await self.handle_settings(mode, ["start", "end", "day_mask", "power_percent"], mode)
 
-    async def _handle_power_settings(
-        self, 
-        mode: str, 
-        start_time: Optional[str], 
-        end_time: Optional[str],
+    def _reset_pending_values(self, mode: str) -> None:
+        if mode.startswith("discharge"):
+            index = int(mode.replace("discharge", "")) - 1
+            for attr in ["start", "end", "day_mask", "power_percent"]:
+                self._hub._pending_discharges[index][attr] = None
+        else:
+            attributes = ["start", "end", "day_mask", "power_percent"]
+            for attr in attributes:
+                pending_attr = f"_pending_{mode}_{attr}"
+                if hasattr(self._hub, pending_attr):
+                    setattr(self._hub, pending_attr, None)
+
+    async def _update_day_mask_and_power(
+        self,
+        address: int,
         day_mask: Optional[int],
         power_percent: Optional[int],
         label: str
     ) -> None:
-        """
-        Common method for handling charge and discharge settings
-        """
+        """Updates the day mask and power percentage, reading current values if not provided."""
+        _LOGGER.debug(f"Attempting to update day_mask_power for {label}. Provided day_mask: {day_mask}, power_percent: {power_percent}")
         try:
-            registers = REGISTERS[mode]
-            
-            # Set start time
-            if start_time is not None:
-                await self._write_time_register(
-                    registers["start_time"],
-                    start_time,
-                    f"{label} start time",
-                )
+            _LOGGER.debug(f"Reading current day_mask_power from address {hex(address)} for {label}")
+            regs = await self._hub._read_registers(address)
+            if not regs:
+                _LOGGER.error(f"Failed to read current day_mask_power for {label} at address {hex(address)}. No registers returned.")
+                return
 
-            # Set end time
-            if end_time is not None:
-                await self._write_time_register(
-                    registers["end_time"],
-                    end_time,
-                    f"{label} end time",
-                )
+            current_value = regs[0]
+            current_day_mask = (current_value >> 8) & 0xFF
+            current_power_percent = current_value & 0xFF
+            _LOGGER.debug(f"Current day_mask_power for {label}: {current_value} (day_mask: {current_day_mask}, power_percent: {current_power_percent})")
 
-            # Set day mask and power percentage
-            if day_mask is not None or power_percent is not None:
-                await self._update_day_mask_and_power(
-                    registers["day_mask_power"],
-                    day_mask,
-                    power_percent,
-                    label
+            new_day_mask = day_mask if day_mask is not None else 127 # Default to 127 if no day_mask is provided
+            new_power_percent = power_percent if power_percent is not None else 5 # Default to 5 if no power_percent is provided
+            _LOGGER.debug(f"Calculated new day_mask: {new_day_mask}, new_power_percent: {new_power_percent} for {label}")
+
+            combined_value = (new_day_mask << 8) | new_power_percent
+
+            if combined_value == current_value:
+                _LOGGER.info(f"No change detected for {label} day_mask_power. Current value: {current_value}. Not writing to Modbus.")
+                return
+
+            _LOGGER.debug(f"Writing combined value {combined_value} to register {hex(address)} for {label}")
+            success = await self._hub._write_register(address, combined_value)
+
+            if success:
+                _LOGGER.info(
+                    f"Successfully set {label} day_mask_power to: {combined_value} (day_mask: {new_day_mask}, power_percent: {new_power_percent})"
                 )
+            else:
+                _LOGGER.error(f"Failed to write {label} day_mask_power")
         except Exception as e:
-            _LOGGER.error(f"Error writing {label} settings: {e}")
-        finally:
-            # Reset pending values
-            self._reset_pending_values(mode)
-
-    async def _update_day_mask_and_power(
-        self, 
-        address: int, 
-        day_mask: Optional[int], 
-        power_percent: Optional[int],
-        label: str
-    ) -> None:
-        """Updates the day mask and power percentage"""
-        regs = await self._hub._read_registers(address)
-        current_value = regs[0]
-        current_day_mask = (current_value >> 8) & 0xFF
-        current_power_percent = current_value & 0xFF
-
-        new_day_mask = day_mask if day_mask is not None else current_day_mask
-        new_power_percent = power_percent if power_percent is not None else current_power_percent
-
-        value = (new_day_mask << 8) | new_power_percent
-        success = await self._hub._write_register(address, value)
-        
-        if success:
-            _LOGGER.info(
-                f"Successfully set {label} power time: day_mask={new_day_mask}, power_percent={new_power_percent}"
-            )
-        else:
-            _LOGGER.error(f"Failed to write {label} power time")
-
-    def _reset_pending_values(self, mode: str) -> None:
-        """Resets the pending values"""
-        if mode == "charge":
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_day_mask = None
-            self._hub._pending_charge_power_percent = None
-        elif mode == "discharge":
-            self._hub._pending_discharge_start = None
-            self._hub._pending_discharge_end = None
-            self._hub._pending_discharge_day_mask = None
-            self._hub._pending_discharge_power_percent = None
-        elif mode == "discharge2":
-            self._hub._pending_discharge2_start = None
-            self._hub._pending_discharge2_end = None
-            self._hub._pending_discharge2_day_mask = None
-            self._hub._pending_discharge2_power_percent = None
-        elif mode == "discharge3":
-            self._hub._pending_discharge3_start = None
-            self._hub._pending_discharge3_end = None
-            self._hub._pending_discharge3_day_mask = None
-            self._hub._pending_discharge3_power_percent = None
-        elif mode == "discharge4":
-            self._hub._pending_discharge4_start = None
-            self._hub._pending_discharge4_end = None
-            self._hub._pending_discharge4_day_mask = None
-            self._hub._pending_discharge4_power_percent = None
-        elif mode == "discharge5":
-            self._hub._pending_discharge5_start = None
-            self._hub._pending_discharge5_end = None
-            self._hub._pending_discharge5_day_mask = None
-            self._hub._pending_discharge5_power_percent = None
-        elif mode == "discharge6":
-            self._hub._pending_discharge6_start = None
-            self._hub._pending_discharge6_end = None
-            self._hub._pending_discharge6_day_mask = None
-            self._hub._pending_discharge6_power_percent = None
-        elif mode == "discharge7":
-            self._hub._pending_discharge7_start = None
-            self._hub._pending_discharge7_end = None
-            self._hub._pending_discharge7_day_mask = None
-            self._hub._pending_discharge7_power_percent = None
+            _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
 
     async def handle_export_limit(self) -> None:
         """Handles the export limit"""

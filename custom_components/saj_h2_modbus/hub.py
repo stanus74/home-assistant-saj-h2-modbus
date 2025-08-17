@@ -48,36 +48,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_charge_end: Optional[str] = None
         self._pending_charge_day_mask: Optional[int] = None
         self._pending_charge_power_percent: Optional[int] = None
-        self._pending_discharge_start: Optional[str] = None
-        self._pending_discharge_end: Optional[str] = None
-        self._pending_discharge_day_mask: Optional[int] = None
-        self._pending_discharge_power_percent: Optional[int] = None
+       
         
         # Pending settings for additional discharge times
-        self._pending_discharge2_start: Optional[str] = None
-        self._pending_discharge2_end: Optional[str] = None
-        self._pending_discharge2_day_mask: Optional[int] = None
-        self._pending_discharge2_power_percent: Optional[int] = None
-        self._pending_discharge3_start: Optional[str] = None
-        self._pending_discharge3_end: Optional[str] = None
-        self._pending_discharge3_day_mask: Optional[int] = None
-        self._pending_discharge3_power_percent: Optional[int] = None
-        self._pending_discharge4_start: Optional[str] = None
-        self._pending_discharge4_end: Optional[str] = None
-        self._pending_discharge4_day_mask: Optional[int] = None
-        self._pending_discharge4_power_percent: Optional[int] = None
-        self._pending_discharge5_start: Optional[str] = None
-        self._pending_discharge5_end: Optional[str] = None
-        self._pending_discharge5_day_mask: Optional[int] = None
-        self._pending_discharge5_power_percent: Optional[int] = None
-        self._pending_discharge6_start: Optional[str] = None
-        self._pending_discharge6_end: Optional[str] = None
-        self._pending_discharge6_day_mask: Optional[int] = None
-        self._pending_discharge6_power_percent: Optional[int] = None
-        self._pending_discharge7_start: Optional[str] = None
-        self._pending_discharge7_end: Optional[str] = None
-        self._pending_discharge7_day_mask: Optional[int] = None
-        self._pending_discharge7_power_percent: Optional[int] = None
+        self._pending_discharges: List[Dict[str, Optional[Any]]] = []
+        for _ in range(7): # Initialize 7 discharge setting slots
+            self._pending_discharges.append({
+                "start": None,
+                "end": None,
+                "day_mask": None,
+                "power_percent": None,
+            })
         
         self._pending_export_limit: Optional[int] = None
         self._pending_charging_state: Optional[bool] = None
@@ -93,6 +74,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_grid_max_discharge_power: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
+
+        # Dynamically generate all setter methods from the PENDING_FIELDS list
+        for name, attr_path in PENDING_FIELDS:
+            setter = make_pending_setter(attr_path)
+            setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
 
     async def set_battery_charge_power_limit(self, value: int) -> None:
         self._pending_battery_charge_power_limit = value
@@ -114,10 +100,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def set_battery_capacity_charge_upper_limit(self, value: int) -> None:
         self._pending_battery_capacity_charge_upper_limit = value
-
-    for _name, _suffix in PENDING_FIELDS:
-        locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
-    del _name, _suffix
 
     def _create_client(self) -> AsyncModbusTcpClient:
         client = AsyncModbusTcpClient(
@@ -189,9 +171,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 pending_handlers = [
                     (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
                     (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
-                    (True, self._setting_handler.handle_charge_settings),
-                    (True, self._setting_handler.handle_discharge_settings),
-                    (True, self._setting_handler.handle_export_limit),
+                    (any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]), self._setting_handler.handle_charge_settings),
+                    (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
                     (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
                     (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
                     (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
@@ -203,10 +184,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
                 ]
                 
+                
                 # Add generic discharge handlers dynamically
-                for i in range(2, 8):
+                for i in range(1, 8):
                     pending_handlers.append((
-                        any(getattr(self, f"_pending_discharge{i}_{attr}", None) is not None for attr in ["start", "end", "day_mask", "power_percent"]),
+                        any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]),
                         lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)
                     ))
 

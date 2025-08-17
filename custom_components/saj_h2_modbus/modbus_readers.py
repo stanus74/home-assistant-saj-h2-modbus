@@ -37,10 +37,10 @@ async def _read_modbus_data(
             method = method or default_decoder
 
             if method == "skip_bytes":
-                index += factor // 2  # factor in Bytes; 2 Bytes je Register
+                index += factor // 2  # factor in Bytes; 2 Bytes per register
                 continue
             if not key or index >= len(regs):
-                # fehlender Key oder zu wenig Register: Feld überspringen
+                # Missing key or not enough registers: skip field
                 continue
 
             try:
@@ -51,7 +51,7 @@ async def _read_modbus_data(
                     value = client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.UINT16)
                 elif method == "32u":
                     if index + 1 >= len(regs):
-                        value = 0  # zu kurzer Block → neutraler Wert (bestehendes Verhalten)
+                        value = 0  # Block too short -> neutral value (existing behavior)
                     else:
                         value = client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
                         index += 1
@@ -61,7 +61,7 @@ async def _read_modbus_data(
                 new_data[key] = round(value * factor, 2) if factor != 1 else value
             except Exception as e:
                 _LOGGER.log(log_level_on_error, f"Error decoding {key}: {e}")
-                # nicht den gesamten Datensatz verwerfen; zum nächsten Feld fortsetzen
+                # Do not discard the entire dataset; continue to the next field
             finally:
                 index += 1
 
@@ -249,8 +249,8 @@ async def _read_phase_block(
     default_factor: float = 1,
 ) -> DataDict:
     """
-    Liest einen 3‑Phasen‑Block (R/S/T) kompakt.
-    fields: Liste von (name, method, [factor]) → erzeugt Keys R<key_prefix><name>, S..., T...
+    Reads a 3-phase block (R/S/T) compactly.
+    fields: List of (name, method, [factor]) -> generates Keys R<key_prefix><name>, S..., T...
     """
     decode: List[tuple] = []
     for phase in ("R", "S", "T"):
@@ -359,8 +359,8 @@ async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
     return data
 
 async def read_discharge_data(client: ModbusClient, lock: Lock) -> DataDict:
-    """Reads all Discharge registers at once (discharge 1-7), kompakt."""
-    # 7 * 3 Register ab 0x361B
+    """Reads all Discharge registers at once (discharge 1-7), compactly."""
+    # 7 * 3 registers starting from 0x361B
     decode_instructions: List[tuple] = []
     for i in range(7):
         p = "" if i == 0 else str(i + 1)

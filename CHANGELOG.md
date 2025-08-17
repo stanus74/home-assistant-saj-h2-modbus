@@ -10,6 +10,14 @@
 - Updated `pending_handlers` in `hub.py` to dynamically call `handle_settings` for different modes (e.g., `charge`, `discharge`).
 - Added debug logging in `hub.py` and `charge_control.py` to trace pending settings and Modbus operations.
 
+### Improvements
+
+- **Improved Charge/Discharge Day Mask and Power Percent Handling:**
+  - Modified `charge_control.py` to default `day_mask` to 127 and `power_percent` to 5 when not explicitly provided.
+  - Ensured that existing `day_mask` or `power_percent` values are read from the inverter and combined with new inputs if only one is provided.
+  - Implemented a check to prevent redundant Modbus writes for day mask and power percent if the combined value has not changed.
+- **Optimized Modbus Write Operations:**
+  - Updated `hub.py` to only trigger `charge_control.py`'s `handle_charge_settings` when there are actual pending changes for charge start/end times, day mask, or power percent.
 
 ### Added
 
@@ -24,7 +32,7 @@
 ### Removed
 
 - Cleaned up unused imports (`Dict`, `NamedTuple`, `Any`, `UnitOfTime`) from `const.py` to reduce code noise.
-
+- some more cleanup
 
 # Changelog (v2.3.1)
 

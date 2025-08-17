@@ -62,7 +62,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     ]
 
     for i in range(1, 8):
-        prefix = "" if i == 1 else str(i)
+        prefix = str(i)
         entities.append(SajGenericNumberEntity(
             hub,
             f"SAJ Discharge{prefix} Day Mask (Input)",

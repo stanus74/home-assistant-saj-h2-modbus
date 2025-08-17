@@ -40,7 +40,7 @@ async def async_setup_entry(
 
     # Discharge Start/End Time Entities (1-7)
     for i in range(1, 8):
-        prefix = "" if i == 1 else str(i)
+        prefix = str(i)
         entities.append(SajTimeTextEntity(
             hub,
             f"SAJ Discharge{prefix} Start Time (Time)",
