@@ -73,6 +73,10 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
     """Handle an options flow for SAJ Modbus."""
 
+    def _get_option_default(self, key, default):
+        """Get option default value from options or data."""
+        return self.config_entry.options.get(key, self.config_entry.data.get(key, default))
+
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
@@ -101,8 +105,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_HOST, default=self.config_entry.options.get(CONF_HOST, self.config_entry.data.get(CONF_HOST, ''))): str,
-                vol.Required(CONF_PORT, default=self.config_entry.options.get(CONF_PORT, self.config_entry.data.get(CONF_PORT, 502))): int,
-                vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, 30))): int,
+                vol.Required(CONF_HOST, default=self._get_option_default(CONF_HOST, '')): str,
+                vol.Required(CONF_PORT, default=self._get_option_default(CONF_PORT, 502)): int,
+                vol.Optional(CONF_SCAN_INTERVAL, default=self._get_option_default(CONF_SCAN_INTERVAL, 30)): int,
             }),
         )

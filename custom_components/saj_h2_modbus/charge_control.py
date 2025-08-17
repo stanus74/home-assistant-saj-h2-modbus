@@ -78,6 +78,58 @@ REGISTERS = {
     "grid_max_discharge_power": 0x3650,
 }
 
+# Mapping of simple pending attributes to their register addresses and labels
+SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
+    "export_limit": (REGISTERS["export_limit"], "export limit"),
+    "app_mode": (REGISTERS["app_mode"], "app mode"),
+    "discharge_time_enable": (
+        REGISTERS["discharging_state"],
+        "discharge time enable",
+    ),
+    "battery_on_grid_discharge_depth": (
+        REGISTERS["battery_on_grid_discharge_depth"],
+        "battery on grid discharge depth",
+    ),
+    "battery_off_grid_discharge_depth": (
+        REGISTERS["battery_off_grid_discharge_depth"],
+        "battery off grid discharge depth",
+    ),
+    "battery_capacity_charge_upper_limit": (
+        REGISTERS["battery_capacity_charge_upper_limit"],
+        "battery capacity charge upper limit",
+    ),
+    "battery_charge_power_limit": (
+        REGISTERS["battery_charge_power_limit"],
+        "battery charge power limit",
+    ),
+    "battery_discharge_power_limit": (
+        REGISTERS["battery_discharge_power_limit"],
+        "battery discharge power limit",
+    ),
+    "grid_max_charge_power": (
+        REGISTERS["grid_max_charge_power"],
+        "grid max charge power",
+    ),
+    "grid_max_discharge_power": (
+        REGISTERS["grid_max_discharge_power"],
+        "grid max discharge power",
+    ),
+}
+
+
+def _make_simple_handler(pending_attr: str, address: int, label: str):
+    """Factory for simple register handlers."""
+
+    async def handler(self) -> None:
+        await self._handle_simple_register(
+            getattr(self._hub, f"_pending_{pending_attr}"),
+            address,
+            label,
+            lambda: setattr(self._hub, f"_pending_{pending_attr}", None),
+        )
+
+    return handler
+
 
 def make_pending_setter(attr_path: str):
     """
@@ -216,95 +268,6 @@ class ChargeSettingHandler:
         except Exception as e:
             _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
 
-    async def handle_export_limit(self) -> None:
-        """Handles the export limit"""
-        await self._handle_simple_register(
-            self._hub._pending_export_limit,
-            REGISTERS["export_limit"],
-            "export limit",
-            lambda: setattr(self._hub, "_pending_export_limit", None)
-        )
-                
-    async def handle_app_mode(self) -> None:
-        """Handles the app mode"""
-        await self._handle_simple_register(
-            self._hub._pending_app_mode,
-            REGISTERS["app_mode"],
-            "app mode",
-            lambda: setattr(self._hub, "_pending_app_mode", None)
-        )
-        
-    async def handle_discharge_time_enable(self) -> None:
-        """Handles the Discharge Time Enable value"""
-        await self._handle_simple_register(
-            self._hub._pending_discharge_time_enable,
-            REGISTERS["discharging_state"],
-            "discharge time enable",
-            lambda: setattr(self._hub, "_pending_discharge_time_enable", None)
-        )
-
-    async def handle_battery_on_grid_discharge_depth(self) -> None:
-        """Handles the Battery On Grid Discharge Depth value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_on_grid_discharge_depth,
-            REGISTERS["battery_on_grid_discharge_depth"],
-            "battery on grid discharge depth",
-            lambda: setattr(self._hub, "_pending_battery_on_grid_discharge_depth", None)
-        )
-
-    async def handle_battery_off_grid_discharge_depth(self) -> None:
-        """Handles the Battery Off Grid Discharge Depth value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_off_grid_discharge_depth,
-            REGISTERS["battery_off_grid_discharge_depth"],
-            "battery off grid discharge depth",
-            lambda: setattr(self._hub, "_pending_battery_off_grid_discharge_depth", None)
-        )
-
-    async def handle_battery_capacity_charge_upper_limit(self) -> None:
-        """Handles the Battery Capacity Charge Upper Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_capacity_charge_upper_limit,
-            REGISTERS["battery_capacity_charge_upper_limit"],
-            "battery capacity charge upper limit",
-            lambda: setattr(self._hub, "_pending_battery_capacity_charge_upper_limit", None)
-        )
-
-    async def handle_battery_charge_power_limit(self) -> None:
-        """Handles the Battery Charge Power Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_charge_power_limit,
-            REGISTERS["battery_charge_power_limit"],
-            "battery charge power limit",
-            lambda: setattr(self._hub, "_pending_battery_charge_power_limit", None)
-        )
-
-    async def handle_battery_discharge_power_limit(self) -> None:
-        """Handles the Battery Discharge Power Limit value"""
-        await self._handle_simple_register(
-            self._hub._pending_battery_discharge_power_limit,
-            REGISTERS["battery_discharge_power_limit"],
-            "battery discharge power limit",
-            lambda: setattr(self._hub, "_pending_battery_discharge_power_limit", None)
-        )
-
-    async def handle_grid_max_charge_power(self) -> None:
-        """Handles the Grid Max Charge Power value"""
-        await self._handle_simple_register(
-            self._hub._pending_grid_max_charge_power,
-            REGISTERS["grid_max_charge_power"],
-            "grid max charge power",
-            lambda: setattr(self._hub, "_pending_grid_max_charge_power", None)
-        )
-
-    async def handle_grid_max_discharge_power(self) -> None:
-        """Handles the Grid Max Discharge Power value"""
-        await self._handle_simple_register(
-            self._hub._pending_grid_max_discharge_power,
-            REGISTERS["grid_max_discharge_power"],
-            "grid max discharge power",
-            lambda: setattr(self._hub, "_pending_grid_max_discharge_power", None)
-        )
 
     async def _handle_simple_register(
         self, 
@@ -399,3 +362,11 @@ class ChargeSettingHandler:
             _LOGGER.info(f"Successfully set {label}: {time_str}")
         else:
             _LOGGER.error(f"Failed to write {label}")
+
+# Dynamically add simple register handlers to ChargeSettingHandler
+for _attr, (_addr, _label) in SIMPLE_REGISTER_MAP.items():
+    setattr(
+        ChargeSettingHandler,
+        f"handle_{_attr}",
+        _make_simple_handler(_attr, _addr, _label),
+    )

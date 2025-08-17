@@ -2,6 +2,8 @@
 
 ## Big Code improvement and reducing
 
+## Code was shortened by 380 lines or reduced by 16Kbytes.
+
 ### Updated
 
 - Refactored `hub.py` to consolidate `_pending_*` attributes into a single `_pending_settings` dictionary for better maintainability.
