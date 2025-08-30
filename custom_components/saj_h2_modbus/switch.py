@@ -14,9 +14,11 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ switches."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
+    device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
+
+    switch_types = ["charging", "discharging"]
     async_add_entities([
-        SajChargingSwitch(hub, hass.data[DOMAIN][entry.entry_id]["device_info"]),
-        SajDischargingSwitch(hub, hass.data[DOMAIN][entry.entry_id]["device_info"])
+        BaseSajSwitch(hub, device_info, switch_type) for switch_type in switch_types
     ])
     _LOGGER.info("Added SAJ switches")
 
@@ -49,39 +51,29 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             "pending_write": pending is not None
         }
 
-    async def async_turn_on(self, **kwargs) -> None:
-        if self.is_on:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} already on")
+    async def _set_state(self, desired_state: bool) -> None:
+        """Set the switch state with shared logic."""
+        if self.is_on == desired_state:
+            _LOGGER.debug(f"{self._switch_type.capitalize()} already {'on' if desired_state else 'off'}")
             return
 
         if not self._allow_switch():
             return
 
         try:
-            await getattr(self._hub, f"set_{self._switch_type}")(True)
+            await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
-            _LOGGER.debug(f"{self._switch_type.capitalize()} turned ON")
+            _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
             self.async_write_ha_state()
         except Exception as e:
-            _LOGGER.error(f"Turn on failed: {e}")
+            _LOGGER.error(f"Failed to turn {'on' if desired_state else 'off'}: {e}")
             raise
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set_state(True)
 
     async def async_turn_off(self, **kwargs) -> None:
-        if not self.is_on:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} already off")
-            return
-
-        if not self._allow_switch():
-            return
-
-        try:
-            await getattr(self._hub, f"set_{self._switch_type}")(False)
-            self._last_switch_time = time.time()
-            _LOGGER.debug(f"{self._switch_type.capitalize()} turned OFF")
-            self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error(f"Turn off failed: {e}")
-            raise
+        await self._set_state(False)
 
     def _allow_switch(self) -> bool:
         current_time = time.time()
@@ -91,11 +83,3 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             _LOGGER.warning(f"Time lock active! Wait {remaining}s before switching {self._switch_type} again.")
             return False
         return True
-
-class SajChargingSwitch(BaseSajSwitch):
-    def __init__(self, hub: SAJModbusHub, device_info):
-        super().__init__(hub, device_info, "charging")
-
-class SajDischargingSwitch(BaseSajSwitch):
-    def __init__(self, hub: SAJModbusHub, device_info):
-        super().__init__(hub, device_info, "discharging")

@@ -1,3 +1,41 @@
+# Changelog (v2.4.0)
+
+## Big Code improvement and reducing
+
+## Code was shortened by 380 lines or reduced by 17Kbytes.
+
+### Updated
+
+- Refactored `hub.py` to consolidate `_pending_*` attributes into a single `_pending_settings` dictionary for better maintainability.
+- Updated `ChargeSettingHandler` in `charge_control.py` to use the `_pending_settings` dictionary instead of individual `_pending_*` attributes.
+- Replaced repetitive `handle_*_settings` methods in `charge_control.py` with a generic `handle_settings` method.
+- Updated `pending_handlers` in `hub.py` to dynamically call `handle_settings` for different modes (e.g., `charge`, `discharge`).
+- Added debug logging in `hub.py` and `charge_control.py` to trace pending settings and Modbus operations.
+
+### Improvements
+
+- **Improved Charge/Discharge Day Mask and Power Percent Handling:**
+  - Modified `charge_control.py` to default `day_mask` to 127 and `power_percent` to 5 when not explicitly provided.
+  - Ensured that existing `day_mask` or `power_percent` values are read from the inverter and combined with new inputs if only one is provided.
+  - Implemented a check to prevent redundant Modbus writes for day mask and power percent if the combined value has not changed.
+- **Optimized Modbus Write Operations:**
+  - Updated `hub.py` to only trigger `charge_control.py`'s `handle_charge_settings` when there are actual pending changes for charge start/end times, day mask, or power percent.
+
+### Added
+
+- Introduced `_read_phase_block` helper function for compact 3-phase block reading.
+
+### Changed
+- Refactored `read_discharge_data` to use a loop for dynamic decode instructions.
+- Updated `_read_modbus_data` to handle missing keys or insufficient registers gracefully.
+- Simplified and improved error handling in `read_anti_reflux_data`.
+- Refactored `read_additional_modbus_data_4`, `read_inverter_phase_data`, and `read_offgrid_output_data` to use `_read_phase_block`.
+
+### Removed
+
+- Cleaned up unused imports (`Dict`, `NamedTuple`, `Any`, `UnitOfTime`) from `const.py` to reduce code noise.
+- some more cleanup
+
 # Changelog (v2.3.1)
 
 ### Bug Fixes
@@ -12,6 +50,7 @@
   - Consolidated common Modbus operation logic into a new helper function `_perform_modbus_operation` in `modbus_utils.py`. This makes `read_once` and `write_once` functions more compact and readable.
 - **Centralized Type Aliases:**
   - Moved `ModbusClient` and `Lock` type aliases to `custom_components/saj_h2_modbus/const.py` for better code organization and maintainability.
+
 
 # Changelog (v2.3.0)
 
@@ -194,3 +233,5 @@ Fixed an issue where enabling multiple sensors caused the Modbus adapter to beco
   - Improved error handling consistency across all operations.
   - Added comprehensive German docstrings for better documentation.
   - Enhanced code structure with clearer method responsibilities.
+
+

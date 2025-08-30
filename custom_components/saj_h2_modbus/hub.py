@@ -48,36 +48,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_charge_end: Optional[str] = None
         self._pending_charge_day_mask: Optional[int] = None
         self._pending_charge_power_percent: Optional[int] = None
-        self._pending_discharge_start: Optional[str] = None
-        self._pending_discharge_end: Optional[str] = None
-        self._pending_discharge_day_mask: Optional[int] = None
-        self._pending_discharge_power_percent: Optional[int] = None
+       
         
         # Pending settings for additional discharge times
-        self._pending_discharge2_start: Optional[str] = None
-        self._pending_discharge2_end: Optional[str] = None
-        self._pending_discharge2_day_mask: Optional[int] = None
-        self._pending_discharge2_power_percent: Optional[int] = None
-        self._pending_discharge3_start: Optional[str] = None
-        self._pending_discharge3_end: Optional[str] = None
-        self._pending_discharge3_day_mask: Optional[int] = None
-        self._pending_discharge3_power_percent: Optional[int] = None
-        self._pending_discharge4_start: Optional[str] = None
-        self._pending_discharge4_end: Optional[str] = None
-        self._pending_discharge4_day_mask: Optional[int] = None
-        self._pending_discharge4_power_percent: Optional[int] = None
-        self._pending_discharge5_start: Optional[str] = None
-        self._pending_discharge5_end: Optional[str] = None
-        self._pending_discharge5_day_mask: Optional[int] = None
-        self._pending_discharge5_power_percent: Optional[int] = None
-        self._pending_discharge6_start: Optional[str] = None
-        self._pending_discharge6_end: Optional[str] = None
-        self._pending_discharge6_day_mask: Optional[int] = None
-        self._pending_discharge6_power_percent: Optional[int] = None
-        self._pending_discharge7_start: Optional[str] = None
-        self._pending_discharge7_end: Optional[str] = None
-        self._pending_discharge7_day_mask: Optional[int] = None
-        self._pending_discharge7_power_percent: Optional[int] = None
+        self._pending_discharges: List[Dict[str, Optional[Any]]] = []
+        for _ in range(7): # Initialize 7 discharge setting slots
+            self._pending_discharges.append({
+                "start": None,
+                "end": None,
+                "day_mask": None,
+                "power_percent": None,
+            })
         
         self._pending_export_limit: Optional[int] = None
         self._pending_charging_state: Optional[bool] = None
@@ -93,6 +74,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_grid_max_discharge_power: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
+
+        # Dynamically generate all setter methods from the PENDING_FIELDS list
+        for name, attr_path in PENDING_FIELDS:
+            setter = make_pending_setter(attr_path)
+            setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
 
     async def set_battery_charge_power_limit(self, value: int) -> None:
         self._pending_battery_charge_power_limit = value
@@ -114,10 +100,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def set_battery_capacity_charge_upper_limit(self, value: int) -> None:
         self._pending_battery_capacity_charge_upper_limit = value
-
-    for _name, _suffix in PENDING_FIELDS:
-        locals()[f"set_{_name}"] = make_pending_setter(_name, _suffix)
-    del _name, _suffix
 
     def _create_client(self) -> AsyncModbusTcpClient:
         client = AsyncModbusTcpClient(
@@ -189,39 +171,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 pending_handlers = [
                     (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
                     (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
-                    (True, self._setting_handler.handle_charge_settings),
-                    (True, self._setting_handler.handle_discharge_settings),
-                    (self._pending_discharge2_start is not None or 
-                     self._pending_discharge2_end is not None or 
-                     self._pending_discharge2_day_mask is not None or 
-                     self._pending_discharge2_power_percent is not None, 
-                     self._setting_handler.handle_discharge2_settings),
-                    (self._pending_discharge3_start is not None or 
-                     self._pending_discharge3_end is not None or 
-                     self._pending_discharge3_day_mask is not None or 
-                     self._pending_discharge3_power_percent is not None, 
-                     self._setting_handler.handle_discharge3_settings),
-                    (self._pending_discharge4_start is not None or 
-                     self._pending_discharge4_end is not None or 
-                     self._pending_discharge4_day_mask is not None or 
-                     self._pending_discharge4_power_percent is not None, 
-                     self._setting_handler.handle_discharge4_settings),
-                    (self._pending_discharge5_start is not None or 
-                     self._pending_discharge5_end is not None or 
-                     self._pending_discharge5_day_mask is not None or 
-                     self._pending_discharge5_power_percent is not None, 
-                     self._setting_handler.handle_discharge5_settings),
-                    (self._pending_discharge6_start is not None or 
-                     self._pending_discharge6_end is not None or 
-                     self._pending_discharge6_day_mask is not None or 
-                     self._pending_discharge6_power_percent is not None, 
-                     self._setting_handler.handle_discharge6_settings),
-                    (self._pending_discharge7_start is not None or 
-                     self._pending_discharge7_end is not None or 
-                     self._pending_discharge7_day_mask is not None or 
-                     self._pending_discharge7_power_percent is not None, 
-                     self._setting_handler.handle_discharge7_settings),
-                    (True, self._setting_handler.handle_export_limit),
+                    (any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]), self._setting_handler.handle_charge_settings),
+                    (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
                     (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
                     (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
                     (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
@@ -233,6 +184,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
                 ]
                 
+                
+                # Add generic discharge handlers dynamically
+                for i in range(1, 8):
+                    pending_handlers.append((
+                        any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]),
+                        lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)
+                    ))
+
                 for condition, handler in pending_handlers:
                     if condition:
                         await handler()
@@ -268,16 +227,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     modbus_readers.read_inverter_phase_data,
                     modbus_readers.read_offgrid_output_data,
                     modbus_readers.read_side_net_data,
+                    modbus_readers.read_passive_battery_data,
                     modbus_readers.read_charge_data,
                     modbus_readers.read_discharge_data,  # Reads all discharges at once
-                    modbus_readers.read_anti_reflux_data,
-                    modbus_readers.read_passive_battery_data,
+                    modbus_readers.read_anti_reflux_data,                    
                     modbus_readers.read_meter_a_data,
                 ]
                 
                 for method in reader_methods:
                     await execute_reader_method(method)
 
+                # Cache sofort mit neuen Werten aktualisieren,
+                # damit _get_power_state() aktuelle Daten sieht
+                self.inverter_data.update(combined_data)
                 combined_data["charging_enabled"] = await self.get_charging_state()
                 combined_data["discharging_enabled"] = await self.get_discharging_state()
 
@@ -288,27 +250,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error(f"Unexpected error during update: {e}")
             return {}
 
-    async def _get_power_state(self, state_register: int, state_type: str) -> bool:
+    async def _get_power_state(self, state_key: str, state_type: str) -> bool:
         try:
-            # Read the state register
-            state_regs = await self._read_registers(state_register)
-            state_value = state_regs[0]
-            
-            # Read the App-Mode register (0x3647)
-            app_mode_regs = await self._read_registers(0x3647)
-            app_mode_value = app_mode_regs[0]
-            
-            # Return True if both conditions are met
+            state_value = self.inverter_data.get(state_key)
+            app_mode_value = self.inverter_data.get("AppMode")
+
+            if state_value is None or app_mode_value is None:
+                _LOGGER.warning(f"{state_type} state or AppMode not available in cached data")
+                return False
+
             return state_value > 0 and app_mode_value == 1
         except Exception as e:
-            _LOGGER.error(f"Error reading {state_type} state: {e}")
+            _LOGGER.error(f"Error checking {state_type} state: {e}")
             return False
-            
+
     async def get_charging_state(self) -> bool:
-        return await self._get_power_state(0x3604, "Charging")
+        return await self._get_power_state("charging_enabled", "Charging")
 
     async def get_discharging_state(self) -> bool:
-        return await self._get_power_state(0x3605, "Discharging")
+        return await self._get_power_state("discharging_enabled", "Discharging")
 
     async def _read_registers(self, address: int, count: int = 1) -> List[int]:
         return await try_read_registers(

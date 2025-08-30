@@ -8,5 +8,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/stanus74/home-assistant-saj-h2-modbus/issues",
   "requirements": ["pymodbus>=3.6.9"],
-  "version": "2.3.1"
+
+  "version": "2.4.0"
+
 }

@@ -231,15 +231,17 @@ async def try_write_registers(
 ) -> bool:
     await _ensure_connected(client, "write")
     should_retry, on_retry = _create_retry_handlers(client, "write")
-    
+
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
         if is_single:
+            _LOGGER.debug(f"Writing single value {values} to register {hex(address)}")
             result = await _perform_modbus_operation(
                 client, lock, unit, client.write_register, address=address, value=values
             )
         else:
+            _LOGGER.debug(f"Writing values {values} to registers starting at {hex(address)}")
             result = await _perform_modbus_operation(
                 client, lock, unit, client.write_registers, address=address, values=values
             )
