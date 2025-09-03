@@ -33,8 +33,9 @@ This integration is available in the HACS default repository.
 
 ## Configuration
 
-1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and select "SAJ H2 Modbus."
-2. Enter the IP Address and Interval.
+1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and 
+select "SAJ H2 Modbus."
+2. Enter the IP Address and Interval **Important**: don't set intervall at least *60 seconds*
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 4. Set charging values in Home Assistant, see below
 
