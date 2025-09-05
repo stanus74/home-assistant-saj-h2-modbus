@@ -11,16 +11,11 @@ body:
         Please complete **all fields**. Without full information (especially log files), we cannot investigate your issue.
 
         ⚠️ **Important Firmware Note**  
-        If you are using an AIO3 converter, please ensure it is updated to the latest firmware.  
-        Earlier versions caused Modbus communication issues.  
-        Also, check your inverter firmware. If it is **older** than the following versions, please update it:
+        Please ensure that you always have the latest version installed:  
+        https://github.com/stanus74/home-assistant-saj-h2-modbus/releases  
 
-        - **Module**: V1.211  
-        - **Display Board**: V1.070  
-        - **Control Board**: V4.066
-
-        Since this update (Nov 14, 2024), connection quality has improved significantly.  
-        If your firmware is outdated, contact SAJ for assistance.
+        **Do not post an error message if you have set the polling interval to less than 60 seconds.  
+        Modbus protocol is not Gigabit LAN :-)**
 
   - type: input
     id: inverter_model
@@ -32,11 +27,11 @@ body:
       required: true
 
   - type: input
-    id: inverter_firmware
+    id: integration_version
     attributes:
-      label: Inverter firmware version
-      description: Please provide the exact version
-      placeholder: "e.g., V1.2.3"
+      label: Integration version
+      description: Which release of the Modbus integration are you using?
+      placeholder: "e.g., v1.2.3"
     validations:
       required: true
 
@@ -47,18 +42,12 @@ body:
       options:
         - AIO3
         - AIO2
+        - USR-TCP232
+        - Waveshare
         - Other (please specify below)
     validations:
       required: true
-
-  - type: input
-    id: converter_firmware
-    attributes:
-      label: Modbus converter firmware version
-      placeholder: "e.g., AIO3 FW 1.4.0"
-    validations:
-      required: true
-
+  
   - type: textarea
     id: converter_details
     attributes:
@@ -83,6 +72,18 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: ha_install
+    attributes:
+      label: Installation type
+      options:
+        - Home Assistant OS
+        - Home Assistant Container
+        - Home Assistant Supervised
+        - Core (venv/manual install)
+    validations:
+      required: true
+
   - type: textarea
     id: logs
     attributes:
@@ -91,7 +92,19 @@ body:
     validations:
       required: true
 
+  - type: checkboxes
+    id: pre_checks
+    attributes:
+      label: Pre-checks
+      options:
+        - label: I have updated to the latest release
+          required: true
+        - label: I confirmed the inverter is reachable via Modbus TCP
+          required: true
+        - label: I searched for existing issues
+          required: true
+
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve this integration!
+        ✅ Thanks for helping improve this integration!
