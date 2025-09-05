@@ -12,6 +12,11 @@ from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
+FAST_UPDATE_SENSOR_KEYS = [
+    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
+    "inverterPower", "gridPower",
+]
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ sensors from a config entry."""
     hub: SAJModbusHub = hass.data[DOMAIN][entry.entry_id]["hub"]
@@ -19,7 +24,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        entity = SajSensor(hub, device_info, description)
+        # Wenn der Fast-Coordinator deaktiviert/keiner vorhanden ist,
+        # binden Fast-Sensoren automatisch an den Main-Coordinator.
+        if description.key in FAST_UPDATE_SENSOR_KEYS and getattr(hub, "_fast_coordinator", None) is not None:
+            coordinator = hub._fast_coordinator
+        else:
+            coordinator = hub
+        entity = SajSensor(coordinator, device_info, description)
         entities.append(entity)
 
     async_add_entities(entities)
@@ -33,8 +44,14 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator=hub)
         self.entity_description = description
         self._attr_device_info = device_info
-        self._attr_unique_id = f"{hub.name}_{description.key}"
-        self._attr_name = f"{hub.name} {description.name}"
+        # Stabile unique_id: unabhängig vom Coordinator-Namen
+        device_name = device_info.get("name", "SAJ")
+        self._attr_unique_id = f"{device_name}_{description.key}"
+        # WICHTIG: Bei has_entity_name=True KEIN Gerätepräfix im Namen!
+        # HA zeigt automatisch "<Gerätename> <Entitätsname>" an.
+        self._attr_name = description.name
+        # Empfohlener Core-Standard: Entities haben Eigennamen
+        self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
 
@@ -76,4 +93,4 @@ class SajSensor(CoordinatorEntity, SensorEntity):
             self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
 
-        #_LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
+        # _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")

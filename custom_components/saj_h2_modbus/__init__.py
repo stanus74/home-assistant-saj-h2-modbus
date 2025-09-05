@@ -1,5 +1,7 @@
 """The SAJ Modbus Integration."""
 import logging
+import time
+from typing import Optional
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
@@ -22,6 +24,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a SAJ Modbus entry."""
+    _LOGGER.debug("Starting async_setup_entry")
+    start_time = time.monotonic()
+    
     hub = await _create_hub(hass, entry)
     
     if not hub:
@@ -29,15 +34,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "hub": hub,
+        "fast_coordinator": hub._fast_coordinator,
         "device_info": _create_device_info(entry)
     }
 
+   
+    # Starte nur, wenn in hub aktiviert
+    if hub.fast_enabled:
+        await hub.start_fast_updates()
+        # Add a dummy listener to ensure the fast coordinator schedules periodic updates
+        entry.async_on_unload(hub._fast_coordinator.async_add_listener(lambda: None))
+    else:
+        _LOGGER.info("Fast coordinator not started (disabled).")
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_update_options))
+    
+    end_time = time.monotonic()
+    elapsed_time = end_time - start_time
+    _LOGGER.debug(f"Finished async_setup_entry in {elapsed_time:.2f} seconds")
+    
+    duration = time.monotonic() - start_time
+    _LOGGER.debug(f"async_setup_entry completed in {duration:.2f} seconds")
+    
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Hub-spezifischen Unload zuerst ausführen (stoppt Fast-Coordinator, schließt Client)
+    hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
+    if hub is not None:
+        try:
+            await hub.async_unload_entry()
+        except Exception as e:
+            _LOGGER.debug("Ignoring hub unload error: %s", e)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
@@ -59,8 +88,13 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
             entry.data[CONF_NAME],  # Name is always in data, not in options
             _get_config_value(entry, CONF_HOST),
             _get_config_value(entry, CONF_PORT, DEFAULT_PORT),
-            _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            # Optional: hier könnte später aus Options/Env fast_enabled eingelesen werden
+            fast_enabled=None,
         )
+        # Ensure the scan_interval is correctly passed to the hub
+        scan_interval = _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        _LOGGER.debug(f"Setting scan interval to {scan_interval} seconds")
         await hub.async_config_entry_first_refresh()
         return hub
     except Exception as e:

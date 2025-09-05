@@ -4,6 +4,7 @@ import inspect
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+from pymodbus.client import AsyncModbusTcpClient
 
 from .const import ModbusClient, Lock
 
@@ -25,6 +26,27 @@ def set_modbus_config(host: str, port: int) -> None:
     ModbusGlobalConfig.host = host
     ModbusGlobalConfig.port = port
     _LOGGER.debug(f"Global Modbus config set: {host}:{port}")
+async def ensure_client_connected(client: ModbusClient, host: str, port: int, logger: logging.Logger) -> None:
+    """Ensures the Modbus client is connected, attempting to connect if not."""
+    if not client.connected:
+        logger.debug("Client not connected, attempting to connect to %s:%s", host, port)
+        try:
+            await client.connect()
+            if not client.connected:
+                raise ConnectionError(f"Client failed to connect to {host}:{port}")
+            logger.info("Client successfully reconnected to %s:%s", host, port)
+        except Exception as e:
+            logger.error("Error connecting client to %s:%s: %s", host, port, e)
+            raise ConnectionError(f"Failed to connect to {host}:{port} due to {e}") from e
+    logger.debug("Client connected: %s:%s", host, port)
+
+async def connect_if_needed(client: Optional[AsyncModbusTcpClient], host: str, port: int) -> AsyncModbusTcpClient:
+    if client is None:
+        client = AsyncModbusTcpClient(host=host, port=port, timeout=10)
+    if not client.connected:
+        await client.connect()
+    return client
+
 
 async def _exponential_backoff(attempt: int, base: float, cap: float) -> None:
     delay = min(base * 2 ** (attempt - 1), cap)
@@ -57,65 +79,6 @@ async def _retry_with_backoff(
     _LOGGER.warning(f"[{task_name}] All {retries} attempts failed: {last_exception}")
     raise last_exception
 
-class ModbusConnection:
-    """Async context manager for Modbus TCP connections with auto-connect and close."""
-    def __init__(
-        self,
-        client: ModbusClient,
-        host: str,
-        port: int,
-        max_retries: int = 3,
-        timeout: float = 10.0,
-        backoff_base: float = 2.0
-    ):
-        self._client = client
-        self._host = host
-        self._port = port
-        self._max_retries = max_retries
-        self._timeout = timeout
-        self._backoff_base = backoff_base
-
-    async def __aenter__(self) -> ModbusClient:
-        await self.connect()
-        return self._client
-
-    async def __aexit__(
-        self, exc_type: Any, exc: Any, tb: Any
-    ) -> None:
-        try:
-            timeout = self._timeout or 5.0
-            async with asyncio.timeout(timeout):
-                close_fn = getattr(self._client, "close", None)
-                if close_fn:
-                    if inspect.iscoroutinefunction(close_fn):
-                        await close_fn()
-                    else:
-                        close_fn()
-        except Exception:
-            _LOGGER.warning("Error closing Modbus connection", exc_info=True)
-
-    async def connect(self) -> None:
-        async def do_connect():
-            await asyncio.wait_for(
-                self._client.connect(), timeout=self._timeout
-            )
-            if not self._client.connected:
-                raise ConnectionException("Connection failed")
-            return True
-
-        async def on_retry(attempt: int, e: Exception) -> None:
-            _LOGGER.info(f"Reconnect attempt {attempt} after error: {e}")
-
-        await _retry_with_backoff(
-            func=do_connect,
-            should_retry=lambda e: isinstance(e, ConnectionException),
-            retries=self._max_retries,
-            base_delay=self._backoff_base,
-            cap=self._backoff_base ** self._max_retries,
-            on_retry=on_retry,
-            task_name="Modbus-Connect"
-        )
-
 # Default retry settings
 DEFAULT_READ_RETRIES = 3
 DEFAULT_READ_BASE_DELAY = 2.0
@@ -125,34 +88,17 @@ DEFAULT_WRITE_RETRIES = 2
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
-async def _ensure_connected(
-    client: ModbusClient,
-    operation_name: str
-) -> None:
-    """Ensure the client is connected before performing an operation."""
-    host = ModbusGlobalConfig.host
-    port = ModbusGlobalConfig.port
-    
-    if not client.connected:
-        if host is None or port is None:
-            raise ReconnectionNeededError("Client not connected and no host/port available")
-        _LOGGER.info(f"Client not connected, reconnecting before {operation_name}...")
-        async with ModbusConnection(client, host, port):
-            _LOGGER.info(f"Reconnect before {operation_name} successful")
-
-def _create_retry_handlers(client: ModbusClient, operation_name: str):
+def _create_retry_handlers(client: ModbusClient, host: str, port: int, logger: logging.Logger, operation_name: str):
     """Create standard retry handlers for Modbus operations."""
-    host = ModbusGlobalConfig.host
-    port = ModbusGlobalConfig.port
     
     def should_retry(e: Exception) -> bool:
         return isinstance(e, (ConnectionException, ModbusIOException))
 
     async def on_retry(attempt: int, e: Exception) -> None:
-        if isinstance(e, ConnectionException) and host and port:
-            _LOGGER.info(f"Connection lost during {operation_name}, attempting reconnect")
-            async with ModbusConnection(client, host, port):
-                _LOGGER.info(f"Reconnect during {operation_name} successful")
+        if isinstance(e, ConnectionException):
+            logger.info(f"Connection lost during {operation_name}, attempting reconnect")
+            await ensure_client_connected(client, host, port, logger)
+            logger.info(f"Reconnect during {operation_name} successful")
     
     return should_retry, on_retry
 
@@ -183,9 +129,12 @@ async def try_read_registers(
     base_delay: float = DEFAULT_READ_BASE_DELAY,
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> List[int]:
-    await _ensure_connected(client, "read")
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    if host is None or port is None:
+        raise ReconnectionNeededError("Modbus client not configured with host and port.")
 
-    should_retry, on_retry = _create_retry_handlers(client, "read")
+    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "read")
     
     async def read_once():
         response = await _perform_modbus_operation(
@@ -229,8 +178,12 @@ async def try_write_registers(
     base_delay: float = DEFAULT_WRITE_BASE_DELAY,
     cap_delay: float = DEFAULT_WRITE_CAP_DELAY,
 ) -> bool:
-    await _ensure_connected(client, "write")
-    should_retry, on_retry = _create_retry_handlers(client, "write")
+    host = ModbusGlobalConfig.host
+    port = ModbusGlobalConfig.port
+    if host is None or port is None:
+        raise ReconnectionNeededError("Modbus client not configured with host and port.")
+
+    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "write")
 
     is_single = isinstance(values, int)
 
