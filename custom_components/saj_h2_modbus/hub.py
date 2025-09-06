@@ -29,6 +29,9 @@ FAST_POLL_DEFAULT = True # True or False
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:
+        # Optional: UI-Optimismus während eines Intervalls, bevor echte Reads zurückkommen
+        self._optimistic_push_enabled: bool = True
+        self._optimistic_overlay: dict[str, Any] | None = None
         super().__init__(
             # Coordinator-Basis
             hass,
@@ -201,112 +204,121 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = False
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        _LOGGER.debug("Starting _async_update_data")
-        start_time = time.monotonic()
-
+        """Regelmäßiger Poll-Zyklus:
+        1) Verbindung herstellen,
+        2) Pending zuerst abarbeiten (Modbus-Writes),
+        3) dann frische Werte lesen,
+        4) konsolidierten Cache zurückgeben.
+        Dadurch verkürzt sich die Sichtbarkeit von Pending→Final auf EIN Intervall."""
+        start = time.monotonic()
         try:
+            # --- Sicherstellen, dass Modbus-Client verbunden ist ---
             self._client = await connect_if_needed(self._client, self._host, self._port)
-
-            # HINWEIS: Pending-Settings werden NACH dem Daten-Refresh angewendet (siehe unten)
-
-            combined_data: Dict[str, Any] = {}
-            if not self.inverter_data:
-                self.inverter_data.update(
-                    await modbus_readers.read_modbus_inverter_data(self._client, self._read_lock)
-                )
-            combined_data.update(self.inverter_data)
-
-            async def execute_reader_method(method):
-                """Helper function to execute a reader method with error handling."""
-                try:
-                    result = await method(self._client, self._read_lock)
-                    combined_data.update(result)
-                except ReconnectionNeededError as e:
-                    _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                except Exception:
-                    _LOGGER.exception("Unexpected error during update")
-                await asyncio.sleep(0.3)
-
             
-            reader_methods = [
-                modbus_readers.read_modbus_realtime_data,
-                modbus_readers.read_additional_modbus_data_1_part_1,
-                modbus_readers.read_additional_modbus_data_1_part_2,
-                modbus_readers.read_additional_modbus_data_2_part_1,
-                modbus_readers.read_additional_modbus_data_2_part_2,
-                modbus_readers.read_additional_modbus_data_3,
-                modbus_readers.read_additional_modbus_data_3_2,
-                modbus_readers.read_additional_modbus_data_4,
-                modbus_readers.read_battery_data,
-                modbus_readers.read_inverter_phase_data,
-                modbus_readers.read_offgrid_output_data,
-                modbus_readers.read_side_net_data,
-                modbus_readers.read_passive_battery_data,
-                modbus_readers.read_charge_data,
-                modbus_readers.read_discharge_data,  
-                modbus_readers.read_anti_reflux_data,
-                modbus_readers.read_meter_a_data,
-            ]
+            # --- Pending zuerst schreiben (inkl. AppMode-OR-Logik) ---
+            # Optional: Erwarteten Zielzustand im Cache markieren (ohne Modbus, nur kosmetisch)
+            if self._optimistic_push_enabled and self._has_pending():
+                self._apply_optimistic_overlay()
+                # Optional: Sofortige UI-Aktualisierung mit erwarteten Werten
+                if self._optimistic_overlay:
+                    self.async_set_updated_data(self._optimistic_overlay)
 
-            for method in reader_methods:
-                await execute_reader_method(method)
+            await self._process_pending_settings()  # führt die Modbus-Writes aus (Charging/Discharging + AppMode)
 
-            # Cache sofort mit neuen Werten aktualisieren,
-            # damit _get_power_state() aktuelle Daten sieht
-            self.inverter_data.update(combined_data)
-
-            # Abgeleitete Zustände NICHT auf die Roh-Keys schreiben
-            chg = await self.get_charging_state()
-            dchg = await self.get_discharging_state()
-            if chg is not None:
-                combined_data["is_charging"] = chg
-                self.inverter_data["is_charging"] = chg
-            if dchg is not None:
-                combined_data["is_discharging"] = dchg
-                self.inverter_data["is_discharging"] = dchg
-
-            # --- Pending-Settings jetzt (nach frischen Daten) anwenden ---
-            try:
-                pending_handlers = [
-                    (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
-                    (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
-                    (
-                        any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]),
-                        self._setting_handler.handle_charge_settings
-                    ),
-                    (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
-                    (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
-                    (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
-                    (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
-                    (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
-                    (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
-                    (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
-                    (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
-                    (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
-                    (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
-                ]
-
-                # Generische Discharge-Handler dynamisch hinzufügen
-                for i in range(1, 8):
-                    if any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
-                        pending_handlers.append((True, lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)))
-
-                for condition, handler in pending_handlers:
-                    if condition:
-                        await handler()
-            except Exception as err:
-                _LOGGER.warning("Applying pending settings failed: %s", err)
-
-            duration_total = time.monotonic() - start_time
-            #LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds (success: True)")
-
-            return combined_data
-        except Exception as e:
-            _LOGGER.error(f"Unexpected error during update: {e}")
-            return {}
+            # --- Danach: Frische Reads holen, damit direkt finaler Zustand im selben Intervall sichtbar ist ---
+            cache = await self._run_reader_methods()
+            # Optimismus-Overlay verwerfen, echte Werte übernehmen
+            self._optimistic_overlay = None
+            self.inverter_data = cache
+            return self.inverter_data
+        except Exception as err:
+            _LOGGER.error("Update cycle failed: %s", err)
+            raise
         finally:
-            duration = time.monotonic() - start_time
-            _LOGGER.debug(f"_async_update_data completed in {duration:.2f} seconds")
+            elapsed = round(time.monotonic() - start, 3)
+            _LOGGER.debug("Update cycle took %ss", elapsed)
+
+    async def _process_pending_settings(self) -> None:
+        """Abarbeitung ausstehender Writes; jetzt VOR den Reads aufgerufen."""
+        # Es gibt in ChargeSettingHandler KEIN has_pending/handle_all_pending.
+        # Wir prüfen die Hub-Pending-Felder und rufen die passenden Handler direkt auf.
+        try:
+            pending_handlers = [
+                (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
+                (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
+                (
+                    any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]),
+                    self._setting_handler.handle_charge_settings,
+                ),
+                (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
+                (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
+                (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
+                (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
+                (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
+                (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
+                (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
+                (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
+                (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
+                (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
+            ]
+            # Generische Discharge-Handler dynamisch hinzufügen (Slots 1..7)
+            for i in range(1, 8):
+                if any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
+                    pending_handlers.append((True, lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)))
+            for condition, handler in pending_handlers:
+                if condition:
+                    await handler()
+        except Exception as e:
+            _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e)
+
+    async def _run_reader_methods(self) -> Dict[str, Any]:
+        """Sequentielles Ausführen der Reader; baut den Cache."""
+        new_cache: Dict[str, Any] = {}
+        self._client = await connect_if_needed(self._client, self._host, self._port)
+        
+        reader_methods = [
+            modbus_readers.read_modbus_inverter_data,
+            modbus_readers.read_modbus_realtime_data,
+            modbus_readers.read_additional_modbus_data_1_part_1,
+            modbus_readers.read_additional_modbus_data_1_part_2,
+            modbus_readers.read_additional_modbus_data_2_part_1,
+            modbus_readers.read_additional_modbus_data_2_part_2,
+            modbus_readers.read_additional_modbus_data_3,
+            modbus_readers.read_additional_modbus_data_3_2,
+            modbus_readers.read_additional_modbus_data_4,
+            modbus_readers.read_battery_data,
+            modbus_readers.read_inverter_phase_data,
+            modbus_readers.read_offgrid_output_data,
+            modbus_readers.read_side_net_data,
+            modbus_readers.read_passive_battery_data,
+            modbus_readers.read_charge_data,
+            modbus_readers.read_discharge_data,
+            modbus_readers.read_anti_reflux_data,
+            modbus_readers.read_meter_a_data,
+        ]
+
+        for method in reader_methods:
+            try:
+                part = await method(self._client, self._read_lock)
+                if part:
+                    new_cache.update(part)
+            except ReconnectionNeededError as e:
+                _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
+                # Einmaliger Reconnect-Versuch
+                await self.reconnect_client()
+                # Versuche es erneut
+                try:
+                    part = await method(self._client, self._read_lock)
+                    if part:
+                        new_cache.update(part)
+                except Exception as e:
+                    _LOGGER.warning(f"Retry failed for {method.__name__}: {e}")
+            except Exception as e:
+                _LOGGER.warning("Reader failed: %s", e)
+        
+        # Falls während dieses Intervalls ein Optimismus-Overlay aktiv war,
+        # haben wir jetzt echte Werte — Overlay wird ignoriert/gelöscht.
+        return new_cache
 
     async def _get_power_state(self, state_key: str, state_type: str) -> Optional[bool]:
         """Liest Roh-Status + AppMode aus dem Cache und liefert ein bool,
@@ -377,3 +389,69 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Clear pending settings
         self._pending_settings.clear()
         return True
+
+    # --- Hilfsfunktionen ---
+    def _has_pending(self) -> bool:
+        """Prüft, ob ausstehende Änderungen im Hub vorhanden sind (ohne Handler-API)."""
+        if self._pending_charging_state is not None:
+            return True
+        if self._pending_discharging_state is not None:
+            return True
+        if any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]):
+            return True
+        if self._pending_export_limit is not None:
+            return True
+        if self._pending_app_mode is not None:
+            return True
+        if self._pending_discharge_time_enable is not None:
+            return True
+        if any([
+            self._pending_battery_on_grid_discharge_depth is not None,
+            self._pending_battery_off_grid_discharge_depth is not None,
+            self._pending_battery_capacity_charge_upper_limit is not None,
+            self._pending_battery_charge_power_limit is not None,
+            self._pending_battery_discharge_power_limit is not None,
+            self._pending_grid_max_charge_power is not None,
+            self._pending_grid_max_discharge_power is not None,
+        ]):
+            return True
+        # Discharge-Slots prüfen
+        for i in range(7):
+            slot = self._pending_discharges[i]
+            if any(slot[attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
+                return True
+        return False
+
+    def _apply_optimistic_overlay(self) -> None:
+        """Markiert im lokalen Cache den erwarteten Zielzustand,
+        bis die echten Read-Werte direkt im Anschluss kommen.
+        Keine Modbus-Zugriffe, nur kosmetisches UI-Snappiness."""
+        try:
+            # Ausgangslage aus aktuellem Cache
+            base = dict(self.inverter_data or {})
+            # Pending-Ziele direkt aus Hub-Pending-Feldern ableiten (ohne Handler-API)
+            # Wir nutzen die *Roh*-Enable-Keys und setzen nur, wenn Pending-Werte vorhanden sind.
+            chg = base.get("charging_enabled")
+            dchg = base.get("discharging_enabled")
+            if self._pending_charging_state is not None:
+                chg = 1 if self._pending_charging_state else 0
+            if self._pending_discharging_state is not None:
+                dchg = 1 if self._pending_discharging_state else 0
+            # AppMode-OR: 1 sobald mindestens einer aktiv, sonst 0
+            app_mode = 1 if bool(chg) or bool(dchg) else 0
+
+            overlay = base
+            if chg is not None:
+                overlay["charging_enabled"] = 1 if chg else 0
+            if dchg is not None:
+                overlay["discharging_enabled"] = 1 if dchg else 0
+            overlay["AppMode"] = app_mode
+
+            self._optimistic_overlay = overlay
+            # UI kann (wenn gewünscht) sofort „näherungsweise“ rendert, ohne Modbus:
+            # Hinweis: Wir rufen HIER NICHT request_refresh() und keine Modbus-Funktionen.
+            # Wenn du die Entities sofort updaten willst (ohne Modbus), könntest du:
+            # self.async_set_updated_data(overlay)
+            # Da du „keinen Coordinator-Aufruf beim Klick“ wünschst, lassen wir das standardmäßig aus.
+        except Exception as e:
+            _LOGGER.debug("Optimistic overlay skipped: %s", e)
