@@ -87,7 +87,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_battery_discharge_power_limit: Optional[int] = None
         self._pending_grid_max_charge_power: Optional[int] = None
         self._pending_grid_max_discharge_power: Optional[int] = None
-        self._pending_settings: Dict[str, Any] = {}
 
         self._setting_handler = ChargeSettingHandler(self)
 
@@ -97,7 +96,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
 
 
-             # Verify that all expected setter methods were created
+        # Verify that all expected setter methods were created
         for name, _ in PENDING_FIELDS:
             if not hasattr(self, f"set_{name}"):
                 _LOGGER.warning("Missing dynamically generated setter for %s", name)
@@ -386,8 +385,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             except Exception as e:
                 _LOGGER.warning(f"Error while closing Modbus client: {e}")
 
-        # Clear pending settings
-        self._pending_settings.clear()
         return True
 
     # --- Hilfsfunktionen ---

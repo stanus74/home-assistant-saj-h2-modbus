@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import inspect
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException

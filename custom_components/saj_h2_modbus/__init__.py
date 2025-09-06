@@ -1,7 +1,6 @@
 """The SAJ Modbus Integration."""
 import logging
 import time
-from typing import Optional
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
@@ -51,10 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     end_time = time.monotonic()
     elapsed_time = end_time - start_time
-    _LOGGER.debug(f"Finished async_setup_entry in {elapsed_time:.2f} seconds")
-    
-    duration = time.monotonic() - start_time
-    _LOGGER.debug(f"async_setup_entry completed in {duration:.2f} seconds")
+    _LOGGER.debug(f"async_setup_entry completed in {elapsed_time:.2f} seconds")
     
     return True
 
