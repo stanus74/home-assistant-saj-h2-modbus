@@ -56,19 +56,6 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_force_update = description.force_update
 
     @property
-    def native_last_reset_time(self):
-        """Return the time when the sensor was last reset, if applicable."""
-        if self.entity_description.state_class == SensorStateClass.TOTAL:
-            now = dt_util.utcnow()
-            if self.entity_description.reset_period == "daily":
-                return now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif self.entity_description.reset_period == "monthly":
-                return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            elif self.entity_description.reset_period == "yearly":
-                return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        return None
-
-    @property
     def native_value(self):
         """Return the state of the sensor."""
         value = self.coordinator.data.get(self.entity_description.key)
@@ -89,8 +76,5 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_coordinator_update)
-        )
 
         # _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")

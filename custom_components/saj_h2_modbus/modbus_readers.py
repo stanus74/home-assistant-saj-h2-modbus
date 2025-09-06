@@ -172,11 +172,7 @@ async def read_additional_modbus_data_1_part_2(client: ModbusClient, lock: Lock)
         ("gridPower", "16i"),
     ]
     
-    import traceback
-    if any("hub._periodic_task" in l for l in traceback.format_stack()):
-        _LOGGER.debug(">>> read_additional_modbus_data_1_part_2() called from periodic background task")
-    else:
-        _LOGGER.debug(">>> read_additional_modbus_data_1_part_2() called from update loop")
+    
 
     return await _read_modbus_data(client, lock, 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2', default_factor=1)
 

@@ -30,6 +30,7 @@ FAST_POLL_DEFAULT = True # True or False
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:
         super().__init__(
+            # Coordinator-Basis
             hass,
             _LOGGER,
             name=name,
@@ -52,6 +53,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._retry_delay = 1
         self._operation_timeout = 30
 
+        # Einmal-Warnschalter gegen Log-Spam bei fehlenden States/AppMode
+        self._warned_missing_states: bool = False
         # Pending settings
         self._pending_charge_start: Optional[str] = None
         self._pending_charge_end: Optional[str] = None
@@ -81,6 +84,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_battery_discharge_power_limit: Optional[int] = None
         self._pending_grid_max_charge_power: Optional[int] = None
         self._pending_grid_max_discharge_power: Optional[int] = None
+        self._pending_settings: Dict[str, Any] = {}
 
         self._setting_handler = ChargeSettingHandler(self)
 
@@ -114,6 +118,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
                 # Cache aktualisieren (nicht mit Rohdaten überschreiben)
                 self.inverter_data.update(result)
+                _LOGGER.debug("Finished fetching %s data in fast cycle (success: True)", self.name)
                 return result
             except ReconnectionNeededError as e:
                 _LOGGER.warning("Fast coordinator requires reconnection: %s", e)
@@ -202,6 +207,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             self._client = await connect_if_needed(self._client, self._host, self._port)
 
+            # HINWEIS: Pending-Settings werden NACH dem Daten-Refresh angewendet (siehe unten)
+
             combined_data: Dict[str, Any] = {}
             if not self.inverter_data:
                 self.inverter_data.update(
@@ -247,11 +254,51 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Cache sofort mit neuen Werten aktualisieren,
             # damit _get_power_state() aktuelle Daten sieht
             self.inverter_data.update(combined_data)
-            combined_data["charging_enabled"] = await self.get_charging_state()
-            combined_data["discharging_enabled"] = await self.get_discharging_state()
+
+            # Abgeleitete Zustände NICHT auf die Roh-Keys schreiben
+            chg = await self.get_charging_state()
+            dchg = await self.get_discharging_state()
+            if chg is not None:
+                combined_data["is_charging"] = chg
+                self.inverter_data["is_charging"] = chg
+            if dchg is not None:
+                combined_data["is_discharging"] = dchg
+                self.inverter_data["is_discharging"] = dchg
+
+            # --- Pending-Settings jetzt (nach frischen Daten) anwenden ---
+            try:
+                pending_handlers = [
+                    (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
+                    (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
+                    (
+                        any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]),
+                        self._setting_handler.handle_charge_settings
+                    ),
+                    (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
+                    (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
+                    (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
+                    (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
+                    (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
+                    (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
+                    (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
+                    (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
+                    (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
+                    (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
+                ]
+
+                # Generische Discharge-Handler dynamisch hinzufügen
+                for i in range(1, 8):
+                    if any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
+                        pending_handlers.append((True, lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)))
+
+                for condition, handler in pending_handlers:
+                    if condition:
+                        await handler()
+            except Exception as err:
+                _LOGGER.warning("Applying pending settings failed: %s", err)
 
             duration_total = time.monotonic() - start_time
-            _LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds (success: True)")
+            #LOGGER.debug(f"Finished fetching SAJ data in {duration_total:.3f} seconds (success: True)")
 
             return combined_data
         except Exception as e:
@@ -261,24 +308,36 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             duration = time.monotonic() - start_time
             _LOGGER.debug(f"_async_update_data completed in {duration:.2f} seconds")
 
-    async def _get_power_state(self, state_key: str, state_type: str) -> bool:
+    async def _get_power_state(self, state_key: str, state_type: str) -> Optional[bool]:
+        """Liest Roh-Status + AppMode aus dem Cache und liefert ein bool,
+        oder None, wenn Daten (noch) fehlen."""
         try:
             state_value = self.inverter_data.get(state_key)
-            app_mode_value = self.inverter_data.get("AppMode")
+            app_mode_value = self.inverter_data.get("AppMode")  # Key-Bezeichnung wie in deinen Logs
 
             if state_value is None or app_mode_value is None:
-                _LOGGER.warning(f"{state_type} state or AppMode not available in cached data")
-                return False
+                if not self._warned_missing_states:
+                    _LOGGER.warning(f"{state_type} state or AppMode not available in cached data")
+                    self._warned_missing_states = True
+                else:
+                    _LOGGER.debug("%s state still not available; skip derived handling", state_type)
+                return None
 
-            return state_value > 0 and app_mode_value == 1
+            # Sobald Werte vorhanden sind, Warnschalter zurücksetzen
+            if self._warned_missing_states:
+                self._warned_missing_states = False
+
+            # Rohwert > 0 und AppMode aktiv (== 1)
+            return bool(state_value > 0 and app_mode_value == 1)
         except Exception as e:
             _LOGGER.error(f"Error checking {state_type} state: {e}")
-            return False
+            return None
 
-    async def get_charging_state(self) -> bool:
+    async def get_charging_state(self) -> Optional[bool]:
         return await self._get_power_state("charging_enabled", "Charging")
 
-    async def get_discharging_state(self) -> bool:
+    async def get_discharging_state(self) -> Optional[bool]:
+        # Wichtig: Roh-Key abfragen, nicht das abgeleitete Flag
         return await self._get_power_state("discharging_enabled", "Discharging")
 
     async def _read_registers(self, address: int, count: int = 1) -> List[int]:
@@ -314,4 +373,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._client.close()
             except Exception as e:
                 _LOGGER.warning(f"Error while closing Modbus client: {e}")
+
+        # Clear pending settings
+        self._pending_settings.clear()
         return True
