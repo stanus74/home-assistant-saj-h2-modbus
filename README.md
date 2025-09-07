@@ -15,7 +15,7 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features
 
 - Installation through Config Flow UI
-- Over 220 registers (power, energy, temperature sensors, battery...)
+- Over 330 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
 - Smart Modbus connection management - especially for AIO3
 
@@ -35,7 +35,10 @@ This integration is available in the HACS default repository.
 
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and 
 select "SAJ H2 Modbus."
-2. Enter the IP Address and Interval **Important**: don't set intervall at least *60 seconds*
+2. Enter the IP Address and Interval 
+
+**Important**: don't set intervall **at least 60 seconds**
+
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 4. Set charging values in Home Assistant, see below
 
@@ -43,6 +46,21 @@ select "SAJ H2 Modbus."
 
 ## Features
 
+### 🚀 New Fast Coordinator (10s) for Live Data
+
+* **High-frequency polling for key metrics (e.g., PV power, battery):**
+
+  * Introduced a 10s fast coordinator 
+  * Can be disabled via simple adjustment in hub.py, 
+    
+    Energy sensors are polled every 10 seconds: 
+
+    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
+    "inverterPower", "gridPower",
+
+This is the default setting. Can be disabled in hub.py line 27:
+
+`FAST_POLL_DEFAULT = True # True or False`
 
 ### 🚀 Working Mode Control (Advanced Users, new since Version 2.1)
 
@@ -52,22 +70,17 @@ see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob
 
 ### 🚀 Export Limit Control
 
-- **SAJ Export Limit (Input)**
-  Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
+- **SAJ Export Limit (Input)** 
+  `number.saj_export_limit_input` : Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
 
-#### Sensors:
-- **SAJ Anti-Reflux Power Limit** (`365AH`) – changeable with Export Limit (Input)
-- **SAJ Anti-Reflux Current Limit** (`365BH`)
-- **SAJ Anti-Reflux Current Mode** (`365CH`)
-
-#### Perfect for zero export or dynamic grid feed-in limitation.
+Perfect for zero export or dynamic grid feed-in limitation.
 
 
 ### Configure Charging and Discharging Time and Power
 
 #### 🚀 Custom Lovelace Card for Charging/Discharging Control
 
-A custom Lovelace card is available to provide a user-friendly interface for controlling charging settings:
+A custom Lovelace card is available to provide a user-friendly interface for controlling settings:
 
 ![SAJ H2 Charge Card](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/images/saj_h2_modbus/charge.png "SAJ H2 Charge Card")
 

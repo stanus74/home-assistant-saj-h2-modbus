@@ -1,3 +1,64 @@
+# Changelog (v2.5.0)
+
+### 🚀 New Fast Coordinator (10s) for Live Data
+
+* **High-frequency polling for key metrics (e.g., PV power, battery):**
+
+  * Introduced a 10s fast coordinator 
+  * Can be disabled via simple adjustment in hub.py, 
+    
+    Energy sensors are polled every 10 seconds: 
+
+    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
+    "inverterPower", "gridPower",
+
+This is the default setting. Can be disabled in hub.py line 27:
+
+`FAST_POLL_DEFAULT = True # True or False`
+
+
+### Major Code Improvements & Feature Expansion
+
+* **Complete refactor of `hub.py`** for better structure, robust Modbus handling, and future-proof extensibility.
+
+### Updated
+
+* **Sensor Polling:**
+
+  * Modbus connections now reliably handled via `connect_if_needed()`.
+  * Improved error handling and reconnection strategy.
+  * Clear separation of volatile and static data reads.
+
+* **Charging/Discharging Management:**
+
+  * Introduced "optimistic push" logic: planned states are reflected in the UI before Modbus confirmation.
+  * Clean detection of pending changes via `_has_pending()`.
+  * Maintained dynamic generation of all setter methods for flexibility.
+
+### Improvements
+
+* **Efficient Modbus Access:**
+
+  * Separated polling intervals reduce read load.
+  * More resilient to timeouts and read errors.
+
+* **Connection Stability:**
+
+  * New connection check and auto-reconnect logic with `ensure_client_connected()`.
+  * Graceful handling and logging of client shutdown errors.
+
+* **Logging & UX:**
+
+  * Suppresses repeated warnings for missing app mode/state values.
+  * Enhanced debug logging for fast coordinator updates.
+
+### Added
+
+* **Fast update functionality (`start_fast_updates`)** with dedicated `DataUpdateCoordinator`.
+* **Optimistic state overlay (`_optimistic_overlay`)** for faster UI feedback during pending changes.
+* **Single-use warning logic (`_warned_missing_states`)** to reduce log noise for known issues.
+
+
 # Changelog (v2.4.0)
 
 ## Big Code improvement and reducing
