@@ -47,7 +47,7 @@ body:
         - Other (please specify below)
     validations:
       required: true
-  
+
   - type: textarea
     id: converter_details
     attributes:
@@ -108,3 +108,16 @@ body:
     attributes:
       value: |
         ✅ Thanks for helping improve this integration!
+
+        ---
+        ⚠️ **Please read carefully before submitting a question:**
+
+        This is a **community-driven hobby project**. SAJ offers **no official support**, and everything here is based on reverse engineering in spare time.
+
+        Before submitting, please:
+
+        - Make sure your question actually relates to this integration and not to general Home Assistant behavior (e.g. Energy dashboard display, template sensors, etc.)
+        - Double-check the [README](https://github.com/stanus74/home-assistant-saj-h2-modbus) and existing issues.
+        - Use the [Home Assistant Forum](https://community.home-assistant.io) for HA-specific questions.
+
+        Thanks for your understanding!
