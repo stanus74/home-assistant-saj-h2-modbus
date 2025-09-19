@@ -23,13 +23,13 @@ from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_s
 
 _LOGGER = logging.getLogger(__name__)
 
-# Globaler Schalter: Fast-Coordinator (10s) standardmäßig aktiv?
+# Global switch: Fast-Coordinator (10s) active by default?
 FAST_POLL_DEFAULT = True # True or False
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:
-        # Optional: UI-Optimismus während eines Intervalls, bevor echte Reads zurückkommen
+        # Optional: UI optimism during an interval before real reads return
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
         super().__init__(
@@ -48,7 +48,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._client: Optional[AsyncModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-        # Fast-Poll-Schalter (None => nutze FAST_POLL_DEFAULT)
+        # Fast-Poll switch (None => use FAST_POLL_DEFAULT)
         self.fast_enabled: bool = FAST_POLL_DEFAULT if fast_enabled is None else fast_enabled
 
         self._reconnecting = False
@@ -56,7 +56,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._retry_delay = 1
         self._operation_timeout = 30
 
-        # Einmal-Warnschalter gegen Log-Spam bei fehlenden States/AppMode
+        # One-time warning switch against log spam for missing states/AppMode
         self._warned_missing_states: bool = False
         # Pending settings
         self._pending_charge_start: Optional[str] = None
@@ -100,13 +100,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         for name, _ in PENDING_FIELDS:
             if not hasattr(self, f"set_{name}"):
                 _LOGGER.warning("Missing dynamically generated setter for %s", name)
-        # Zweiter Coordinator (10s) wird bei Bedarf initialisiert
+        # Second coordinator (10s) is initialized when needed
         self._fast_coordinator: Optional[DataUpdateCoordinator[Dict[str, Any]]] = None
-        # Hinweis: kein eigener Task-Satz mehr nötig
+        # Note: no own task set needed anymore
    
     async def start_fast_updates(self) -> None:
-        """Erzeuge und starte den 10s-DataUpdateCoordinator für part_2."""
-        # Wenn global deaktiviert, nicht starten
+        """Create and start the 10s-DataUpdateCoordinator for part_2."""
+        # If globally disabled, don't start
         if not self.fast_enabled:
             _LOGGER.info("Fast coordinator disabled via hub setting; skipping start.")
             return
@@ -114,19 +114,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return
 
         async def _async_update_fast() -> Dict[str, Any]:
-            # Sicherstellen, dass der Client verbunden ist
+            # Ensure the client is connected
             self._client = await connect_if_needed(self._client, self._host, self._port)
             try:
                 result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
-                # Cache aktualisieren (nicht mit Rohdaten überschreiben)
+                # Update cache (don't overwrite with raw data)
                 self.inverter_data.update(result)
                 _LOGGER.debug("Finished fetching %s data in fast cycle (success: True)", self.name)
                 return result
             except ReconnectionNeededError as e:
                 _LOGGER.warning("Fast coordinator requires reconnection: %s", e)
-                # Einmaliger Reconnect-Versuch
+                # Single reconnection attempt
                 await self.reconnect_client()
-                # kein automatisches Retry hier; nächster Tick greift erneut
+                # no automatic retry here; next tick will try again
                 return {}
 
         self._fast_coordinator = DataUpdateCoordinator[Dict[str, Any]](
@@ -136,7 +136,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             update_interval=timedelta(seconds=10),
             update_method=_async_update_fast,
         )
-        # Ersten Refresh durchführen, damit Entities sofort Daten sehen
+        # Perform first refresh so entities can see data immediately
         await self._fast_coordinator.async_config_entry_first_refresh()
 
     def _create_client(self) -> AsyncModbusTcpClient:
@@ -203,30 +203,30 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = False
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Regelmäßiger Poll-Zyklus:
-        1) Verbindung herstellen,
-        2) Pending zuerst abarbeiten (Modbus-Writes),
-        3) dann frische Werte lesen,
-        4) konsolidierten Cache zurückgeben.
-        Dadurch verkürzt sich die Sichtbarkeit von Pending→Final auf EIN Intervall."""
+        """Regular poll cycle:
+        1) Establish connection,
+        2) Process pending first (Modbus-Writes),
+        3) then read fresh values,
+        4) return consolidated cache.
+        This shortens the visibility of Pending→Final to ONE interval."""
         start = time.monotonic()
         try:
-            # --- Sicherstellen, dass Modbus-Client verbunden ist ---
+            # --- Ensure Modbus client is connected ---
             self._client = await connect_if_needed(self._client, self._host, self._port)
             
-            # --- Pending zuerst schreiben (inkl. AppMode-OR-Logik) ---
-            # Optional: Erwarteten Zielzustand im Cache markieren (ohne Modbus, nur kosmetisch)
+            # --- Write pending first (including AppMode-OR logic) ---
+            # Optional: Mark expected target state in cache (without Modbus, only cosmetic)
             if self._optimistic_push_enabled and self._has_pending():
                 self._apply_optimistic_overlay()
-                # Optional: Sofortige UI-Aktualisierung mit erwarteten Werten
+                # Optional: Immediate UI update with expected values
                 if self._optimistic_overlay:
                     self.async_set_updated_data(self._optimistic_overlay)
 
             await self._process_pending_settings()  # führt die Modbus-Writes aus (Charging/Discharging + AppMode)
 
-            # --- Danach: Frische Reads holen, damit direkt finaler Zustand im selben Intervall sichtbar ist ---
+            # --- Then: Get fresh reads so final state is visible in the same interval ---
             cache = await self._run_reader_methods()
-            # Optimismus-Overlay verwerfen, echte Werte übernehmen
+            # Discard optimistic overlay, take real values
             self._optimistic_overlay = None
             self.inverter_data = cache
             return self.inverter_data
@@ -238,9 +238,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Update cycle took %ss", elapsed)
 
     async def _process_pending_settings(self) -> None:
-        """Abarbeitung ausstehender Writes; jetzt VOR den Reads aufgerufen."""
-        # Es gibt in ChargeSettingHandler KEIN has_pending/handle_all_pending.
-        # Wir prüfen die Hub-Pending-Felder und rufen die passenden Handler direkt auf.
+        """Processing pending writes; now called BEFORE the reads."""
+        # ChargeSettingHandler has NO has_pending/handle_all_pending.
+        # We check the hub-pending fields and call the appropriate handlers directly.
         try:
             pending_handlers = [
                 (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
@@ -260,7 +260,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
                 (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
             ]
-            # Generische Discharge-Handler dynamisch hinzufügen (Slots 1..7)
+            # Dynamically add generic discharge handlers (slots 1..7)
             for i in range(1, 8):
                 if any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
                     pending_handlers.append((True, lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)))
@@ -271,7 +271,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e)
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
-        """Sequentielles Ausführen der Reader; baut den Cache."""
+        """Sequential execution of readers; builds the cache."""
         new_cache: Dict[str, Any] = {}
         self._client = await connect_if_needed(self._client, self._host, self._port)
         
@@ -315,13 +315,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             except Exception as e:
                 _LOGGER.warning("Reader failed: %s", e)
         
-        # Falls während dieses Intervalls ein Optimismus-Overlay aktiv war,
-        # haben wir jetzt echte Werte — Overlay wird ignoriert/gelöscht.
+        # If an optimistic overlay was active during this interval,
+        # we now have real values — overlay is ignored/deleted.
         return new_cache
 
     async def _get_power_state(self, state_key: str, state_type: str) -> Optional[bool]:
-        """Liest Roh-Status + AppMode aus dem Cache und liefert ein bool,
-        oder None, wenn Daten (noch) fehlen."""
+        """Reads raw status + AppMode from cache and returns a bool,
+        or None if data is (still) missing."""
         try:
             state_value = self.inverter_data.get(state_key)
             app_mode_value = self.inverter_data.get("AppMode")  # Key-Bezeichnung wie in deinen Logs
@@ -334,11 +334,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.debug("%s state still not available; skip derived handling", state_type)
                 return None
 
-            # Sobald Werte vorhanden sind, Warnschalter zurücksetzen
+            # Once values are present, reset warning switch
             if self._warned_missing_states:
                 self._warned_missing_states = False
 
-            # Rohwert > 0 und AppMode aktiv (== 1)
+            # Raw value > 0 and AppMode active (== 1)
             return bool(state_value > 0 and app_mode_value == 1)
         except Exception as e:
             _LOGGER.error(f"Error checking {state_type} state: {e}")
@@ -348,7 +348,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return await self._get_power_state("charging_enabled", "Charging")
 
     async def get_discharging_state(self) -> Optional[bool]:
-        # Wichtig: Roh-Key abfragen, nicht das abgeleitete Flag
+        # Important: Query raw key, not the derived flag
         return await self._get_power_state("discharging_enabled", "Discharging")
 
     async def _read_registers(self, address: int, count: int = 1) -> List[int]:
@@ -370,7 +370,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
     async def async_unload_entry(self) -> bool:
         """Handle removal of the Modbus hub."""
-        # Fast-Coordinator stoppen (keine weitere 10s-Polling)
+        # Stop fast coordinator (no more 10s polling)
         if self._fast_coordinator is not None:
             try:
                 await self._fast_coordinator.async_set_update_interval(None)
@@ -387,9 +387,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         return True
 
-    # --- Hilfsfunktionen ---
+    # --- Helper functions ---
     def _has_pending(self) -> bool:
-        """Prüft, ob ausstehende Änderungen im Hub vorhanden sind (ohne Handler-API)."""
+        """Checks if there are pending changes in the hub (without Handler-API)."""
         if self._pending_charging_state is not None:
             return True
         if self._pending_discharging_state is not None:
@@ -420,21 +420,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return False
 
     def _apply_optimistic_overlay(self) -> None:
-        """Markiert im lokalen Cache den erwarteten Zielzustand,
-        bis die echten Read-Werte direkt im Anschluss kommen.
-        Keine Modbus-Zugriffe, nur kosmetisches UI-Snappiness."""
+        """Marks the expected target state in the local cache,
+        until the real read values come directly afterwards.
+        No Modbus accesses, only cosmetic UI snappiness."""
         try:
-            # Ausgangslage aus aktuellem Cache
+            # Starting point from current cache
             base = dict(self.inverter_data or {})
-            # Pending-Ziele direkt aus Hub-Pending-Feldern ableiten (ohne Handler-API)
-            # Wir nutzen die *Roh*-Enable-Keys und setzen nur, wenn Pending-Werte vorhanden sind.
+            # Derive pending targets directly from hub-pending fields (without Handler-API)
+            # We use the *raw* enable keys and only set when pending values are present.
             chg = base.get("charging_enabled")
             dchg = base.get("discharging_enabled")
             if self._pending_charging_state is not None:
                 chg = 1 if self._pending_charging_state else 0
             if self._pending_discharging_state is not None:
                 dchg = 1 if self._pending_discharging_state else 0
-            # AppMode-OR: 1 sobald mindestens einer aktiv, sonst 0
+            # AppMode-OR: 1 as soon as at least one is active, otherwise 0
             app_mode = 1 if bool(chg) or bool(dchg) else 0
 
             overlay = base
@@ -445,10 +445,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             overlay["AppMode"] = app_mode
 
             self._optimistic_overlay = overlay
-            # UI kann (wenn gewünscht) sofort „näherungsweise“ rendert, ohne Modbus:
-            # Hinweis: Wir rufen HIER NICHT request_refresh() und keine Modbus-Funktionen.
-            # Wenn du die Entities sofort updaten willst (ohne Modbus), könntest du:
+            # UI can (if desired) render "approximately" immediately, without Modbus:
+            # Note: We do NOT call request_refresh() and no Modbus functions HERE.
+            # If you want to update the entities immediately (without Modbus), you could:
             # self.async_set_updated_data(overlay)
-            # Da du „keinen Coordinator-Aufruf beim Klick“ wünschst, lassen wir das standardmäßig aus.
+            # Since you wish for "no coordinator call on click", we leave that out by default.
         except Exception as e:
             _LOGGER.debug("Optimistic overlay skipped: %s", e)

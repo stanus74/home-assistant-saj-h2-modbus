@@ -121,14 +121,14 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 
 def _make_simple_handler(pending_attr: str, address: int, label: str):
     """
-    Factory für einfache Register-Handler, die:
-      1) den Pending-Wert SELBST aus dem Hub lesen,
-      2) bei Erfolg schreiben,
-      3) das Pending-Feld zurücksetzen.
-    Signatur ist (self) -> passt zu hub._async_update_data, wo ohne Argument aufgerufen wird.
+    Factory for simple register handlers that:
+      1) read the pending value THEMSELVES from the hub,
+      2) write on success,
+      3) reset the pending field.
+    Signature is (self) -> fits hub._async_update_data, where it's called without arguments.
     """
     async def handler(self) -> bool:
-        # Pending-Wert aus dem Hub holen
+        # Get pending value from hub
         value = getattr(self._hub, f"_pending_{pending_attr}", None)
         if value is None:
             _LOGGER.debug("Skip %s: no pending value", pending_attr)
@@ -148,7 +148,7 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
             _LOGGER.error("Error writing %s: %s", label, e)
             return False
         finally:
-            # Pending-Wert IMMER zurücksetzen, damit er nicht hängen bleibt
+            # ALWAYS reset pending value so it doesn't get stuck
             try:
                 setattr(self._hub, f"_pending_{pending_attr}", None)
             except Exception:
@@ -316,7 +316,7 @@ class ChargeSettingHandler:
                 reset_callback()
 
     async def handle_pending_charging_state(self) -> None:
-        """Handles the pending charging state (robust, ohne Default-Writes)."""
+        """Handles the pending charging state (robust, without default writes)."""
         desired = self._hub._pending_charging_state
         if desired is None:
             return
@@ -330,7 +330,7 @@ class ChargeSettingHandler:
             _LOGGER.debug("Deferring pending charging_state: prerequisites not ready")
             return
 
-        # Schreiben, wenn Register vorhanden
+        # Write if register exists
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
         _LOGGER.debug("Attempting to write value %s to register %s for charging_state", write_value, hex(addr))
@@ -349,7 +349,7 @@ class ChargeSettingHandler:
         self._hub._pending_charging_state = None
 
     async def handle_pending_discharging_state(self) -> None:
-        """Handles the pending discharging state (robust, ohne Default-Writes)."""
+        """Handles the pending discharging state (robust, without default writes)."""
         desired = self._hub._pending_discharging_state
         if desired is None:
             return
@@ -375,30 +375,30 @@ class ChargeSettingHandler:
         charge_state: Optional[bool] = None,
         discharge_state: Optional[bool] = None,
     ) -> None:
-        # Lade-/Entlade-Flags aus dem Hub holen, falls nicht übergeben
+        # Get charge/discharge flags from hub, if not passed
         chg, dchg = await asyncio.gather(
             self._hub.get_charging_state() if charge_state is None else asyncio.sleep(0, result=charge_state),
             self._hub.get_discharging_state() if discharge_state is None else asyncio.sleep(0, result=discharge_state),
         )
-        # Wenn States noch nicht bereit: überspringen und im nächsten Zyklus erneut versuchen
+        # If states not ready yet: skip and try again in next cycle
         if chg is None or dchg is None:
             _LOGGER.debug("Skip power-state handling: state not ready (chg=%s, dchg=%s)", chg, dchg)
             return
 
-        # AppMode muss ebenfalls vorhanden sein – kein Default-Write mehr!
+        # AppMode must also be present – no more default writes!
         app_mode = self._hub.inverter_data.get("AppMode")
         if app_mode is None:
             _LOGGER.debug("Skip power-state handling: AppMode not ready")
             return
 
-        # Beispiel: wenn einer der Modi aktiv ist, AppMode sicherstellen
+        # Example: if one of the modes is active, ensure AppMode
         desired_mode = 1 if (chg or dchg) else 0
         if app_mode != desired_mode:
             _LOGGER.info("Updating AppMode from %s to %s", app_mode, desired_mode)
             await self._hub._write_register(REGISTERS["app_mode"], desired_mode)
 
-        # Weitere, auf chg/dchg basierende Writes hier sicher ausführen ...
-        # (z. B. Limits setzen, wenn (dis-)charging aktiv ist)
+        # Further, safely execute writes based on chg/dchg here ...
+        # (e.g. set limits when (dis-)charging is active)
 
     async def _write_time_register(
         self, address: int, time_str: str, label: str

@@ -9,8 +9,13 @@
     
     Energy sensors are polled every 10 seconds: 
 
-    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
-    "inverterPower", "gridPower",
+      - sensor.saj_total_load_power
+      - sensor.saj_pv_power
+      - sensor.saj_battery_power
+      - sensor.saj_total_grid_power
+      - sensor.saj_inverter_power
+      - sensor.saj_grid_power
+
 
 This is the default setting. Can be disabled in hub.py line 27:
 

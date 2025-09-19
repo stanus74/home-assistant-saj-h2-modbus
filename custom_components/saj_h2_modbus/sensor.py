@@ -24,8 +24,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        # Wenn der Fast-Coordinator deaktiviert/keiner vorhanden ist,
-        # binden Fast-Sensoren automatisch an den Main-Coordinator.
+        # If the Fast-Coordinator is disabled/not present,  
+        # Fast-sensors automatically bind to the Main-Coordinator.
         if description.key in FAST_UPDATE_SENSOR_KEYS and getattr(hub, "_fast_coordinator", None) is not None:
             coordinator = hub._fast_coordinator
         else:
@@ -44,13 +44,13 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator=hub)
         self.entity_description = description
         self._attr_device_info = device_info
-        # Stabile unique_id: unabhängig vom Coordinator-Namen
+        # Stable unique_id: independent of coordinator name
         device_name = device_info.get("name", "SAJ")
         self._attr_unique_id = f"{device_name}_{description.key}"
-        # WICHTIG: Bei has_entity_name=True KEIN Gerätepräfix im Namen!
-        # HA zeigt automatisch "<Gerätename> <Entitätsname>" an.
+        # IMPORTANT: With has_entity_name=True NO device prefix in the name!
+        # HA automatically shows "<Device Name> <Entity Name>".
         self._attr_name = description.name
-        # Empfohlener Core-Standard: Entities haben Eigennamen
+        # Recommended Core Standard: Entities have their own names
         self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
