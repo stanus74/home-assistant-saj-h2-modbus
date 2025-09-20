@@ -172,6 +172,8 @@ async def read_additional_modbus_data_1_part_2(client: ModbusClient, lock: Lock)
         ("gridPower", "16i"),
     ]
     
+    
+
     return await _read_modbus_data(client, lock, 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2', default_factor=1)
 
 async def read_additional_modbus_data_2_part_1(client: ModbusClient, lock: Lock) -> DataDict:

@@ -12,6 +12,11 @@ from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
+FAST_UPDATE_SENSOR_KEYS = [
+    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
+    "inverterPower", "gridPower",
+]
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ sensors from a config entry."""
     hub: SAJModbusHub = hass.data[DOMAIN][entry.entry_id]["hub"]
@@ -19,7 +24,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        entity = SajSensor(hub, device_info, description)
+        # If the Fast-Coordinator is disabled/not present,  
+        # Fast-sensors automatically bind to the Main-Coordinator.
+        if description.key in FAST_UPDATE_SENSOR_KEYS and getattr(hub, "_fast_coordinator", None) is not None:
+            coordinator = hub._fast_coordinator
+        else:
+            coordinator = hub
+        entity = SajSensor(coordinator, device_info, description)
         entities.append(entity)
 
     async_add_entities(entities)
@@ -33,23 +44,16 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator=hub)
         self.entity_description = description
         self._attr_device_info = device_info
-        self._attr_unique_id = f"{hub.name}_{description.key}"
-        self._attr_name = f"{hub.name} {description.name}"
+        # Stable unique_id: independent of coordinator name
+        device_name = device_info.get("name", "SAJ")
+        self._attr_unique_id = f"{device_name}_{description.key}"
+        # IMPORTANT: With has_entity_name=True NO device prefix in the name!
+        # HA automatically shows "<Device Name> <Entity Name>".
+        self._attr_name = description.name
+        # Recommended Core Standard: Entities have their own names
+        self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
-
-    @property
-    def native_last_reset_time(self):
-        """Return the time when the sensor was last reset, if applicable."""
-        if self.entity_description.state_class == SensorStateClass.TOTAL:
-            now = dt_util.utcnow()
-            if self.entity_description.reset_period == "daily":
-                return now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif self.entity_description.reset_period == "monthly":
-                return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            elif self.entity_description.reset_period == "yearly":
-                return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        return None
 
     @property
     def native_value(self):
@@ -72,8 +76,5 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_coordinator_update)
-        )
 
-        #_LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
+        # _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
