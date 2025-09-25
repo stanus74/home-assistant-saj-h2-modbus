@@ -33,7 +33,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
         super().__init__(
-            # Coordinator-Basis
+            # Coordinator base
             hass,
             _LOGGER,
             name=name,
@@ -222,7 +222,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 if self._optimistic_overlay:
                     self.async_set_updated_data(self._optimistic_overlay)
 
-            await self._process_pending_settings()  # führt die Modbus-Writes aus (Charging/Discharging + AppMode)
+            await self._process_pending_settings()  # Executes the Modbus writes (Charging/Discharging + AppMode)
 
             # --- Then: Get fresh reads so final state is visible in the same interval ---
             cache = await self._run_reader_methods()
@@ -412,7 +412,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._pending_grid_max_discharge_power is not None,
         ]):
             return True
-        # Discharge-Slots prüfen
+        # Check Discharge-Slots
         for i in range(7):
             slot = self._pending_discharges[i]
             if any(slot[attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
