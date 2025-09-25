@@ -1,3 +1,28 @@
+# Changelog (v2.5.1)
+
+### Added
+
+* **New Sensor `CT Grid Power Total`**
+
+  * Aggregates real power from all three smart meter phases:
+
+    * `Meter_A_PowerW` (Phase R)
+    * `Meter_A_PowerW_2` (Phase S)
+    * `Meter_A_PowerW_3` (Phase T)
+  * Calculated automatically in `read_meter_a_data` and exposed as `sensor.saj_ct_gridpower_total`.
+  * Provides the total grid power directly from the smart meter (instead of relying on inverter-internal estimates).
+
+### Removed
+
+* **Obsolete CT Sensors** (no backing registers):
+
+  * `CT_GridPowerWatt`
+  * `CT_PVPowerWatt`
+  * `CT_GridPowerVA`
+  * `CT_PVPowerVA`
+    → These were placeholders without real Modbus registers and are now fully removed for data consistency.
+
+
 # Changelog (v2.5.0)
 
 ### 🚀 New Fast Coordinator (10s) for Live Data

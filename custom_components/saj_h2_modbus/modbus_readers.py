@@ -161,20 +161,33 @@ async def read_additional_modbus_data_1_part_1(client: ModbusClient, lock: Lock)
 async def read_additional_modbus_data_1_part_2(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 1)."""
     decode_instructions_part_2 = [
-        ("directionPV", None), ("directionBattery", "16i"), ("directionGrid", "16i"),
-        ("directionOutput", None), (None, "skip_bytes", 14), ("TotalLoadPower", "16i"),
-        ("CT_GridPowerWatt", "16i"), ("CT_GridPowerVA", "16i"),
-        ("CT_PVPowerWatt", "16i"), ("CT_PVPowerVA", "16i"),
-        ("pvPower", "16i"), ("batteryPower", "16i"),
-        ("totalgridPower", "16i"), ("totalgridPowerVA", "16i"),
-        ("inverterPower", "16i"), ("TotalInvPowerVA", "16i"),
-        ("BackupTotalLoadPowerWatt", None), ("BackupTotalLoadPowerVA", None),
-        ("gridPower", "16i"),
-    ]
-    
-    
+        ("directionPV", "16u"),              # 0x4095  (PV_direction)
+        ("directionBattery", "16i"),         # 0x4096  (Battery_direction)
+        ("directionGrid", "16i"),            # 0x4097  (Grid_direction)
+        ("directionOutput", "16u"),          # 0x4098  (Output_direction)
 
-    return await _read_modbus_data(client, lock, 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2', default_factor=1)
+        (None, "skip_bytes", 14),            # -> springt auf 0x40A0
+        ("TotalLoadPower", "16i"),           # 0x40A0  (SysTotalLoadWatt)
+
+        (None, "skip_bytes", 8),             # 0x40A1–0x40A4 überspringen
+        ("pvPower", "16i"),                  # 0x40A5  (TotalPVPower)
+        ("batteryPower", "16i"),             # 0x40A6  (TotalBatteryPower)
+        ("totalgridPower", "16i"),           # 0x40A7  (TotalGridPowerWatt)
+        ("totalgridPowerVA", "16i"),         # 0x40A8  (TotalGridPowerVA)
+        ("inverterPower", "16i"),            # 0x40A9  (TotalInvPowerWatt)
+        ("TotalInvPowerVA", "16i"),          # 0x40AA  (TotalInvPowerVA)
+        ("BackupTotalLoadPowerWatt", "16u"), # 0x40AB  (BackupTotalLoadWatt)
+        ("BackupTotalLoadPowerVA", "16u"),   # 0x40AC  (BackupTotalLoadVA)
+        ("gridPower", "16i"),                # 0x40AD  (SysGridPowerWatt)
+    ]
+
+    return await _read_modbus_data(
+        client, lock,
+        16533, 25,   # 16533 dez = 0x4095 hex
+        decode_instructions_part_2,
+        'additional_data_1_part_2',
+        default_factor=1
+    )
 
 async def read_additional_modbus_data_2_part_1(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 2)."""
@@ -252,7 +265,7 @@ async def _read_phase_block(
 ) -> DataDict:
     """
     Reads a 3-phase block (R/S/T) compactly.
-    fields: List of (name, method, [factor]) -> generates Keys R<key_prefix><name>, S..., T...
+    fields: List of (name, method, [factor]) -> generates Keys R<key_prefix><name>, S... T...
     """
     decode: List[tuple] = []
     for phase in ("R", "S", "T"):
@@ -470,7 +483,16 @@ async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
         ("Meter_A_Freq3", "16u", 0.01),
     ]
 
-    return await _read_modbus_data(client, lock, 0xA03D, 18, decode_instructions, "meter_a_data")
+    data = await _read_modbus_data(client, lock, 0xA03D, 18, decode_instructions, "meter_a_data")
+    if data:
+        try:
+            p1 = data.get("Meter_A_PowerW", 0)
+            p2 = data.get("Meter_A_PowerW_2", 0)
+            p3 = data.get("Meter_A_PowerW_3", 0)
+            data["CT_GridPower_total"] = p1 + p2 + p3
+        except Exception as e:
+            _LOGGER.error(f"Error calculating CT_GridPower_total: {e}")
+    return data
 
 async def read_side_net_data(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads data for side-net parameters."""

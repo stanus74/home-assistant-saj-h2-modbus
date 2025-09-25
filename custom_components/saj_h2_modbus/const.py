@@ -143,6 +143,8 @@ schedule_sensors_group = SensorGroup(
     state_class=None,
 )
 
+
+
 def create_sensor_descriptions(group: SensorGroup, sensors: list) -> dict:
     descriptions = {}
     for sensor in sensors:
@@ -184,8 +186,7 @@ power_sensors = [
     {"name": "PV3 Power", "key": "pv3Power", "icon": "flash", "enable": False},
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
 
-    {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
-    {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
+  
     {"name": "Backup Total Load Power Watt", "key": "BackupTotalLoadPowerWatt", "icon": "home-lightning-bolt", "enable": False},
     {"name": "R-Phase Grid Power Watt", "key": "RGridPowerWatt", "icon": "flash", "enable": False},
     {"name": "S-Phase Grid Power Watt", "key": "SGridPowerWatt", "icon": "flash", "enable": False},
@@ -193,6 +194,7 @@ power_sensors = [
     {"name": "Meter A Real Power 1", "key": "Meter_A_PowerW", "icon": "flash", "enable": False},
     {"name": "Meter A Real Power 2", "key": "Meter_A_PowerW_2", "icon": "flash", "enable": False},
     {"name": "Meter A Real Power 3", "key": "Meter_A_PowerW_3", "icon": "flash", "enable": False},
+    {"name": "CT Grid Power Total", "key": "CT_GridPower_total", "icon": "transmission-tower", "enable": True},
     {"name": "R-Phase Inverter Power Watt", "key": "RInvPowerWatt", "icon": "flash", "enable": True},
     {"name": "S-Phase Inverter Power Watt", "key": "SInvPowerWatt", "icon": "flash", "enable": True},
     {"name": "T-Phase Inverter Power Watt", "key": "TInvPowerWatt", "icon": "flash", "enable": True},
@@ -205,8 +207,7 @@ power_sensors = [
 ]
 
 apparent_power_sensors = [
-    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "enable": False},
-    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "enable": False},
+    
     {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "enable": False},
     {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "enable": False},
     {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "enable": False},
