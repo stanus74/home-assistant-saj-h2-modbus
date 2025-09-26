@@ -24,7 +24,7 @@ from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_s
 _LOGGER = logging.getLogger(__name__)
 
 # Global switch: Fast-Coordinator (10s) active by default?
-FAST_POLL_DEFAULT = True # True or False
+FAST_POLL_DEFAULT = False # True or False
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -87,6 +87,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_battery_discharge_power_limit: Optional[int] = None
         self._pending_grid_max_charge_power: Optional[int] = None
         self._pending_grid_max_discharge_power: Optional[int] = None
+        self._pending_passive_charge_enable: Optional[int] = None
+        self._pending_passive_grid_charge_power: Optional[int] = None
+        self._pending_passive_grid_discharge_power: Optional[int] = None
+        self._pending_passive_bat_charge_power: Optional[int] = None
+        self._pending_passive_bat_discharge_power: Optional[int] = None
 
         self._setting_handler = ChargeSettingHandler(self)
 
@@ -259,6 +264,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
                 (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
                 (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
+                (self._pending_passive_charge_enable is not None, self._setting_handler.handle_passive_charge_enable),
+                (self._pending_passive_grid_charge_power is not None, self._setting_handler.handle_passive_grid_charge_power),
+                (self._pending_passive_grid_discharge_power is not None, self._setting_handler.handle_passive_grid_discharge_power),
+                (self._pending_passive_bat_charge_power is not None, self._setting_handler.handle_passive_bat_charge_power),
+                (self._pending_passive_bat_discharge_power is not None, self._setting_handler.handle_passive_bat_discharge_power),
             ]
             # Dynamically add generic discharge handlers (slots 1..7)
             for i in range(1, 8):

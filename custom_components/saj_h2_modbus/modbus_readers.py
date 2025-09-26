@@ -436,11 +436,15 @@ async def read_anti_reflux_data(client: ModbusClient, lock: Lock) -> DataDict:
 async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the Passive Charge/Discharge and Battery configuration registers."""
     decode_instructions = [
-        ("Passive_charge_enable", "16u", 1),
-        ("Passive_GridChargePower", "16u"),
-        ("Passive_GridDisChargePower", "16u"),
-        ("Passive_BatChargePower", "16u"),
-        ("Passive_BatDisChargePower", "16u"),
+        
+         # New passive registers in snake_case
+        ("passive_charge_enable", "16u", 1),
+        ("passive_grid_charge_power", "16u"),
+        ("passive_grid_discharge_power", "16u"),
+        ("passive_bat_charge_power", "16u"),
+        ("passive_bat_discharge_power", "16u"),
+
+
         (None, "skip_bytes", 18),  # Skip registers 363B-3643
         ("BatOnGridDisDepth", "16u", 1),
         ("BatOffGridDisDepth", "16u", 1),
@@ -455,6 +459,7 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
 
     try:
         data = await _read_modbus_data(client, lock, 0x3636, 27, decode_instructions, "passive_battery_data", default_factor=0.1)
+        _LOGGER.debug(f"Passive Battery Data: {data}")  # Add this line
         return data
     except Exception as e:
         _LOGGER.error(f"Error reading Passive Battery data: {e}")

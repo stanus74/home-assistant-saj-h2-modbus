@@ -505,11 +505,11 @@ battery_schedule_sensors = [
     {"name": "Discharge 7 End Time", "key": "discharge7_end_time", "icon": "clock-outline"},
     {"name": "Discharge 7 Day Mask", "key": "discharge7_day_mask", "icon": "calendar"},
     {"name": "Discharge 7 Power Percent", "key": "discharge7_power_percent", "icon": "flash", "unit_of_measurement": "%"},
-    {"name": "Passive Charge Enable", "key": "Passive_charge_enable", "icon": "power-settings"},
-    {"name": "Passive Grid Charge Power", "key": "Passive_GridChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
-    {"name": "Passive Grid Discharge Power", "key": "Passive_GridDisChargePower", "icon": "transmission-tower", "unit_of_measurement": "%"},
-    {"name": "Passive Battery Charge Power", "key": "Passive_BatChargePower", "icon": "battery-charging", "unit_of_measurement": "%"},
-    {"name": "Passive Battery Discharge Power", "key": "Passive_BatDisChargePower", "icon": "battery", "unit_of_measurement": "%"},
+    {"name": "Passive Charge Enable", "key": "passive_charge_enable", "icon": "power-settings"},
+    {"name": "Passive Grid Charge Power", "key": "passive_grid_charge_power", "icon": "transmission-tower", "unit_of_measurement": "%"},
+    {"name": "Passive Grid Discharge Power", "key": "passive_grid_discharge_power", "icon": "transmission-tower", "unit_of_measurement": "%"},
+    {"name": "Passive Battery Charge Power", "key": "passive_bat_charge_power", "icon": "battery-charging", "unit_of_measurement": "%"},
+    {"name": "Passive Battery Discharge Power", "key": "passive_bat_discharge_power", "icon": "battery", "unit_of_measurement": "%"},
 ]
 
 anti_reflux_sensors = [
