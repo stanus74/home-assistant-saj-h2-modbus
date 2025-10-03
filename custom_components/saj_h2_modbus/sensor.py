@@ -15,6 +15,10 @@ _LOGGER = logging.getLogger(__name__)
 FAST_UPDATE_SENSOR_KEYS = [
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
     "inverterPower", "gridPower",
+    "directionPV", "directionBattery", "directionGrid", "directionOutput",
+    "CT_GridPowerWatt", "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA",
+    "totalgridPowerVA", "TotalInvPowerVA", "BackupTotalLoadPowerWatt",
+    "BackupTotalLoadPowerVA",
 ]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:

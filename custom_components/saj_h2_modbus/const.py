@@ -59,6 +59,7 @@ apparent_power_sensors_group = SensorGroup(
     device_class=SensorDeviceClass.APPARENT_POWER,
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:flash-outline",
+    force_update=True
 )
 
 voltage_sensors_group = SensorGroup(
@@ -186,6 +187,9 @@ power_sensors = [
     {"name": "PV3 Power", "key": "pv3Power", "icon": "flash", "enable": False},
     {"name": "PV4 Power", "key": "pv4Power", "icon": "flash", "enable": False},
 
+    {"name": "CT Grid Power Watt", "key": "CT_GridPowerWatt", "icon": "flash", "enable": False},
+    {"name": "CT PV Power Watt", "key": "CT_PVPowerWatt", "icon": "flash", "enable": False},
+
   
     {"name": "Backup Total Load Power Watt", "key": "BackupTotalLoadPowerWatt", "icon": "home-lightning-bolt", "enable": False},
     {"name": "R-Phase Grid Power Watt", "key": "RGridPowerWatt", "icon": "flash", "enable": False},
@@ -208,6 +212,9 @@ power_sensors = [
 
 apparent_power_sensors = [
     
+    {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "enable": False},
+    {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "enable": False},
+
     {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "enable": False},
     {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "enable": False},
     {"name": "R-Phase Grid Power VA", "key": "RGridPowerVA", "enable": False},
