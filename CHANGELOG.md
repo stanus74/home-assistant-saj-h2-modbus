@@ -1,8 +1,8 @@
 # Changelog (v2.6.0)
 
-### 🚀 New Passive Input Methods Added
+### 🚀 New Passive Charge/Discharging Input Methods Added 
 
-* **New Passive Charging/Discharging Input Registers:**
+* **New Input Registers:**
 
   - `SAJ Passive Charge Enable (Input)` - Register 3636H ...
   - `SAJ Passive Grid Charge Power (Input)` 
