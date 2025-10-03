@@ -12,7 +12,7 @@
   
 
 * These new input methods allow for precise control of passive battery charge & discharge power.
-see Discussion F&Q > Link
+see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
 
 ---
 
