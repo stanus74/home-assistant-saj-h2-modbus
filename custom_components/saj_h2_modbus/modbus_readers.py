@@ -161,33 +161,19 @@ async def read_additional_modbus_data_1_part_1(client: ModbusClient, lock: Lock)
 async def read_additional_modbus_data_1_part_2(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 1)."""
     decode_instructions_part_2 = [
-        ("directionPV", "16u"),              # 0x4095  (PV_direction)
-        ("directionBattery", "16i"),         # 0x4096  (Battery_direction)
-        ("directionGrid", "16i"),            # 0x4097  (Grid_direction)
-        ("directionOutput", "16u"),          # 0x4098  (Output_direction)
-
-        (None, "skip_bytes", 14),            # -> springt auf 0x40A0
-        ("TotalLoadPower", "16i"),           # 0x40A0  (SysTotalLoadWatt)
-
-        (None, "skip_bytes", 8),             # 0x40A1–0x40A4 überspringen
-        ("pvPower", "16i"),                  # 0x40A5  (TotalPVPower)
-        ("batteryPower", "16i"),             # 0x40A6  (TotalBatteryPower)
-        ("totalgridPower", "16i"),           # 0x40A7  (TotalGridPowerWatt)
-        ("totalgridPowerVA", "16i"),         # 0x40A8  (TotalGridPowerVA)
-        ("inverterPower", "16i"),            # 0x40A9  (TotalInvPowerWatt)
-        ("TotalInvPowerVA", "16i"),          # 0x40AA  (TotalInvPowerVA)
-        ("BackupTotalLoadPowerWatt", "16u"), # 0x40AB  (BackupTotalLoadWatt)
-        ("BackupTotalLoadPowerVA", "16u"),   # 0x40AC  (BackupTotalLoadVA)
-        ("gridPower", "16i"),                # 0x40AD  (SysGridPowerWatt)
+        ("directionPV", None), ("directionBattery", "16i"), ("directionGrid", "16i"),
+        ("directionOutput", None), (None, "skip_bytes", 14), ("TotalLoadPower", "16i"),
+        ("CT_GridPowerWatt", "16i"), ("CT_GridPowerVA", "16i"),
+        ("CT_PVPowerWatt", "16i"), ("CT_PVPowerVA", "16i"),
+        ("pvPower", "16i"), ("batteryPower", "16i"),
+        ("totalgridPower", "16i"), ("totalgridPowerVA", "16i"),
+        ("inverterPower", "16i"), ("TotalInvPowerVA", "16i"),
+        ("BackupTotalLoadPowerWatt", None), ("BackupTotalLoadPowerVA", None),
+        ("gridPower", "16i"),
     ]
+    
+    return await _read_modbus_data(client, lock, 16533, 25, decode_instructions_part_2, 'additional_data_1_part_2', default_factor=1)
 
-    return await _read_modbus_data(
-        client, lock,
-        16533, 25,   # 16533 dez = 0x4095 hex
-        decode_instructions_part_2,
-        'additional_data_1_part_2',
-        default_factor=1
-    )
 
 async def read_additional_modbus_data_2_part_1(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 2)."""
@@ -436,11 +422,15 @@ async def read_anti_reflux_data(client: ModbusClient, lock: Lock) -> DataDict:
 async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the Passive Charge/Discharge and Battery configuration registers."""
     decode_instructions = [
-        ("Passive_charge_enable", "16u", 1),
-        ("Passive_GridChargePower", "16u"),
-        ("Passive_GridDisChargePower", "16u"),
-        ("Passive_BatChargePower", "16u"),
-        ("Passive_BatDisChargePower", "16u"),
+        
+         # New passive registers in snake_case
+        ("passive_charge_enable", "16u", 1),
+        ("passive_grid_charge_power", "16u"),
+        ("passive_grid_discharge_power", "16u"),
+        ("passive_bat_charge_power", "16u"),
+        ("passive_bat_discharge_power", "16u"),
+
+
         (None, "skip_bytes", 18),  # Skip registers 363B-3643
         ("BatOnGridDisDepth", "16u", 1),
         ("BatOffGridDisDepth", "16u", 1),
@@ -455,6 +445,7 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
 
     try:
         data = await _read_modbus_data(client, lock, 0x3636, 27, decode_instructions, "passive_battery_data", default_factor=0.1)
+        _LOGGER.debug(f"Passive Battery Data: {data}")  # Add this line
         return data
     except Exception as e:
         _LOGGER.error(f"Error reading Passive Battery data: {e}")

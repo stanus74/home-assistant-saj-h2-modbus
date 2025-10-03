@@ -97,11 +97,11 @@ body:
     attributes:
       label: Pre-checks
       options:
-        - label: I have updated to the latest release
-          required: true
         - label: I confirmed the inverter is reachable via Modbus TCP
           required: true
         - label: I searched for existing issues
+          required: true
+        - label: I removed the integration and performed a clean reinstallation.
           required: true
 
   - type: markdown

@@ -1,27 +1,33 @@
-# Changelog (v2.5.1)
+# Changelog (v2.6.0)
 
-### Added
+### 🚀 New Passive Charge/Discharging Input Methods Added 
 
-* **New Sensor `CT Grid Power Total`**
+* **New Input Registers:**
 
-  * Aggregates real power from all three smart meter phases:
+  - `SAJ Passive Charge Enable (Input)` - Register 3636H ...
+  - `SAJ Passive Grid Charge Power (Input)` 
+  - `SAJ Passive Grid Discharge Power (Input)`
+  - `SAJ Passive Battery Charge Power (Input)` 
+  - `SAJ Passive Battery Discharge Power (Input)` - ... Register 363AH
+  
 
-    * `Meter_A_PowerW` (Phase R)
-    * `Meter_A_PowerW_2` (Phase S)
-    * `Meter_A_PowerW_3` (Phase T)
-  * Calculated automatically in `read_meter_a_data` and exposed as `sensor.saj_ct_gridpower_total`.
-  * Provides the total grid power directly from the smart meter (instead of relying on inverter-internal estimates).
+* These new input methods allow for precise control of passive battery charge & discharge power.
+see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
 
-### Removed
+---
 
-* **Obsolete CT Sensors** (no backing registers):
+### 🚀 New Fast Sensors Added
 
-  * `CT_GridPowerWatt`
-  * `CT_PVPowerWatt`
-  * `CT_GridPowerVA`
-  * `CT_PVPowerVA`
-    → These were placeholders without real Modbus registers and are now fully removed for data consistency.
+* **Fast Coordinator (10s) now includes additional sensors:**
 
+  - `sensor.saj_ct_pv_power_watt`
+  - `sensor.saj_ct_pv_power_va`
+  - `sensor.saj_ct_grid_power_va`
+  - `sensor.saj_ct_grid_power_watt`  
+
+* These sensors are now updated every 10 seconds via the Fast Coordinator, ensuring more frequent updates for live data monitoring.
+
+---
 
 # Changelog (v2.5.0)
 

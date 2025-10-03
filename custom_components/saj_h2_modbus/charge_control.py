@@ -28,6 +28,11 @@ PENDING_FIELDS: List[tuple[str, str]] = (
         ("battery_discharge_power_limit", "battery_discharge_power_limit"),
         ("grid_max_charge_power", "grid_max_charge_power"),
         ("grid_max_discharge_power", "grid_max_discharge_power"),
+        ("passive_charge_enable", "passive_charge_enable"),
+        ("passive_grid_charge_power", "passive_grid_charge_power"),
+        ("passive_grid_discharge_power", "passive_grid_discharge_power"),
+        ("passive_bat_charge_power", "passive_bat_charge_power"),
+        ("passive_bat_discharge_power", "passive_bat_discharge_power"),
     ]
 )
 
@@ -61,6 +66,11 @@ REGISTERS = {
     "grid_max_charge_power": 0x364F,
     "grid_max_discharge_power": 0x3650,
     "discharge_time_enable": 0x3651,
+    "passive_charge_enable": 0x3636,
+    "passive_grid_charge_power": 0x3637,
+    "passive_grid_discharge_power": 0x3638,
+    "passive_bat_charge_power": 0x3639,
+    "passive_bat_discharge_power": 0x363A,
 }
 
 # Mapping of simple pending attributes to their register addresses and labels
@@ -98,6 +108,26 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
     "grid_max_discharge_power": (
         REGISTERS["grid_max_discharge_power"],
         "grid max discharge power",
+    ),
+    "passive_charge_enable": (
+        REGISTERS["passive_charge_enable"],
+        "passive charge enable",
+    ),
+    "passive_grid_charge_power": (
+        REGISTERS["passive_grid_charge_power"],
+        "passive grid charge power",
+    ),
+    "passive_grid_discharge_power": (
+        REGISTERS["passive_grid_discharge_power"],
+        "passive grid discharge power",
+    ),
+    "passive_bat_charge_power": (
+        REGISTERS["passive_bat_charge_power"],
+        "passive battery charge power",
+    ),
+    "passive_bat_discharge_power": (
+        REGISTERS["passive_bat_discharge_power"],
+        "passive battery discharge power",
     ),
 }
 

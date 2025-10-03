@@ -59,6 +59,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
         SajGenericNumberEntity(hub, "SAJ Battery Discharge Power Limit (Input)", f"{hub.name}_battery_discharge_power_limit_input", 0, 1100, 100, 1100, device_info, set_method_name="set_battery_discharge_power_limit"),
         SajGenericNumberEntity(hub, "SAJ Grid Max Charge Power (Input)", f"{hub.name}_grid_max_charge_power_input", 0, 1100, 100, 1100, device_info, set_method_name="set_grid_max_charge_power"),
         SajGenericNumberEntity(hub, "SAJ Grid Max Discharge Power (Input)", f"{hub.name}_grid_max_discharge_power_input", 0, 1100, 100, 1100, device_info, set_method_name="set_grid_max_discharge_power"),
+        SajGenericNumberEntity(hub, "SAJ Passive Charge Enable (Input)", f"{hub.name}_passive_charge_enable_input", 0, 2, 1, 0, device_info, set_method_name="set_passive_charge_enable"),
+        SajGenericNumberEntity(hub, "SAJ Passive Grid Charge Power (Input)", f"{hub.name}_passive_grid_charge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_grid_charge_power"),
+        SajGenericNumberEntity(hub, "SAJ Passive Grid Discharge Power (Input)", f"{hub.name}_passive_grid_discharge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_grid_discharge_power"),
+        SajGenericNumberEntity(hub, "SAJ Passive Battery Charge Power (Input)", f"{hub.name}_passive_bat_charge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_bat_charge_power"),
+        SajGenericNumberEntity(hub, "SAJ Passive Battery Discharge Power (Input)", f"{hub.name}_passive_bat_discharge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_bat_discharge_power"),
     ]
 
     for i in range(1, 8):
