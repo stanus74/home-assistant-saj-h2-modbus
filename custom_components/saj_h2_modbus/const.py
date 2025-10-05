@@ -327,7 +327,7 @@ battery_sensors = [
     {"name": "Battery 3 SOH", "key": "Bat3SOH", "icon": "battery", "enable": False},
     {"name": "Battery 4 SOC", "key": "Bat4SOC", "icon": "battery", "enable": False},
     {"name": "Battery 4 SOH", "key": "Bat4SOH", "icon": "battery", "enable": False},
-    {"name": "Battary on grid discharge depth", "key": "BatOnGridDisDepth", "enable": True},
+    {"name": "Battery on grid discharge depth", "key": "BatOnGridDisDepth", "enable": True},
     {"name": "Battery offgrid discharge depth", "key": "BatOffGridDisDepth", "enable": True},
     {"name": "Battery charge depth", "key": "BatcharDepth", "enable": True},
     {"name": "Battery Charge Power Limit", "key": "BatChargePower", "icon": "battery-charging", "enable": True},
