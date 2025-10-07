@@ -378,24 +378,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             address,
             value,
         )
-    async def async_unload_entry(self) -> bool:
-        """Handle removal of the Modbus hub."""
-        # Stop fast coordinator (no more 10s polling)
-        if self._fast_coordinator is not None:
-            try:
-                await self._fast_coordinator.async_set_update_interval(None)
-            except Exception as e:
-                _LOGGER.debug("Ignoring error stopping fast coordinator: %s", e)
-            self._fast_coordinator = None
+   async def async_unload_entry(self) -> None:
+       """Cleanup tasks when the config entry is removed."""
+       if self._fast_coordinator:
+           try:
+               await self._fast_coordinator.async_stop()
+               _LOGGER.debug("Fast coordinator stopped")
+           except Exception as e:
+               _LOGGER.warning("Failed to stop fast coordinator: %s", e)
 
-        # Close the Modbus client
-        if self._client:
-            try:
-                self._client.close()
-            except Exception as e:
-                _LOGGER.warning(f"Error while closing Modbus client: {e}")
-
-        return True
+       if self._client and self._client.connected:
+           await self._client.close()
+           _LOGGER.debug("Modbus client connection closed")
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:

@@ -5,6 +5,179 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+NUMBER_DEFINITIONS = [
+    {
+        "key": "charge_day_mask",
+        "name": "Charge Day Mask",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 127,
+        "unit": None,
+        "setter": "set_charge_day_mask",
+    },
+    {
+        "key": "charge_power_percent",
+        "name": "Charge Power Percent",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 5,
+        "unit": "%",
+        "setter": "set_charge_power_percent",
+    },
+    {
+        "key": "export_limit",
+        "name": "Export Limit",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 0,
+        "unit": None,
+        "setter": "set_export_limit",
+    },
+    {
+        "key": "app_mode",
+        "name": "App Mode",
+        "min": 0,
+        "max": 3,
+        "step": 1,
+        "default": 0,
+        "unit": None,
+        "setter": "set_app_mode",
+    },
+    {
+        "key": "discharge_time_enable",
+        "name": "Discharge Time Enable",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 0,
+        "unit": None,
+        "setter": "set_discharge_time_enable",
+    },
+    {
+        "key": "battery_on_grid_discharge_depth",
+        "name": "Battery On Grid Discharge Depth",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 20,
+        "unit": "%",
+        "setter": "set_battery_on_grid_discharge_depth",
+    },
+    {
+        "key": "battery_off_grid_discharge_depth",
+        "name": "Battery Off Grid Discharge Depth",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 20,
+        "unit": "%",
+        "setter": "set_battery_off_grid_discharge_depth",
+    },
+    {
+        "key": "battery_capacity_charge_upper_limit",
+        "name": "Battery Capacity Charge Upper Limit",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 100,
+        "unit": "%",
+        "setter": "set_battery_capacity_charge_upper_limit",
+    },
+    {
+        "key": "battery_charge_power_limit",
+        "name": "Battery Charge Power Limit",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 1100,
+        "unit": None,
+        "setter": "set_battery_charge_power_limit",
+    },
+    {
+        "key": "battery_discharge_power_limit",
+        "name": "Battery Discharge Power Limit",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 1100,
+        "unit": None,
+        "setter": "set_battery_discharge_power_limit",
+    },
+    {
+        "key": "grid_max_charge_power",
+        "name": "Grid Max Charge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 1100,
+        "unit": None,
+        "setter": "set_grid_max_charge_power",
+    },
+    {
+        "key": "grid_max_discharge_power",
+        "name": "Grid Max Discharge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 1100,
+        "unit": None,
+        "setter": "set_grid_max_discharge_power",
+    },
+    {
+        "key": "passive_charge_enable",
+        "name": "Passive Charge Enable",
+        "min": 0,
+        "max": 2,
+        "step": 1,
+        "default": 0,
+        "unit": None,
+        "setter": "set_passive_charge_enable",
+    },
+    {
+        "key": "passive_grid_charge_power",
+        "name": "Passive Grid Charge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 0,
+        "unit": "%",
+        "setter": "set_passive_grid_charge_power",
+    },
+    {
+        "key": "passive_grid_discharge_power",
+        "name": "Passive Grid Discharge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 0,
+        "unit": "%",
+        "setter": "set_passive_grid_discharge_power",
+    },
+    {
+        "key": "passive_bat_charge_power",
+        "name": "Passive Battery Charge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 0,
+        "unit": "%",
+        "setter": "set_passive_bat_charge_power",
+    },
+    {
+        "key": "passive_bat_discharge_power",
+        "name": "Passive Battery Discharge Power",
+        "min": 0,
+        "max": 1100,
+        "step": 100,
+        "default": 0,
+        "unit": "%",
+        "setter": "set_passive_bat_discharge_power",
+    },
+]
+
 class SajNumberEntity(NumberEntity):
     """Base class for SAJ writable number entities."""
     _attr_mode = NumberMode.BOX
@@ -46,49 +219,60 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
 
-    entities = [
-        SajGenericNumberEntity(hub, "SAJ Charge Day Mask (Input)", f"{hub.name}_charge_day_mask_input", 0, 127, 1, 127, device_info, set_method_name="set_charge_day_mask"),
-        SajGenericNumberEntity(hub, "SAJ Charge Power Percent (Input)", f"{hub.name}_charge_power_percent_input", 0, 100, 1, 5, device_info, set_method_name="set_charge_power_percent"),
-        SajGenericNumberEntity(hub, "SAJ Export Limit (Input)", f"{hub.name}_export_limit_input", 0, 1100, 100, 0, device_info, set_method_name="set_export_limit"),
-        SajGenericNumberEntity(hub, "SAJ App Mode (Input)", f"{hub.name}_app_mode_input", 0, 3, 1, 0, device_info, set_method_name="set_app_mode"),
-        SajGenericNumberEntity(hub, "SAJ Discharge Time Enable (Input)", f"{hub.name}_discharge_time_enable_input", 0, 127, 1, 0, device_info, set_method_name="set_discharge_time_enable"),
-        SajGenericNumberEntity(hub, "SAJ Battery On Grid Discharge Depth (Input)", f"{hub.name}_battery_on_grid_discharge_depth_input", 0, 100, 1, 20, device_info, set_method_name="set_battery_on_grid_discharge_depth"),
-        SajGenericNumberEntity(hub, "SAJ Battery Off Grid Discharge Depth (Input)", f"{hub.name}_battery_off_grid_discharge_depth_input", 0, 100, 1, 20, device_info, set_method_name="set_battery_off_grid_discharge_depth"),
-        SajGenericNumberEntity(hub, "SAJ Battery Capacity Charge Upper Limit (Input)", f"{hub.name}_battery_capacity_charge_upper_limit_input", 0, 100, 1, 100, device_info, set_method_name="set_battery_capacity_charge_upper_limit"),
-        SajGenericNumberEntity(hub, "SAJ Battery Charge Power Limit (Input)", f"{hub.name}_battery_charge_power_limit_input", 0, 1100, 100, 1100, device_info, set_method_name="set_battery_charge_power_limit"),
-        SajGenericNumberEntity(hub, "SAJ Battery Discharge Power Limit (Input)", f"{hub.name}_battery_discharge_power_limit_input", 0, 1100, 100, 1100, device_info, set_method_name="set_battery_discharge_power_limit"),
-        SajGenericNumberEntity(hub, "SAJ Grid Max Charge Power (Input)", f"{hub.name}_grid_max_charge_power_input", 0, 1100, 100, 1100, device_info, set_method_name="set_grid_max_charge_power"),
-        SajGenericNumberEntity(hub, "SAJ Grid Max Discharge Power (Input)", f"{hub.name}_grid_max_discharge_power_input", 0, 1100, 100, 1100, device_info, set_method_name="set_grid_max_discharge_power"),
-        SajGenericNumberEntity(hub, "SAJ Passive Charge Enable (Input)", f"{hub.name}_passive_charge_enable_input", 0, 2, 1, 0, device_info, set_method_name="set_passive_charge_enable"),
-        SajGenericNumberEntity(hub, "SAJ Passive Grid Charge Power (Input)", f"{hub.name}_passive_grid_charge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_grid_charge_power"),
-        SajGenericNumberEntity(hub, "SAJ Passive Grid Discharge Power (Input)", f"{hub.name}_passive_grid_discharge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_grid_discharge_power"),
-        SajGenericNumberEntity(hub, "SAJ Passive Battery Charge Power (Input)", f"{hub.name}_passive_bat_charge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_bat_charge_power"),
-        SajGenericNumberEntity(hub, "SAJ Passive Battery Discharge Power (Input)", f"{hub.name}_passive_bat_discharge_power_input", 0, 1100, 100, 0, device_info, set_method_name="set_passive_bat_discharge_power"),
-    ]
+    entities = []
 
+    for desc in NUMBER_DEFINITIONS:
+        entity = SajGenericNumberEntity(
+            hub=hub,
+            name=f"SAJ {desc['name']} (Input)",
+            unique_id=f"{hub.name}_{desc['key']}_input",
+            min_val=desc["min"],
+            max_val=desc["max"],
+            step=desc["step"],
+            default=desc["default"],
+            unit=desc["unit"],
+            set_method_name=desc["setter"],
+            device_info=device_info,
+        )
+        entities.append(entity)
+
+    # Add discharge entities for indices 1-7
     for i in range(1, 8):
         prefix = str(i)
-        entities.append(SajGenericNumberEntity(
-            hub,
-            f"SAJ Discharge{prefix} Day Mask (Input)",
-            f"{hub.name}_discharge{prefix}_day_mask_input",
-            0,
-            127,
-            1,
-            127,
-            device_info,
-            set_method_name=f"set_discharge{prefix}_day_mask"
-        ))
-        entities.append(SajGenericNumberEntity(
-            hub,
-            f"SAJ Discharge{prefix} Power Percent (Input)",
-            f"{hub.name}_discharge{prefix}_power_percent_input",
-            0,
-            100,
-            1,
-            5,
-            device_info,
-            set_method_name=f"set_discharge{prefix}_power_percent"
-        ))
+        for desc in [
+            {
+                "key": f"discharge{prefix}_day_mask",
+                "name": f"Discharge{prefix} Day Mask",
+                "min": 0,
+                "max": 127,
+                "step": 1,
+                "default": 127,
+                "unit": None,
+                "setter": f"set_discharge{prefix}_day_mask",
+            },
+            {
+                "key": f"discharge{prefix}_power_percent",
+                "name": f"Discharge{prefix} Power Percent",
+                "min": 0,
+                "max": 100,
+                "step": 1,
+                "default": 5,
+                "unit": "%",
+                "setter": f"set_discharge{prefix}_power_percent",
+            },
+        ]:
+            entity = SajGenericNumberEntity(
+                hub=hub,
+                name=f"SAJ {desc['name']} (Input)",
+                unique_id=f"{hub.name}_{desc['key']}_input",
+                min_val=desc["min"],
+                max_val=desc["max"],
+                step=desc["step"],
+                default=desc["default"],
+                unit=desc["unit"],
+                set_method_name=desc["setter"],
+                device_info=device_info,
+            )
+            entities.append(entity)
 
     async_add_entities(entities)

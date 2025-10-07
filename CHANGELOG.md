@@ -1,6 +1,32 @@
+# Changelog (v2.6.1)
+
+### 🔧 Fix for Proper Fast Coordinator Shutdown
+
+* **Fixed:** The Fast Coordinator (10s) is now properly stopped when the config entry is unloaded.
+* **Impact:** This prevents potential resource leaks and ensures clean shutdown of the integration.
+
+---
+
+### 🚀 Entity Factory Implementation with Mapping Lists
+
+* **Implemented Factory Pattern with Mapping Lists:**
+  - Refactored number, switch, and text entity creation to use centralized mapping lists
+  - Reduced boilerplate code in async_setup_entry functions
+  - Improved maintainability and extensibility of entity definitions
+  - Standardized entity creation pattern across all platforms
+
+### 🔧 Code Improvements
+
+* **Reduced Code Duplication:**
+  - Eliminated repetitive entity instantiation code
+  - Centralized entity configuration in dedicated mapping structures
+  - Enhanced readability and simplified future modifications
+
+---
+
 # Changelog (v2.6.0)
 
-### 🚀 New Passive Charge/Discharging Input Methods Added 
+### 🚀 New Passive Charge/Discharging Input Methods Added
 
 * **New Input Registers:**
 
