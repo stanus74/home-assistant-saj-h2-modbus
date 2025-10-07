@@ -5,6 +5,8 @@
 * **Fixed:** The Fast Coordinator (10s) is now properly stopped when the config entry is unloaded.
 * **Impact:** This prevents potential resource leaks and ensures clean shutdown of the integration.
 
+* Fix Register Address "discharge_time_enable": 0x3605, before was 0x3650 
+
 ---
 
 ### 🚀 Entity Factory Implementation with Mapping Lists

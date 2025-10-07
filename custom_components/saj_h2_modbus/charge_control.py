@@ -65,7 +65,7 @@ REGISTERS = {
     "battery_discharge_power_limit": 0x364E,
     "grid_max_charge_power": 0x364F,
     "grid_max_discharge_power": 0x3650,
-    "discharge_time_enable": 0x3651,
+    "discharge_time_enable": 0x3605,
     "passive_charge_enable": 0x3636,
     "passive_grid_charge_power": 0x3637,
     "passive_grid_discharge_power": 0x3638,
