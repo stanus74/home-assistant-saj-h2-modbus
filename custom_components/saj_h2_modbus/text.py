@@ -12,6 +12,21 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+TEXT_DEFINITIONS = [
+    {
+        "key": "charge_start_time",
+        "name": "Charge Start Time",
+        "unique_id_suffix": "_charge_start_time",
+        "setter": "set_charge_start",
+    },
+    {
+        "key": "charge_end_time",
+        "name": "Charge End Time",
+        "unique_id_suffix": "_charge_end_time",
+        "setter": "set_charge_end",
+    },
+]
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -21,40 +36,44 @@ async def async_setup_entry(
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
 
-    entities = [
-        SajTimeTextEntity(
-            hub,
-            "SAJ Charge Start Time (Time)",
-            f"{hub.name}_charge_start_time",
-            hub.set_charge_start,
-            device_info
-        ),
-        SajTimeTextEntity(
-            hub,
-            "SAJ Charge End Time (Time)",
-            f"{hub.name}_charge_end_time",
-            hub.set_charge_end,
-            device_info
-        ),
-    ]
+    entities = []
+
+    # Add charge entities
+    for desc in TEXT_DEFINITIONS:
+        entity = SajTimeTextEntity(
+            hub=hub,
+            name=f"SAJ {desc['name']} (Time)",
+            unique_id=f"{hub.name}{desc['unique_id_suffix']}",
+            set_method=getattr(hub, desc["setter"]),
+            device_info=device_info
+        )
+        entities.append(entity)
 
     # Discharge Start/End Time Entities (1-7)
     for i in range(1, 8):
         prefix = str(i)
-        entities.append(SajTimeTextEntity(
-            hub,
-            f"SAJ Discharge{prefix} Start Time (Time)",
-            f"{hub.name}_discharge{prefix}_start_time",
-            getattr(hub, f"set_discharge{prefix}_start"),
-            device_info
-        ))
-        entities.append(SajTimeTextEntity(
-            hub,
-            f"SAJ Discharge{prefix} End Time (Time)",
-            f"{hub.name}_discharge{prefix}_end_time",
-            getattr(hub, f"set_discharge{prefix}_end"),
-            device_info
-        ))
+        for desc in [
+            {
+                "key": f"discharge{prefix}_start_time",
+                "name": f"Discharge{prefix} Start Time",
+                "unique_id_suffix": f"_discharge{prefix}_start_time",
+                "setter": f"set_discharge{prefix}_start",
+            },
+            {
+                "key": f"discharge{prefix}_end_time",
+                "name": f"Discharge{prefix} End Time",
+                "unique_id_suffix": f"_discharge{prefix}_end_time",
+                "setter": f"set_discharge{prefix}_end",
+            },
+        ]:
+            entity = SajTimeTextEntity(
+                hub=hub,
+                name=f"SAJ {desc['name']} (Time)",
+                unique_id=f"{hub.name}{desc['unique_id_suffix']}",
+                set_method=getattr(hub, desc["setter"]),
+                device_info=device_info
+            )
+            entities.append(entity)
 
     async_add_entities(entities)
 

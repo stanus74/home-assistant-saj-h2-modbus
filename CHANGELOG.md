@@ -1,6 +1,33 @@
+# Changelog (v2.6.1)
+
+### 🔧 Fix for Proper Fast Coordinator Shutdown
+
+* **Fixed:** The Fast Coordinator (10s) is now properly stopped when the config entry is unloaded.
+* **Impact:** This prevents potential resource leaks and ensures clean shutdown of the integration.
+
+* Corrected register address "discharge_time_enable": 0x3605, before was 0x3650 
+
+
+### 🚀 Entity Factory Implementation with Mapping Lists
+
+* **Implemented Factory Pattern with Mapping Lists:**
+  - Refactored number, switch, and text entity creation to use centralized mapping lists
+  - Reduced boilerplate code in async_setup_entry functions
+  - Improved maintainability and extensibility of entity definitions
+  - Standardized entity creation pattern across all platforms
+
+### 🔧 Code Improvements
+
+* **Reduced Code Duplication:**
+  - Eliminated repetitive entity instantiation code
+  - Centralized entity configuration in dedicated mapping structures
+  - Enhanced readability and simplified future modifications
+
+---
+
 # Changelog (v2.6.0)
 
-### 🚀 New Passive Charge/Discharging Input Methods Added 
+### 🚀 New Passive Charge/Discharging Input Methods Added
 
 * **New Input Registers:**
 
@@ -97,7 +124,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 
 # Changelog (v2.4.0)
 
-## Big Code improvement and reducing
+## Big Code improvement and reduction
 
 ## Code was shortened by 380 lines or reduced by 17Kbytes.
 

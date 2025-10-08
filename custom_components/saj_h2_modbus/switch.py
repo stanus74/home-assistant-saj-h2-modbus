@@ -7,19 +7,38 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .hub import SAJModbusHub  
+from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
+
+SWITCH_DEFINITIONS = [
+    {
+        "key": "charging",
+        "name": "Charging",
+        "unique_id_suffix": "_control"
+    },
+    {
+        "key": "discharging",
+        "name": "Discharging",
+        "unique_id_suffix": "_control"
+    },
+]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ switches."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
 
-    switch_types = ["charging", "discharging"]
-    async_add_entities([
-        BaseSajSwitch(hub, device_info, switch_type) for switch_type in switch_types
-    ])
+    entities = []
+    for desc in SWITCH_DEFINITIONS:
+        entity = BaseSajSwitch(
+            hub=hub,
+            device_info=device_info,
+            switch_type=desc["key"]
+        )
+        entities.append(entity)
+
+    async_add_entities(entities)
     _LOGGER.info("Added SAJ switches")
 
 class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
@@ -27,7 +46,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(hub)
         self._hub = hub
         self._attr_device_info = device_info
-        self._attr_unique_id = f"{hub.name}_{switch_type}_control"
+        self._attr_unique_id = f"{hub.name}_{switch_type}{SWITCH_DEFINITIONS[0]['unique_id_suffix'] if switch_type == 'charging' else SWITCH_DEFINITIONS[1]['unique_id_suffix']}"
         self._attr_name = f"{hub.name} {switch_type.capitalize()} Control"
         self._attr_entity_registry_enabled_default = True
         self._attr_assumed_state = True
