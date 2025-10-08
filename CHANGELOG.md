@@ -5,9 +5,8 @@
 * **Fixed:** The Fast Coordinator (10s) is now properly stopped when the config entry is unloaded.
 * **Impact:** This prevents potential resource leaks and ensures clean shutdown of the integration.
 
-* Fix Register Address "discharge_time_enable": 0x3605, before was 0x3650 
+* Corrected register address "discharge_time_enable": 0x3605, before was 0x3650 
 
----
 
 ### 🚀 Entity Factory Implementation with Mapping Lists
 
@@ -125,7 +124,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 
 # Changelog (v2.4.0)
 
-## Big Code improvement and reducing
+## Big Code improvement and reduction
 
 ## Code was shortened by 380 lines or reduced by 17Kbytes.
 

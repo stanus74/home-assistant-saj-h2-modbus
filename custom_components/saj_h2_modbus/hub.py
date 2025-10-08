@@ -378,7 +378,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             address,
             value,
         )
-   async def async_unload_entry(self) -> None:
+    async def async_unload_entry(self) -> None:
        """Cleanup tasks when the config entry is removed."""
        if self._fast_coordinator:
            try:
