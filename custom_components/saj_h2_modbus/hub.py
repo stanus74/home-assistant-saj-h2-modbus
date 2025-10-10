@@ -26,6 +26,49 @@ _LOGGER = logging.getLogger(__name__)
 # Global switch: Fast-Coordinator (10s) active by default?
 FAST_POLL_DEFAULT = False # True or False
 
+CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
+
+SIMPLE_PENDING_ATTRS = (
+    "_pending_charging_state",
+    "_pending_discharging_state",
+    "_pending_export_limit",
+    "_pending_app_mode",
+    "_pending_discharge_time_enable",
+    "_pending_battery_on_grid_discharge_depth",
+    "_pending_battery_off_grid_discharge_depth",
+    "_pending_battery_capacity_charge_upper_limit",
+    "_pending_battery_charge_power_limit",
+    "_pending_battery_discharge_power_limit",
+    "_pending_grid_max_charge_power",
+    "_pending_grid_max_discharge_power",
+    "_pending_passive_charge_enable",
+    "_pending_passive_grid_charge_power",
+    "_pending_passive_grid_discharge_power",
+    "_pending_passive_bat_charge_power",
+    "_pending_passive_bat_discharge_power",
+)
+
+PENDING_HANDLER_MAP = [
+    ("_pending_charging_state", "handle_pending_charging_state"),
+    ("_pending_discharging_state", "handle_pending_discharging_state"),
+    ("_charge_group", "handle_charge_settings"),
+    ("_pending_export_limit", "handle_export_limit"),
+    ("_pending_app_mode", "handle_app_mode"),
+    ("_pending_discharge_time_enable", "handle_discharge_time_enable"),
+    ("_pending_battery_on_grid_discharge_depth", "handle_battery_on_grid_discharge_depth"),
+    ("_pending_battery_off_grid_discharge_depth", "handle_battery_off_grid_discharge_depth"),
+    ("_pending_battery_capacity_charge_upper_limit", "handle_battery_capacity_charge_upper_limit"),
+    ("_pending_battery_charge_power_limit", "handle_battery_charge_power_limit"),
+    ("_pending_battery_discharge_power_limit", "handle_battery_discharge_power_limit"),
+    ("_pending_grid_max_charge_power", "handle_grid_max_charge_power"),
+    ("_pending_grid_max_discharge_power", "handle_grid_max_discharge_power"),
+    ("_pending_passive_charge_enable", "handle_passive_charge_enable"),
+    ("_pending_passive_grid_charge_power", "handle_passive_grid_charge_power"),
+    ("_pending_passive_grid_discharge_power", "handle_passive_grid_discharge_power"),
+    ("_pending_passive_bat_charge_power", "handle_passive_bat_charge_power"),
+    ("_pending_passive_bat_discharge_power", "handle_passive_bat_discharge_power"),
+]
+
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:
@@ -66,33 +109,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
        
         
         # Pending settings for additional discharge times
-        self._pending_discharges: List[Dict[str, Optional[Any]]] = []
-        for _ in range(7): # Initialize 7 discharge setting slots
-            self._pending_discharges.append({
-                "start": None,
-                "end": None,
-                "day_mask": None,
-                "power_percent": None,
-            })
-        
-        self._pending_export_limit: Optional[int] = None
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
-        self._pending_app_mode: Optional[int] = None
-        self._pending_discharge_time_enable: Optional[int] = None
-        self._pending_battery_on_grid_discharge_depth: Optional[int] = None
-        self._pending_battery_off_grid_discharge_depth: Optional[int] = None
-        self._pending_battery_capacity_charge_upper_limit: Optional[int] = None
-        self._pending_battery_charge_power_limit: Optional[int] = None
-        self._pending_battery_discharge_power_limit: Optional[int] = None
-        self._pending_grid_max_charge_power: Optional[int] = None
-        self._pending_grid_max_discharge_power: Optional[int] = None
-        self._pending_passive_charge_enable: Optional[int] = None
-        self._pending_passive_grid_charge_power: Optional[int] = None
-        self._pending_passive_grid_discharge_power: Optional[int] = None
-        self._pending_passive_bat_charge_power: Optional[int] = None
-        self._pending_passive_bat_discharge_power: Optional[int] = None
+        self._pending_discharges: List[Dict[str, Optional[Any]]] = [
+            {key: None for key in CHARGE_PENDING_SUFFIXES}
+            for _ in range(7)
+        ]
 
+        for attr in SIMPLE_PENDING_ATTRS:
+            setattr(self, attr, None)
+        
         self._setting_handler = ChargeSettingHandler(self)
 
         # Dynamically generate all setter methods from the PENDING_FIELDS list
@@ -244,39 +268,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _process_pending_settings(self) -> None:
         """Processing pending writes; now called BEFORE the reads."""
-        # ChargeSettingHandler has NO has_pending/handle_all_pending.
-        # We check the hub-pending fields and call the appropriate handlers directly.
         try:
-            pending_handlers = [
-                (self._pending_charging_state is not None, self._setting_handler.handle_pending_charging_state),
-                (self._pending_discharging_state is not None, self._setting_handler.handle_pending_discharging_state),
-                (
-                    any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]),
-                    self._setting_handler.handle_charge_settings,
-                ),
-                (self._pending_export_limit is not None, self._setting_handler.handle_export_limit),
-                (self._pending_app_mode is not None, self._setting_handler.handle_app_mode),
-                (self._pending_discharge_time_enable is not None, self._setting_handler.handle_discharge_time_enable),
-                (self._pending_battery_on_grid_discharge_depth is not None, self._setting_handler.handle_battery_on_grid_discharge_depth),
-                (self._pending_battery_off_grid_discharge_depth is not None, self._setting_handler.handle_battery_off_grid_discharge_depth),
-                (self._pending_battery_capacity_charge_upper_limit is not None, self._setting_handler.handle_battery_capacity_charge_upper_limit),
-                (self._pending_battery_charge_power_limit is not None, self._setting_handler.handle_battery_charge_power_limit),
-                (self._pending_battery_discharge_power_limit is not None, self._setting_handler.handle_battery_discharge_power_limit),
-                (self._pending_grid_max_charge_power is not None, self._setting_handler.handle_grid_max_charge_power),
-                (self._pending_grid_max_discharge_power is not None, self._setting_handler.handle_grid_max_discharge_power),
-                (self._pending_passive_charge_enable is not None, self._setting_handler.handle_passive_charge_enable),
-                (self._pending_passive_grid_charge_power is not None, self._setting_handler.handle_passive_grid_charge_power),
-                (self._pending_passive_grid_discharge_power is not None, self._setting_handler.handle_passive_grid_discharge_power),
-                (self._pending_passive_bat_charge_power is not None, self._setting_handler.handle_passive_bat_charge_power),
-                (self._pending_passive_bat_discharge_power is not None, self._setting_handler.handle_passive_bat_discharge_power),
-            ]
-            # Dynamically add generic discharge handlers (slots 1..7)
-            for i in range(1, 8):
-                if any(self._pending_discharges[i-1][attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
-                    pending_handlers.append((True, lambda i=i: self._setting_handler.handle_discharge_settings_by_index(i)))
-            for condition, handler in pending_handlers:
-                if condition:
-                    await handler()
+            for attr_name, handler_name in PENDING_HANDLER_MAP:
+                if attr_name == "_charge_group":
+                    if any(
+                        getattr(self, f"_pending_charge_{suffix}") is not None
+                        for suffix in CHARGE_PENDING_SUFFIXES
+                    ):
+                        await getattr(self._setting_handler, handler_name)()
+                    continue
+
+                if getattr(self, attr_name) is not None:
+                    await getattr(self._setting_handler, handler_name)()
+
+            for index, slot in enumerate(self._pending_discharges, start=1):
+                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                    await self._setting_handler.handle_discharge_settings_by_index(index)
         except Exception as e:
             _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e)
 
@@ -382,10 +389,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
        """Cleanup tasks when the config entry is removed."""
        if self._fast_coordinator:
            try:
-               await self._fast_coordinator.async_stop()
-               _LOGGER.debug("Fast coordinator stopped")
+               # Remove listener and set to None instead of calling async_stop()
+               self._fast_coordinator.async_remove_listener(self.async_set_updated_data)
+               self._fast_coordinator = None
+               _LOGGER.debug("Fast coordinator listener removed")
            except Exception as e:
-               _LOGGER.warning("Failed to stop fast coordinator: %s", e)
+               _LOGGER.warning("Failed to remove fast coordinator listener: %s", e)
 
        if self._client and self._client.connected:
            await self._client.close()
@@ -394,32 +403,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     # --- Helper functions ---
     def _has_pending(self) -> bool:
         """Checks if there are pending changes in the hub (without Handler-API)."""
-        if self._pending_charging_state is not None:
+        if any(getattr(self, attr) is not None for attr in SIMPLE_PENDING_ATTRS):
             return True
-        if self._pending_discharging_state is not None:
+        if any(
+            getattr(self, f"_pending_charge_{suffix}") is not None
+            for suffix in CHARGE_PENDING_SUFFIXES
+        ):
             return True
-        if any(getattr(self, f"_pending_charge_{attr}") is not None for attr in ["start", "end", "day_mask", "power_percent"]):
-            return True
-        if self._pending_export_limit is not None:
-            return True
-        if self._pending_app_mode is not None:
-            return True
-        if self._pending_discharge_time_enable is not None:
-            return True
-        if any([
-            self._pending_battery_on_grid_discharge_depth is not None,
-            self._pending_battery_off_grid_discharge_depth is not None,
-            self._pending_battery_capacity_charge_upper_limit is not None,
-            self._pending_battery_charge_power_limit is not None,
-            self._pending_battery_discharge_power_limit is not None,
-            self._pending_grid_max_charge_power is not None,
-            self._pending_grid_max_discharge_power is not None,
-        ]):
-            return True
-        # Check Discharge-Slots
-        for i in range(7):
-            slot = self._pending_discharges[i]
-            if any(slot[attr] is not None for attr in ["start", "end", "day_mask", "power_percent"]):
+        for slot in self._pending_discharges:
+            if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
                 return True
         return False
 

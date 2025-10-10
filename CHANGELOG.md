@@ -1,3 +1,21 @@
+# Changelog (v2.6.2)
+
+### 🔧 Code Refactoring for Maintainability
+
+* **Refactored Pending Settings Handling:**
+  - Introduced constants `CHARGE_PENDING_SUFFIXES` and `SIMPLE_PENDING_ATTRS` to reduce redundancy.
+  - Centralized pending setting handlers in `PENDING_HANDLER_MAP` for cleaner and more maintainable code.
+  - Simplified `_process_pending_settings` and `_has_pending` methods to dynamically handle pending attributes.
+
+* **Optimized Initialization:**
+  - Consolidated repetitive initialization of `_pending_*` attributes using loops and constants.
+
+* **Impact:**
+  - Improved code readability and maintainability.
+  - Reduced potential for errors when adding or modifying pending settings.
+
+---
+
 # Changelog (v2.6.1)
 
 ### 🔧 Fix for Proper Fast Coordinator Shutdown
