@@ -15,7 +15,7 @@ DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
     vol.Required(CONF_HOST): str,
     vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
+    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(int, vol.Range(min=60, msg="invalid_scan_interval")),
 })
 
 
@@ -107,6 +107,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             data_schema=vol.Schema({
                 vol.Required(CONF_HOST, default=self._get_option_default(CONF_HOST, '')): str,
                 vol.Required(CONF_PORT, default=self._get_option_default(CONF_PORT, 502)): int,
-                vol.Optional(CONF_SCAN_INTERVAL, default=self._get_option_default(CONF_SCAN_INTERVAL, 30)): int,
+                vol.Optional(CONF_SCAN_INTERVAL, default=self._get_option_default(CONF_SCAN_INTERVAL, 30)): vol.All(int, vol.Range(min=60, msg="invalid_scan_interval")),
             }),
         )

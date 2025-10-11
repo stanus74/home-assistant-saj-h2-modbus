@@ -12,7 +12,8 @@
       }
     },
     "error": {
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "invalid_scan_interval": "Scan interval must be at least 60 seconds"
     },
     "abort": {
       "already_configured": "Device is already configured"

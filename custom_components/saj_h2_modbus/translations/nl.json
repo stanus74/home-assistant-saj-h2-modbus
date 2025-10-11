@@ -12,7 +12,8 @@
       }
     },
     "error": {
-      "already_configured": "Apparaat is al geconfigureerd"
+      "already_configured": "Apparaat is al geconfigureerd",
+      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd"
