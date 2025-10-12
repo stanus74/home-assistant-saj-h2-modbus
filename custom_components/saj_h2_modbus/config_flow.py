@@ -84,16 +84,16 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 # Get the hub from the saved data with robust default handling
                 hub = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {}).get("hub")
 
-                if hub is None:
-                    _LOGGER.error(f"Hub not found for entry_id: {self.config_entry.entry_id}")
-                    return self.async_abort(reason="hub_not_found")
-
-                # Update the hub configuration
-                await hub.update_connection_settings(
-                    user_input[CONF_HOST],
-                    user_input[CONF_PORT],
-                    user_input[CONF_SCAN_INTERVAL]
-                )
+                if hub is not None:
+                    # Update the hub configuration only if hub exists
+                    await hub.update_connection_settings(
+                        user_input[CONF_HOST],
+                        user_input[CONF_PORT],
+                        user_input[CONF_SCAN_INTERVAL]
+                    )
+                else:
+                    # Hub not found - just log warning but continue to save options
+                    _LOGGER.warning(f"Hub not found for entry_id: {self.config_entry.entry_id}. Options will be saved and hub will be created on reload.")
 
                 # Save the new options in config_entry.options
                 return self.async_create_entry(title="", data=user_input)
@@ -107,6 +107,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             data_schema=vol.Schema({
                 vol.Required(CONF_HOST, default=self._get_option_default(CONF_HOST, '')): str,
                 vol.Required(CONF_PORT, default=self._get_option_default(CONF_PORT, 502)): int,
-                vol.Optional(CONF_SCAN_INTERVAL, default=self._get_option_default(CONF_SCAN_INTERVAL, 30)): vol.All(int, vol.Range(min=60, msg="invalid_scan_interval")),
+                vol.Optional(CONF_SCAN_INTERVAL, default=self._get_option_default(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): vol.All(int, vol.Range(min=60, msg="invalid_scan_interval")),
             }),
         )

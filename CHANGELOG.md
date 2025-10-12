@@ -3,8 +3,8 @@
 ### 🔧 Code Refactoring for Maintainability
 
 * **Refactored Pending Settings Handling:**
-  - Introduced constants `CHARGE_PENDING_SUFFIXES` and `SIMPLE_PENDING_ATTRS` to reduce redundancy.
-  - Centralized pending setting handlers in `PENDING_HANDLER_MAP` for cleaner and more maintainable code.
+  - Introduced constants `CHARGE_PENDING_SUFFIXES` and dynamically generated `SIMPLE_PENDING_ATTRS` from `PENDING_FIELDS` to reduce redundancy.
+  - Centralized and dynamically generated pending setting handlers in `PENDING_HANDLER_MAP` for cleaner and more maintainable code.
   - Simplified `_process_pending_settings` and `_has_pending` methods to dynamically handle pending attributes.
 
 * **Optimized Initialization:**
@@ -13,6 +13,7 @@
 * **Impact:**
   - Improved code readability and maintainability.
   - Reduced potential for errors when adding or modifying pending settings.
+  - Ensured `SIMPLE_PENDING_ATTRS` stays synchronized with `PENDING_FIELDS`.
 
 ---
 

@@ -445,7 +445,7 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
 
     try:
         data = await _read_modbus_data(client, lock, 0x3636, 27, decode_instructions, "passive_battery_data", default_factor=0.1)
-        _LOGGER.debug(f"Passive Battery Data: {data}")  # Add this line
+        #_LOGGER.debug(f"Passive Battery Data: {data}")  # Add this line
         return data
     except Exception as e:
         _LOGGER.error(f"Error reading Passive Battery data: {e}")
