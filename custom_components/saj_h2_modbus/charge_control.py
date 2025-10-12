@@ -234,18 +234,6 @@ class ChargeSettingHandler:
                     self._hub, f"_pending_{mode}_power_percent", 5
                 )
 
-            if mode.startswith("discharge"):
-                index = int(mode.replace("discharge", "")) - 1
-                day_mask_value = self._hub._pending_discharges[index]["day_mask"]
-                power_percent_value = self._hub._pending_discharges[index][
-                    "power_percent"
-                ]
-            else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", None)
-                power_percent_value = getattr(
-                    self._hub, f"_pending_{mode}_power_percent", None
-                )
-
             # Always call _update_day_mask_and_power for modes that have it
             # The _update_day_mask_and_power method handles reading current values and applying defaults
             if "day_mask_power" in registers:

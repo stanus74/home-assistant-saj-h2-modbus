@@ -90,7 +90,13 @@ _PENDING_HANDLER_MAP_GENERATED.append(("_charge_group", "handle_charge_settings"
 # Process SIMPLE_PENDING_ATTRS to derive handler names
 # Einheitlich: alle Handler-Namen ohne 'pending_'
 for attr in SIMPLE_PENDING_ATTRS:
-    handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
+    # Special handling for charging/discharging state to match charge_control.py naming
+    if attr == "_pending_charging_state":
+        handler_name = "handle_charging_state"
+    elif attr == "_pending_discharging_state":
+        handler_name = "handle_discharging_state"
+    else:
+        handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
     _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
 
 PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
@@ -157,6 +163,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.warning("Missing dynamically generated setter for %s", name)
         # Second coordinator (10s) is initialized when needed
         self._fast_coordinator: Optional[DataUpdateCoordinator[Dict[str, Any]]] = None
+        self._fast_unsub = None  # Store unsubscribe callback for fast coordinator
         # Note: no own task set needed anymore
    
     async def start_fast_updates(self) -> None:
@@ -191,6 +198,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             update_interval=timedelta(seconds=10),
             update_method=_async_update_fast,
         )
+        
+        # Store the unsubscribe callback for proper cleanup
+        self._fast_unsub = self._fast_coordinator.async_add_listener(self.async_set_updated_data)
+        
         # Perform first refresh so entities can see data immediately
         await self._fast_coordinator.async_config_entry_first_refresh()
 
@@ -214,7 +225,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     # Close the old client if it exists
                     if self._client:
                         try:
-                            self._client.close()
+                            await self._client.close()
                         except Exception as e:
                             _LOGGER.warning(f"Error while closing old Modbus client: {e}")
                     self._client = self._create_client()
@@ -244,7 +255,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return
         if self._fast_coordinator is not None:
             try:
-                self._fast_coordinator.async_remove_listener(self.async_set_updated_data)
+                # Use the stored unsubscribe callback if available
+                if self._fast_unsub is not None:
+                    self._fast_unsub()
+                    self._fast_unsub = None
                 self._fast_coordinator = None
                 _LOGGER.debug("Old fast coordinator removed")
             except Exception as e:
@@ -252,16 +266,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         await self.start_fast_updates()
 
     async def reconnect_client(self) -> bool:
+        # Check if reconnection is already in progress before acquiring lock
+        if self._reconnecting:
+            _LOGGER.debug("Reconnection already in progress, waiting...")
+            return False
+            
         async with self._connection_lock:
-            _LOGGER.info("Reconnecting Modbus client...")
+            # Double-check after acquiring lock to prevent race conditions
             if self._reconnecting:
-                _LOGGER.debug("Reconnection already in progress, waiting...")
+                _LOGGER.debug("Reconnection already in progress (double-check), waiting...")
                 return False
+                
+            _LOGGER.info("Reconnecting Modbus client...")
             try:
                 self._reconnecting = True
                 if self._client:
                     try:
-                        self._client.close()
+                        await self._client.close()
                     except Exception as e:
                         _LOGGER.warning(f"Error while closing old Modbus client: {e}")
                 self._client = self._create_client() # Recreate client to ensure a fresh connection attempt
@@ -432,8 +453,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
        """Cleanup tasks when the config entry is removed."""
        if self._fast_coordinator:
            try:
-               # Remove listener and set to None instead of calling async_stop()
-               self._fast_coordinator.async_remove_listener(self.async_set_updated_data)
+               # Use the stored unsubscribe callback if available
+               if self._fast_unsub is not None:
+                   self._fast_unsub()
+                   self._fast_unsub = None
                self._fast_coordinator = None
                _LOGGER.debug("Fast coordinator listener removed")
            except Exception as e:
