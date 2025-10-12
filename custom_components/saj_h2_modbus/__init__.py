@@ -33,14 +33,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "hub": hub,
-        "fast_coordinator": hub._fast_coordinator,
+        "fast_coordinator": None,  # Will be set later when start_fast_updates() is called
         "device_info": _create_device_info(entry)
     }
 
    
+    # Start the main coordinator scheduling
+    await hub.start_main_coordinator()
+    
     # Starte nur, wenn in hub aktiviert
     if hub.fast_enabled:
         await hub.start_fast_updates()
+        # Update the fast_coordinator reference in hass.data
+        hass.data[DOMAIN][entry.entry_id]["fast_coordinator"] = hub._fast_coordinator
         # The hub already manages its own listener and cleanup
     else:
         _LOGGER.info("Fast coordinator not started (disabled).")
@@ -97,8 +102,10 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
         )
         # Ensure the scan_interval is correctly passed to the hub
         scan_interval = _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        _LOGGER.debug(f"Setting scan interval to {scan_interval} seconds")
+        _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
+        _LOGGER.info(f"Starting hub with first refresh...")
         await hub.async_config_entry_first_refresh()
+        _LOGGER.info(f"Hub first refresh completed, coordinator should run every {scan_interval} seconds")
         return hub
     except Exception as e:
         _LOGGER.error(f"Failed to set up SAJ Modbus hub: {e}")

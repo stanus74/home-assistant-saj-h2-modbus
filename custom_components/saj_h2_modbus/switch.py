@@ -84,10 +84,24 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             return
 
         try:
+            _LOGGER.debug(f"Calling set_{self._switch_type}({desired_state}) on hub")
             await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
             _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
+            # Check if pending value was set
+            pending_attr = f"_pending_{self._switch_type}_state"
+            pending_value = getattr(self._hub, pending_attr, None)
+            _LOGGER.debug(f"Pending {pending_attr} set to: {pending_value}")
+            
+            # Update UI state to show pending write BEFORE processing
             self.async_write_ha_state()
+            
+            # Immediately process pending settings
+            if pending_value is not None:
+                _LOGGER.debug(f"Immediately processing pending {self._switch_type} setting")
+                await self._hub.process_pending_now()
+                # Update UI state again after processing to clear pending status
+                self.async_write_ha_state()
         except Exception as e:
             _LOGGER.error(f"Failed to turn {'on' if desired_state else 'off'}: {e}")
             raise

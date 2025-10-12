@@ -107,6 +107,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Optional: UI optimism during an interval before real reads return
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
+        _LOGGER.info(f"Initializing SAJModbusHub with scan_interval: {scan_interval} seconds")
         super().__init__(
             # Coordinator base
             hass,
@@ -115,6 +116,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             update_interval=timedelta(seconds=scan_interval),
             update_method=self._async_update_data,
         )
+        _LOGGER.info(f"SAJModbusHub initialized with update_interval: {self.update_interval}")
         self._host = host
         self._port = port
         set_modbus_config(self._host, self._port)
@@ -156,7 +158,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             setter = make_pending_setter(attr_path)
             setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
 
-
         # Verify that all expected setter methods were created
         for name, _ in PENDING_FIELDS:
             if not hasattr(self, f"set_{name}"):
@@ -165,6 +166,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._fast_coordinator: Optional[DataUpdateCoordinator[Dict[str, Any]]] = None
         self._fast_unsub = None  # Store unsubscribe callback for fast coordinator
         # Note: no own task set needed anymore
+
+    async def start_main_coordinator(self) -> None:
+        """Ensure the main coordinator is running and scheduled."""
+        _LOGGER.info("Starting main coordinator scheduling...")
+        # The DataUpdateCoordinator should automatically schedule updates
+        # but we'll ensure it's running by requesting a refresh
+        try:
+            await self.async_request_refresh()
+            _LOGGER.info("Main coordinator refresh requested")
+        except Exception as e:
+            _LOGGER.error(f"Failed to request main coordinator refresh: {e}")
+
+    async def process_pending_now(self) -> None:
+        """Immediately process pending settings without waiting for next update cycle."""
+        _LOGGER.debug("Immediately processing pending settings...")
+        try:
+            await self._ensure_connected_client()
+            await self._process_pending_settings()
+            _LOGGER.debug("Immediate pending processing completed")
+        except Exception as e:
+            _LOGGER.error(f"Immediate pending processing failed: {e}")
 
     async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
         """Ensure the client is connected under connection lock to prevent race conditions."""
@@ -213,12 +235,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Store the unsubscribe callback for proper cleanup
         def _fast_coordinator_callback(data=None):
             """Callback for fast coordinator updates."""
-            self.async_set_updated_data(data)
+            # Don't update the main hub data, just update the inverter_data cache
+            # This prevents triggering updates for all sensors
+            if data:
+                self.inverter_data.update(data)
+                _LOGGER.debug("Fast coordinator updated inverter_data cache")
         
         self._fast_unsub = self._fast_coordinator.async_add_listener(_fast_coordinator_callback)
         
         # Perform first refresh so entities can see data immediately
-        await self._fast_coordinator.async_config_entry_first_refresh()
+        # Note: async_config_entry_first_refresh is deprecated for non-config-entry coordinators
+        # We'll let the coordinator start naturally with its update interval
+        _LOGGER.debug("Fast coordinator created, will start with natural update cycle")
 
     def _create_client(self) -> AsyncModbusTcpClient:
         _LOGGER.debug("Creating new AsyncModbusTcpClient instance for %s:%s", self._host, self._port)
@@ -321,6 +349,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         4) return consolidated cache.
         This shortens the visibility of Pending→Final to ONE interval."""
         start = time.monotonic()
+        _LOGGER.info("Starting main coordinator update cycle")
         try:
             # --- Ensure Modbus client is connected ---
             await self._ensure_connected_client()
@@ -328,6 +357,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # --- Write pending first (including AppMode-OR logic) ---
             # Optional: Mark expected target state in cache (without Modbus, only cosmetic)
             if self._optimistic_push_enabled and self._has_pending():
+                _LOGGER.debug("Found pending settings, applying optimistic overlay")
                 self._apply_optimistic_overlay()
                 # Optional: Immediate UI update with expected values
                 if self._optimistic_overlay:
@@ -340,6 +370,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Discard optimistic overlay, take real values
             self._optimistic_overlay = None
             self.inverter_data = cache
+            _LOGGER.debug("Main coordinator update cycle completed successfully")
             return self.inverter_data
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
@@ -351,22 +382,33 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _process_pending_settings(self) -> None:
         """Processing pending writes; now called BEFORE the reads."""
+        _LOGGER.debug("Processing pending settings...")
         try:
+            pending_found = False
             for attr_name, handler_name in PENDING_HANDLER_MAP:
                 if attr_name == "_charge_group":
                     if any(
                         getattr(self, f"_pending_charge_{suffix}") is not None
                         for suffix in CHARGE_PENDING_SUFFIXES
                     ):
+                        _LOGGER.debug(f"Found pending charge settings, calling {handler_name}")
                         await getattr(self._setting_handler, handler_name)()
+                        pending_found = True
                     continue
 
                 if getattr(self, attr_name) is not None:
+                    _LOGGER.debug(f"Found pending {attr_name}, calling {handler_name}")
                     await getattr(self._setting_handler, handler_name)()
+                    pending_found = True
 
             for index, slot in enumerate(self._pending_discharges, start=1):
                 if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                    _LOGGER.debug(f"Found pending discharge settings for index {index}")
                     await self._setting_handler.handle_discharge_settings_by_index(index)
+                    pending_found = True
+            
+            if not pending_found:
+                _LOGGER.debug("No pending settings found to process")
         except Exception as e:
             _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e)
 

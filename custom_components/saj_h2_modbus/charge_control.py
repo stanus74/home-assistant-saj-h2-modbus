@@ -327,10 +327,13 @@ class ChargeSettingHandler:
 
     async def handle_charging_state(self) -> None:
         """Handles the pending charging state (robust, without default writes)."""
+        _LOGGER.debug("handle_charging_state called")
         desired = self._hub._pending_charging_state
         if desired is None:
+            _LOGGER.debug("No pending charging state to handle")
             return
 
+        _LOGGER.debug(f"Processing pending charging state: {desired}")
         chg, dchg = await asyncio.gather(
             self._hub.get_charging_state(),  # Optional[bool]
             self._hub.get_discharging_state(),  # Optional[bool]
@@ -343,21 +346,22 @@ class ChargeSettingHandler:
         # Write if register exists
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
-        _LOGGER.debug(
+        _LOGGER.info(
             "Attempting to write value %s to register %s for charging_state",
             write_value,
             hex(addr),
         )
-        _LOGGER.debug("Calling _hub._write_register for charging_state...")  # Added log
+        _LOGGER.debug("Calling _hub._write_register for charging_state...")
         ok = False  # Initialize ok to False
         try:
-            _LOGGER.debug("Executing await self._hub._write_register...")  # Added log
+            _LOGGER.debug("Executing await self._hub._write_register...")
             ok = await self._hub._write_register(addr, write_value)
-            _LOGGER.debug(
+            _LOGGER.info(
                 "await self._hub._write_register completed. Result: %s", ok
-            )  # Added log
+            )
             if ok:
                 self._hub.inverter_data["is_charging"] = bool(desired)
+                _LOGGER.info(f"Successfully wrote charging state: {desired}")
         except Exception as e:
             _LOGGER.error(
                 "Error writing charging_state to register %s: %s", hex(addr), e
@@ -365,6 +369,7 @@ class ChargeSettingHandler:
             ok = False  # Ensure ok is False if an exception occurs
         await self._handle_power_state(charge_state=desired)
         self._hub._pending_charging_state = None
+        _LOGGER.debug("handle_charging_state completed")
 
     async def handle_discharging_state(self) -> None:
         """Handles the pending discharging state (robust, without default writes)."""
