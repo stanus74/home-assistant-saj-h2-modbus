@@ -44,6 +44,9 @@ async def connect_if_needed(client: Optional[AsyncModbusTcpClient], host: str, p
         client = AsyncModbusTcpClient(host=host, port=port, timeout=10)
     if not client.connected:
         await client.connect()
+        # Verify that the client is actually connected after the connection attempt
+        if not client.connected:
+            raise ConnectionError(f"Failed to connect to {host}:{port}")
     return client
 
 

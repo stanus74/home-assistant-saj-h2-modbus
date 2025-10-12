@@ -165,6 +165,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._fast_coordinator: Optional[DataUpdateCoordinator[Dict[str, Any]]] = None
         self._fast_unsub = None  # Store unsubscribe callback for fast coordinator
         # Note: no own task set needed anymore
+
+    async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
+        """Ensure the client is connected under connection lock to prevent race conditions."""
+        async with self._connection_lock:
+            self._client = await connect_if_needed(self._client, self._host, self._port)
+            return self._client
    
     async def start_fast_updates(self) -> None:
         """Create and start the 10s-DataUpdateCoordinator for part_2."""
@@ -177,7 +183,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         async def _async_update_fast() -> Dict[str, Any]:
             # Ensure the client is connected
-            self._client = await connect_if_needed(self._client, self._host, self._port)
+            await self._ensure_connected_client()
             try:
                 result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
                 # Update cache (don't overwrite with raw data)
@@ -232,9 +238,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
 
-                # Restart fast updates if enabled
-                if self.fast_enabled:
-                    await self.restart_fast_updates()
+                # Restart fast updates if enabled (move outside lock to avoid deadlock)
+                restart_fast = self.fast_enabled
 
                 # Log the updated configuration
                 _LOGGER.debug(
@@ -248,6 +253,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 raise
             finally:
                 self.updating_settings = False
+        
+        # Restart fast updates outside of the connection lock to avoid deadlock
+        if restart_fast:
+            await self.restart_fast_updates()
 
     async def restart_fast_updates(self) -> None:
         """Restart the fast update coordinator with current config."""
@@ -305,7 +314,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         start = time.monotonic()
         try:
             # --- Ensure Modbus client is connected ---
-            self._client = await connect_if_needed(self._client, self._host, self._port)
+            await self._ensure_connected_client()
             
             # --- Write pending first (including AppMode-OR logic) ---
             # Optional: Mark expected target state in cache (without Modbus, only cosmetic)
@@ -355,7 +364,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _run_reader_methods(self) -> Dict[str, Any]:
         """Sequential execution of readers; builds the cache."""
         new_cache: Dict[str, Any] = {}
-        self._client = await connect_if_needed(self._client, self._host, self._port)
+        await self._ensure_connected_client()
         
         reader_methods = [
             modbus_readers.read_modbus_inverter_data,
