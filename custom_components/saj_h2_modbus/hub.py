@@ -527,10 +527,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             try:
                 if self._client.connected:
                     await self._client.close()
-                    self._client = None  # Set to None after successful close
-                    _LOGGER.debug("Modbus client connection closed and cleaned up")
+                    _LOGGER.debug("Modbus client connection closed")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
+            finally:
+                # Always set client to None to ensure proper cleanup
+                self._client = None
+                _LOGGER.debug("Modbus client cleaned up")
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:

@@ -149,18 +149,19 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
             ok = await self._hub._write_register(address, int(value))
             if ok:
                 _LOGGER.info("Successfully set %s to: %s", label, value)
+                # Only reset pending value on successful write
+                try:
+                    setattr(self._hub, f"_pending_{pending_attr}", None)
+                except Exception:
+                    pass
             else:
                 _LOGGER.error("Failed to write %s", label)
+                # Keep pending value so it can be retried later
             return ok
         except Exception as e:
             _LOGGER.error("Error writing %s: %s", label, e)
+            # Keep pending value so it can be retried later
             return False
-        finally:
-            # ALWAYS reset pending value so it doesn't get stuck
-            try:
-                setattr(self._hub, f"_pending_{pending_attr}", None)
-            except Exception:
-                pass
 
     return handler
 
@@ -362,13 +363,19 @@ class ChargeSettingHandler:
             if ok:
                 self._hub.inverter_data["is_charging"] = bool(desired)
                 _LOGGER.info(f"Successfully wrote charging state: {desired}")
+                # Only reset pending value on successful write
+                self._hub._pending_charging_state = None
         except Exception as e:
             _LOGGER.error(
                 "Error writing charging_state to register %s: %s", hex(addr), e
             )
             ok = False  # Ensure ok is False if an exception occurs
-        await self._handle_power_state(charge_state=desired)
-        self._hub._pending_charging_state = None
+            # Keep pending value so it can be retried later
+        
+        # Only handle power state if the write was successful
+        if ok:
+            await self._handle_power_state(charge_state=desired)
+        
         _LOGGER.debug("handle_charging_state completed")
 
     async def handle_discharging_state(self) -> None:
@@ -389,11 +396,23 @@ class ChargeSettingHandler:
             return
 
         addr = REGISTERS["discharging_state"]
-        ok = await self._hub._write_register(addr, 1 if desired else 0)
+        ok = False  # Initialize ok to False
+        try:
+            ok = await self._hub._write_register(addr, 1 if desired else 0)
+            if ok:
+                self._hub.inverter_data["is_discharging"] = bool(desired)
+                # Only reset pending value on successful write
+                self._hub._pending_discharging_state = None
+        except Exception as e:
+            _LOGGER.error(
+                "Error writing discharging_state to register %s: %s", hex(addr), e
+            )
+            ok = False  # Ensure ok is False if an exception occurs
+            # Keep pending value so it can be retried later
+        
+        # Only handle power state if the write was successful
         if ok:
-            self._hub.inverter_data["is_discharging"] = bool(desired)
-        await self._handle_power_state(discharge_state=desired)
-        self._hub._pending_discharging_state = None
+            await self._handle_power_state(discharge_state=desired)
 
     async def _handle_power_state(
         self,
