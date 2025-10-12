@@ -74,11 +74,16 @@ CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 # Dynamically generate SIMPLE_PENDING_ATTRS from PENDING_FIELDS
 # PENDING_FIELDS is imported from charge_control.py and contains tuples of (setter_name, attribute_path).
 # We extract the attribute_path for attributes that are directly set on the hub instance
-# (i.e., not nested structures like 'discharges[i][suffix]').
+# (i.e., not nested structures like 'discharges[i][suffix]') and exclude charge_* attributes
+# since they are handled as a group.
 _simple_pending_attrs_list = []
 for _, attr_path in PENDING_FIELDS:
-    if "[" not in attr_path:
-        _simple_pending_attrs_list.append(f"_pending_{attr_path}")
+    if "[" in attr_path:
+        continue
+    if attr_path.startswith("charge_"):
+        # Charge-Zeitfenster werden als Gruppe verarbeitet
+        continue
+    _simple_pending_attrs_list.append(f"_pending_{attr_path}")
 
 SIMPLE_PENDING_ATTRS = tuple(_simple_pending_attrs_list)
 
