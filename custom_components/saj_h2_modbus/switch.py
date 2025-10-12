@@ -57,7 +57,11 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        return self._hub.data.get(f"{self._switch_type}_enabled", False)
+        # Use coordinator.data which will fall back to inverter_data if None
+        coordinator_data = self.coordinator.data
+        if coordinator_data is None:
+            coordinator_data = self._hub.inverter_data
+        return coordinator_data.get(f"{self._switch_type}_enabled", False)
 
     @property
     def available(self) -> bool:

@@ -185,8 +185,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return
 
         async def _async_update_fast() -> Dict[str, Any]:
-            # Ensure the client is connected
-            await self._ensure_connected_client()
+            # Check if client exists and is connected before acquiring lock
+            if self._client is None or not self._client.connected:
+                # Only acquire lock if we need to connect
+                await self._ensure_connected_client()
             try:
                 result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
                 # Update cache (don't overwrite with raw data)
@@ -209,7 +211,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
         
         # Store the unsubscribe callback for proper cleanup
-        def _fast_coordinator_callback(data):
+        def _fast_coordinator_callback(data=None):
             """Callback for fast coordinator updates."""
             self.async_set_updated_data(data)
         
