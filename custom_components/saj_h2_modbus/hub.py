@@ -325,6 +325,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return self.inverter_data
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
+            self._optimistic_overlay = None  # Clean up on error
             raise
         finally:
             elapsed = round(time.monotonic() - start, 3)
@@ -462,9 +463,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
            except Exception as e:
                _LOGGER.warning("Failed to remove fast coordinator listener: %s", e)
 
-       if self._client and self._client.connected:
-           await self._client.close()
-           _LOGGER.debug("Modbus client connection closed")
+       if self._client:
+           try:
+               if self._client.connected:
+                   await self._client.close()
+                   _LOGGER.debug("Modbus client connection closed")
+           except Exception as e:
+               _LOGGER.warning("Error closing Modbus client: %s", e)
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:

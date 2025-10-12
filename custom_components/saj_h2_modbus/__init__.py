@@ -41,8 +41,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Starte nur, wenn in hub aktiviert
     if hub.fast_enabled:
         await hub.start_fast_updates()
-        # Add a dummy listener to ensure the fast coordinator schedules periodic updates
-        entry.async_on_unload(hub._fast_coordinator.async_add_listener(lambda: None))
+        # Store the unsubscribe callback for proper cleanup during unload
+        fast_unsub = hub._fast_coordinator.async_add_listener(lambda: None)
+        entry.async_on_unload(fast_unsub)
     else:
         _LOGGER.info("Fast coordinator not started (disabled).")
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
