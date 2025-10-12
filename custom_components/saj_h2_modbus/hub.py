@@ -88,15 +88,9 @@ _PENDING_HANDLER_MAP_GENERATED = []
 _PENDING_HANDLER_MAP_GENERATED.append(("_charge_group", "handle_charge_settings"))
 
 # Process SIMPLE_PENDING_ATTRS to derive handler names
+# Einheitlich: alle Handler-Namen ohne 'pending_'
 for attr in SIMPLE_PENDING_ATTRS:
-    if attr in ("_pending_charging_state", "_pending_discharging_state"):
-        # For these two, keep the '_pending_' prefix in the handler name
-        handler_name = f"handle_pending_{attr[9:]}" # e.g., _pending_charging_state -> handle_pending_charging_state
-    else:
-        # For others, remove '_pending_' prefix from attribute name for handler
-        # Keep underscores in attribute names for proper handler generation
-        attr_name = attr[9:]  # Remove '_pending_' prefix
-        handler_name = f"handle_{attr_name}" # e.g., _pending_discharge_time_enable -> handle_discharge_time_enable
+    handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
     _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
 
 PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED

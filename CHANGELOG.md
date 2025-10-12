@@ -1,3 +1,32 @@
+# Changelog (v2.6.3)
+
+### 🔧 Enhanced Fast Coordinator Management and Connection Handling
+
+* **Improved Fast Coordinator Lifecycle:**
+  - Added `_fast_unsub` attribute to properly store and manage unsubscribe callbacks for fast coordinator listeners
+  - Enhanced `start_fast_updates()` with proper listener attachment using `async_add_listener()`
+  - Improved `restart_fast_updates()` with comprehensive cleanup of old listeners and coordinators
+  - Added proper error handling for listener attachment failures
+
+* **Enhanced Modbus Client Management:**
+  - Added `_close_client()` method for safe and proper Modbus client closing with async support
+  - Updated connection handling methods to use the new `_close_client()` method
+  - Improved reconnection logic with proper client cleanup and recreation
+  - Enhanced error handling and logging throughout connection management
+
+* **Handler Name Generation Compatibility:**
+  - Modified handler name generation logic to maintain backward compatibility with existing charge/discharge state handlers
+  - Conditional logic preserves `handle_pending_` prefix for `charging_state` and `discharging_state` while using simplified naming for other attributes
+  - Ensures smooth transition during refactoring without breaking existing functionality
+
+* **Benefits:**
+  - More robust fast coordinator management with proper cleanup
+  - Improved connection stability and error handling
+  - Better resource management through proper client lifecycle handling
+  - Maintained backward compatibility during handler name refactoring
+
+---
+
 # Changelog (v2.6.2)
 
 ### 🔧 Enhanced Configuration Updates and Fast Coordinator Management

@@ -347,7 +347,7 @@ class ChargeSettingHandler:
         except Exception as e:
             _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
 
-    async def handle_pending_charging_state(self) -> None:
+    async def handle_charging_state(self) -> None:
         """Handles the pending charging state (robust, without default writes)."""
         desired = self._hub._pending_charging_state
         if desired is None:
@@ -388,7 +388,7 @@ class ChargeSettingHandler:
         await self._handle_power_state(charge_state=desired)
         self._hub._pending_charging_state = None
 
-    async def handle_pending_discharging_state(self) -> None:
+    async def handle_discharging_state(self) -> None:
         """Handles the pending discharging state (robust, without default writes)."""
         desired = self._hub._pending_discharging_state
         if desired is None:
