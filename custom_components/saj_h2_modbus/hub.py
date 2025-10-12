@@ -94,7 +94,9 @@ for attr in SIMPLE_PENDING_ATTRS:
         handler_name = f"handle_pending_{attr[9:]}" # e.g., _pending_charging_state -> handle_pending_charging_state
     else:
         # For others, remove '_pending_' prefix from attribute name for handler
-        handler_name = f"handle{attr[9:]}" # e.g., _pending_export_limit -> handle_export_limit
+        # Keep underscores in attribute names for proper handler generation
+        attr_name = attr[9:]  # Remove '_pending_' prefix
+        handler_name = f"handle_{attr_name}" # e.g., _pending_discharge_time_enable -> handle_discharge_time_enable
     _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
 
 PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED

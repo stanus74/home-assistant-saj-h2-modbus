@@ -1,4 +1,4 @@
-# Changelog (v2.6.3)
+# Changelog (v2.6.2)
 
 ### 🔧 Enhanced Configuration Updates and Fast Coordinator Management
 
@@ -20,8 +20,6 @@
   - Proper fast coordinator restart with updated configuration
 
 ---
-
-# Changelog (v2.6.2)
 
 ### 🔧 Code Refactoring for Maintainability
 
