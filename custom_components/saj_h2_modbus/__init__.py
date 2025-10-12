@@ -69,8 +69,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update options."""
-    await hass.config_entries.async_reload(entry.entry_id)
+    """Update options and restart fast updates if needed."""
+    hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
+    if hub is not None:
+        await hub.update_connection_settings(
+            host=_get_config_value(entry, CONF_HOST),
+            port=_get_config_value(entry, CONF_PORT, DEFAULT_PORT),
+            scan_interval=_get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
+    else:
+        await hass.config_entries.async_reload(entry.entry_id)
 
 def _get_config_value(entry: ConfigEntry, key: str, default=None):
     """Get config value with fallback from options to data."""

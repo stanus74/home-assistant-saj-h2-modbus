@@ -225,6 +225,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
 
+                # Restart fast updates if enabled
+                if self.fast_enabled:
+                    await self.restart_fast_updates()
+
                 # Log the updated configuration
                 _LOGGER.debug(
                     "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
@@ -237,6 +241,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 raise
             finally:
                 self.updating_settings = False
+
+    async def restart_fast_updates(self) -> None:
+        """Restart the fast update coordinator with current config."""
+        if not self.fast_enabled:
+            return
+        if self._fast_coordinator is not None:
+            try:
+                self._fast_coordinator.async_remove_listener(self.async_set_updated_data)
+                self._fast_coordinator = None
+                _LOGGER.debug("Old fast coordinator removed")
+            except Exception as e:
+                _LOGGER.warning("Failed to remove old fast coordinator: %s", e)
+        await self.start_fast_updates()
 
     async def reconnect_client(self) -> bool:
         async with self._connection_lock:

@@ -1,3 +1,26 @@
+# Changelog (v2.6.3)
+
+### 🔧 Enhanced Configuration Updates and Fast Coordinator Management
+
+* **Improved Connection Settings Updates:**
+  - Enhanced `update_connection_settings()` method in `hub.py` to properly restart fast updates when enabled after configuration changes
+  - Added `restart_fast_updates()` method to handle fast coordinator lifecycle management
+  - Optimized reconnection logic to only recreate Modbus client when host/port actually change
+  - Maintains persistent Modbus connections when only scan interval is updated
+
+* **Enhanced Options Update Process:**
+  - Modified `async_update_options()` in `__init__.py` to directly update hub settings instead of full config entry reload
+  - Added fallback to reload entry if hub is unavailable for better compatibility
+  - More efficient updates that preserve existing connections and coordinator states
+
+* **Benefits:**
+  - Faster configuration updates without unnecessary full reloads
+  - Better resource utilization by maintaining persistent connections
+  - Improved user experience when adjusting scan intervals or connection settings
+  - Proper fast coordinator restart with updated configuration
+
+---
+
 # Changelog (v2.6.2)
 
 ### 🔧 Code Refactoring for Maintainability
