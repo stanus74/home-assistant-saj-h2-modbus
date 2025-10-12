@@ -222,17 +222,11 @@ class ChargeSettingHandler:
             # Initialize day_mask and power_percent with default values if not provided
             if mode.startswith("discharge"):
                 index = int(mode.replace("discharge", "")) - 1
-                day_mask_value = self._hub._pending_discharges[index].get(
-                    "day_mask", 127
-                )
-                power_percent_value = self._hub._pending_discharges[index].get(
-                    "power_percent", 5
-                )
+                day_mask_value = self._hub._pending_discharges[index].get("day_mask")
+                power_percent_value = self._hub._pending_discharges[index].get("power_percent")
             else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", 127)
-                power_percent_value = getattr(
-                    self._hub, f"_pending_{mode}_power_percent", 5
-                )
+                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask")
+                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent")
 
             # Always call _update_day_mask_and_power for modes that have it
             # The _update_day_mask_and_power method handles reading current values and applying defaults
@@ -300,12 +294,8 @@ class ChargeSettingHandler:
                 f"(day_mask: {current_day_mask}, power_percent: {current_power_percent})"
             )
 
-            new_day_mask = (
-                day_mask if day_mask is not None else 127
-            )  # Default to 127 if no day_mask is provided
-            new_power_percent = (
-                power_percent if power_percent is not None else 5
-            )  # Default to 5 if no power_percent is provided
+            new_day_mask = current_day_mask if day_mask is None else day_mask
+            new_power_percent = current_power_percent if power_percent is None else power_percent
             _LOGGER.debug(
                 f"Calculated new day_mask: {new_day_mask}, "
                 f"new_power_percent: {new_power_percent} for {label}"

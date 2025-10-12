@@ -24,7 +24,7 @@ from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_s
 _LOGGER = logging.getLogger(__name__)
 
 # Global switch: Fast-Coordinator (10s) active by default?
-FAST_POLL_DEFAULT = False # True or False
+FAST_POLL_DEFAULT = True # True or False
 
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
@@ -168,8 +168,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
         """Ensure the client is connected under connection lock to prevent race conditions."""
+        _LOGGER.debug("Acquiring connection lock for %s:%s", self._host, self._port)
         async with self._connection_lock:
+            _LOGGER.debug("Connection lock acquired, checking client connection for %s:%s", self._host, self._port)
             self._client = await connect_if_needed(self._client, self._host, self._port)
+            _LOGGER.debug("Connection lock released for %s:%s", self._host, self._port)
             return self._client
    
     async def start_fast_updates(self) -> None:
@@ -206,13 +209,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
         
         # Store the unsubscribe callback for proper cleanup
-        self._fast_unsub = self._fast_coordinator.async_add_listener(self.async_set_updated_data)
+        def _fast_coordinator_callback(data):
+            """Callback for fast coordinator updates."""
+            self.async_set_updated_data(data)
+        
+        self._fast_unsub = self._fast_coordinator.async_add_listener(_fast_coordinator_callback)
         
         # Perform first refresh so entities can see data immediately
         await self._fast_coordinator.async_config_entry_first_refresh()
 
     def _create_client(self) -> AsyncModbusTcpClient:
-        _LOGGER.debug(f"Creating new Modbus client: AsyncModbusTcpClient {self._host}:{self._port}")
+        _LOGGER.debug("Creating new AsyncModbusTcpClient instance for %s:%s", self._host, self._port)
         return AsyncModbusTcpClient(host=self._host, port=self._port, timeout=10)
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
@@ -460,25 +467,26 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             value,
         )
     async def async_unload_entry(self) -> None:
-       """Cleanup tasks when the config entry is removed."""
-       if self._fast_coordinator:
-           try:
-               # Use the stored unsubscribe callback if available
-               if self._fast_unsub is not None:
-                   self._fast_unsub()
-                   self._fast_unsub = None
-               self._fast_coordinator = None
-               _LOGGER.debug("Fast coordinator listener removed")
-           except Exception as e:
-               _LOGGER.warning("Failed to remove fast coordinator listener: %s", e)
+        """Cleanup tasks when the config entry is removed."""
+        if self._fast_coordinator:
+            try:
+                # Use the stored unsubscribe callback if available
+                if self._fast_unsub is not None:
+                    self._fast_unsub()
+                    self._fast_unsub = None
+                self._fast_coordinator = None
+                _LOGGER.debug("Fast coordinator listener removed")
+            except Exception as e:
+                _LOGGER.warning("Failed to remove fast coordinator listener: %s", e)
 
-       if self._client:
-           try:
-               if self._client.connected:
-                   await self._client.close()
-                   _LOGGER.debug("Modbus client connection closed")
-           except Exception as e:
-               _LOGGER.warning("Error closing Modbus client: %s", e)
+        if self._client:
+            try:
+                if self._client.connected:
+                    await self._client.close()
+                    self._client = None  # Set to None after successful close
+                    _LOGGER.debug("Modbus client connection closed and cleaned up")
+            except Exception as e:
+                _LOGGER.warning("Error closing Modbus client: %s", e)
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:
