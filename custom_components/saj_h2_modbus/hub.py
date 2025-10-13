@@ -19,12 +19,20 @@ from .modbus_utils import (
 )
 
 # Import of the Pending-Setter Factory and Fields
-from .charge_control import ChargeSettingHandler, PENDING_FIELDS, make_pending_setter
+from .charge_control import (
+    ChargeSettingHandler,
+    PENDING_FIELDS,
+    make_pending_setter,
+    SIMPLE_REGISTER_MAP
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 # Global switch: Fast-Coordinator (10s) active by default?
-FAST_POLL_DEFAULT = True # True or False
+FAST_POLL_DEFAULT = False # True or False
+
+# Global switch: Advanced logging for detailed debugging
+ADVANCED_LOGGING = False # Set to True for detailed debugging information
 
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
@@ -102,6 +110,7 @@ for attr in SIMPLE_PENDING_ATTRS:
         handler_name = "handle_discharging_state"
     else:
         handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
+    
     _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
 
 PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
@@ -112,6 +121,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Optional: UI optimism during an interval before real reads return
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
+        
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] SAJModbusHub initialization started - Name: {name}, Host: {host}, Port: {port}, Scan Interval: {scan_interval}s")
+        
         _LOGGER.info(f"Initializing SAJModbusHub with scan_interval: {scan_interval} seconds")
         super().__init__(
             # Coordinator base
@@ -158,6 +171,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         self._setting_handler = ChargeSettingHandler(self)
 
+        # Verify that all handlers in PENDING_HANDLER_MAP exist in ChargeSettingHandler
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] Verifying {len(PENDING_HANDLER_MAP)} handlers in PENDING_HANDLER_MAP")
+        
+        for attr_name, handler_name in PENDING_HANDLER_MAP:
+            if attr_name == "_charge_group":
+                if ADVANCED_LOGGING:
+                    _LOGGER.debug(f"[ADVANCED] Skipping verification for special case: {attr_name}")
+                continue  # Special case, always valid
+            
+            field_name = attr_name[9:]  # Remove _pending_ prefix
+            if field_name not in ["charging_state", "discharging_state"] and field_name not in SIMPLE_REGISTER_MAP:
+                _LOGGER.warning(
+                    "Handler '%s' for field '%s' not found in SIMPLE_REGISTER_MAP. "
+                    "This may cause AttributeError during processing. "
+                    "Ensure the field is either in SIMPLE_REGISTER_MAP or has a custom handler.",
+                    handler_name, field_name, exc_info=True
+                )
+            elif ADVANCED_LOGGING:
+                _LOGGER.debug(f"[ADVANCED] Handler verification passed: {handler_name} -> {field_name}")
+
         # Dynamically generate all setter methods from the PENDING_FIELDS list
         for name, attr_path in PENDING_FIELDS:
             setter = make_pending_setter(attr_path)
@@ -195,11 +229,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
         """Ensure the client is connected under connection lock to prevent race conditions."""
-        _LOGGER.debug("Acquiring connection lock for %s:%s", self._host, self._port)
+        if ADVANCED_LOGGING:
+            _LOGGER.debug(f"[ADVANCED] _ensure_connected_client called - Current client state: {self._client}")
+        
+        if ADVANCED_LOGGING:
+            _LOGGER.debug("Acquiring connection lock for %s:%s", self._host, self._port)
+        
         async with self._connection_lock:
-            _LOGGER.debug("Connection lock acquired, checking client connection for %s:%s", self._host, self._port)
+            if ADVANCED_LOGGING:
+                _LOGGER.debug("Connection lock acquired, checking client connection for %s:%s", self._host, self._port)
+                _LOGGER.debug(f"[ADVANCED] Calling connect_if_needed with client: {self._client}")
+            
             self._client = await connect_if_needed(self._client, self._host, self._port)
-            _LOGGER.debug("Connection lock released for %s:%s", self._host, self._port)
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(f"[ADVANCED] connect_if_needed returned client: {self._client}, connected: {self._client.connected if self._client else 'N/A'}")
+                _LOGGER.debug("Connection lock released for %s:%s", self._host, self._port)
+            
             return self._client
    
     async def start_fast_updates(self) -> None:
@@ -249,9 +295,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._fast_unsub = self._fast_coordinator.async_add_listener(_fast_coordinator_callback)
         
         # Perform first refresh so entities can see data immediately
-        # Note: async_config_entry_first_refresh is deprecated for non-config-entry coordinators
-        # We'll let the coordinator start naturally with its update interval
-        _LOGGER.debug("Fast coordinator created, will start with natural update cycle")
+        try:
+            await self._fast_coordinator.async_refresh()
+            _LOGGER.debug("Fast coordinator created and initial refresh completed")
+        except Exception as e:
+            _LOGGER.warning("Initial refresh of fast coordinator failed: %s", e)
 
     def _create_client(self) -> AsyncModbusTcpClient:
         _LOGGER.debug("Creating new AsyncModbusTcpClient instance for %s:%s", self._host, self._port)
@@ -259,6 +307,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
         """Update connection settings from config entry options."""
+        # Prevent duplicate updates
+        if self.updating_settings:
+            if ADVANCED_LOGGING:
+                _LOGGER.debug("[ADVANCED] Settings update already in progress, skipping duplicate call")
+            return
+            
         async with self._connection_lock:
             self.updating_settings = True
             try:
@@ -284,12 +338,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 restart_fast = self.fast_enabled
 
                 # Log the updated configuration
-                _LOGGER.debug(
-                    "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
-                    self._host,
-                    self._port,
-                    scan_interval
-                )
+                if ADVANCED_LOGGING:
+                    _LOGGER.debug(
+                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
+                        self._host,
+                        self._port,
+                        scan_interval
+                    )
             except Exception as e:
                 _LOGGER.error("Failed to update connection settings: %s", e)
                 raise
@@ -317,6 +372,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         await self.start_fast_updates()
 
     async def reconnect_client(self) -> bool:
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] reconnect_client called - Current reconnecting state: {self._reconnecting}")
+        
         # Check if reconnection is already in progress before acquiring lock
         if self._reconnecting:
             _LOGGER.debug("Reconnection already in progress, waiting...")
@@ -328,7 +386,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.debug("Reconnection already in progress (double-check), waiting...")
                 return False
                 
-            _LOGGER.info("Reconnecting Modbus client...")
+            if ADVANCED_LOGGING:
+                _LOGGER.info("[ADVANCED] Reconnecting Modbus client...")
+            
             try:
                 self._reconnecting = True
                 if self._client:
@@ -338,7 +398,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         _LOGGER.warning(f"Error while closing old Modbus client: {e}")
                 self._client = self._create_client() # Recreate client to ensure a fresh connection attempt
                 await ensure_client_connected(self._client, self._host, self._port, _LOGGER)
-                _LOGGER.info("Reconnection successful.")
+                
+                if ADVANCED_LOGGING:
+                    _LOGGER.info("[ADVANCED] Reconnection successful.")
+                
                 return True
             except Exception as e:
                 _LOGGER.error("Reconnection failed: %s", e)
@@ -354,6 +417,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         4) return consolidated cache.
         This shortens the visibility of Pending→Final to ONE interval."""
         start = time.monotonic()
+        
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] Main coordinator update cycle started - Fast enabled: {self.fast_enabled}")
+        
         _LOGGER.info("Starting main coordinator update cycle")
         try:
             # --- Ensure Modbus client is connected ---
@@ -368,14 +435,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 if self._optimistic_overlay:
                     self.async_set_updated_data(self._optimistic_overlay)
 
+            if ADVANCED_LOGGING:
+                _LOGGER.info("[ADVANCED] Processing pending settings...")
+            
             await self._process_pending_settings()  # Executes the Modbus writes (Charging/Discharging + AppMode)
 
             # --- Then: Get fresh reads so final state is visible in the same interval ---
+            if ADVANCED_LOGGING:
+                _LOGGER.info("[ADVANCED] Running reader methods...")
+            
             cache = await self._run_reader_methods()
             # Discard optimistic overlay, take real values
             self._optimistic_overlay = None
             self.inverter_data = cache
-            _LOGGER.debug("Main coordinator update cycle completed successfully")
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.info(f"[ADVANCED] Update cycle completed - Cache size: {len(cache)} items")
+            
+            
             return self.inverter_data
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
@@ -383,10 +460,30 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             raise
         finally:
             elapsed = round(time.monotonic() - start, 3)
-            _LOGGER.debug("Update cycle took %ss", elapsed)
+                        
+            if ADVANCED_LOGGING:
+                _LOGGER.info(f"[ADVANCED] Total update cycle time: {elapsed}s")
 
     async def _process_pending_settings(self) -> None:
         """Processing pending writes; now called BEFORE the reads."""
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] _process_pending_settings started - Total handlers: {len(PENDING_HANDLER_MAP)}")
+            # Log all pending attributes for debugging
+            pending_attrs = []
+            for attr_name, _ in PENDING_HANDLER_MAP:
+                if attr_name == "_charge_group":
+                    if any(getattr(self, f"_pending_charge_{suffix}") is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                        pending_attrs.append(attr_name)
+                elif getattr(self, attr_name) is not None:
+                    pending_attrs.append(attr_name)
+            
+            # Check discharge settings
+            for i, slot in enumerate(self._pending_discharges, start=1):
+                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                    pending_attrs.append(f"discharge{i}")
+            
+            _LOGGER.info(f"[ADVANCED] Found pending attributes: {pending_attrs}")
+        
         _LOGGER.debug("Processing pending settings...")
         try:
             pending_found = False
@@ -403,22 +500,55 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
                 if getattr(self, attr_name) is not None:
                     _LOGGER.debug(f"Found pending {attr_name}, calling {handler_name}")
-                    await getattr(self._setting_handler, handler_name)()
-                    pending_found = True
+                    
+                    if ADVANCED_LOGGING:
+                        _LOGGER.info(f"[ADVANCED] Executing handler '{handler_name}' for attribute '{attr_name}' with value: {getattr(self, attr_name)}")
+                    
+                    try:
+                        await getattr(self._setting_handler, handler_name)()
+                        pending_found = True
+                        
+                        if ADVANCED_LOGGING:
+                            _LOGGER.info(f"[ADVANCED] Handler '{handler_name}' completed successfully")
+                    except AttributeError as ae:
+                        _LOGGER.error(
+                            "Handler '%s' not found in ChargeSettingHandler for attribute '%s'. "
+                            "This indicates a mismatch between PENDING_FIELDS and available handlers. "
+                            "Please ensure the handler is implemented in ChargeSettingHandler or "
+                            "the field is properly configured in SIMPLE_REGISTER_MAP.",
+                            handler_name, attr_name, exc_info=True
+                        )
+                        # Continue processing other pending settings instead of failing completely
+                    except Exception as e:
+                        _LOGGER.error(
+                            "Error executing handler '%s' for attribute '%s': %s",
+                            handler_name, attr_name, e, exc_info=True
+                        )
+                        # Continue processing other pending settings instead of failing completely
 
             for index, slot in enumerate(self._pending_discharges, start=1):
                 if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
                     _LOGGER.debug(f"Found pending discharge settings for index {index}")
-                    await self._setting_handler.handle_discharge_settings_by_index(index)
-                    pending_found = True
+                    try:
+                        await self._setting_handler.handle_discharge_settings_by_index(index)
+                        pending_found = True
+                    except Exception as e:
+                        _LOGGER.error(
+                            "Error processing discharge settings for index %s: %s",
+                            index, e, exc_info=True
+                        )
+                        # Continue processing other pending settings instead of failing completely
             
             if not pending_found:
                 _LOGGER.debug("No pending settings found to process")
         except Exception as e:
-            _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e)
+            _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e, exc_info=True)
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
         """Sequential execution of readers; builds the cache."""
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] _run_reader_methods started - Client connected: {self._client.connected if self._client else 'No client'}")
+        
         new_cache: Dict[str, Any] = {}
         await self._ensure_connected_client()
         
@@ -530,9 +660,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         if self._client:
             try:
-                if self._client.connected:
-                    await self._client.close()
-                    _LOGGER.debug("Modbus client connection closed")
+                # Always attempt to close the client, regardless of connection state
+                # This ensures proper cleanup of failed connections and half-open sockets
+                await self._client.close()
+                _LOGGER.debug("Modbus client connection closed")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
             finally:

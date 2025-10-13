@@ -428,3 +428,50 @@ Fixed an issue where enabling multiple sensors caused the Modbus adapter to beco
   - Enhanced code structure with clearer method responsibilities.
 
 
+
+
+---
+
+# Changelog (v2.6.4)
+
+### 🔧 Enhanced Error Handling and Logging
+
+* **Improved Pending-Handler-Mapping Robustness:**
+  - Added verification during `PENDING_HANDLER_MAP` generation to check if handlers exist in `SIMPLE_REGISTER_MAP`
+  - Enhanced `_process_pending_settings()` method to catch `AttributeError` exceptions specifically and continue processing other pending settings
+  - Added comprehensive error logging with `exc_info=True` for better debugging and troubleshooting
+  - Added detailed error messages that guide developers on how to fix mismatches between `PENDING_FIELDS` and available handlers
+
+* **Fixed Resource Cleanup in async_unload_entry:**
+  - Modified `async_unload_entry()` to always call `await self._client.close()` regardless of connection state
+  - Added explanatory comments about the importance of closing all client instances
+  - Ensures proper cleanup of failed connections and half-open sockets
+
+* **Added Advanced Logging Feature:**
+  - Introduced global `ADVANCED_LOGGING` switch (default: `False`) for detailed debugging information
+  - When enabled, provides comprehensive debugging information at key points:
+    - **Hub Initialization**: Logs detailed initialization parameters
+    - **Handler Verification**: Logs verification process for each handler (18 handlers verified successfully)
+    - **Connection Management**: Detailed client connection state tracking
+    - **Pending Settings Processing**: Comprehensive pending attribute logging and handler execution tracking
+    - **Reader Methods**: Connection state before reading
+    - **Reconnection Logic**: Reconnection state tracking
+    - **Main Update Cycle**: Complete update cycle timing and flow tracking
+  - All advanced logs are prefixed with `[ADVANCED]` for easy filtering and identification
+  - Provides detailed state information for troubleshooting complex issues
+  - Performance monitoring with timing information for optimization
+  - Development support with comprehensive information for future maintenance
+
+### Usage:
+To enable advanced logging, simply change line 35 in `hub.py`:
+```python
+ADVANCED_LOGGING = True  # Set to True for detailed debugging information
+```
+
+### Benefits:
+- **Enhanced Debugging**: Comprehensive logging makes it easier to identify root causes of issues
+- **Performance Monitoring**: Timing information helps optimize system performance
+- **State Tracking**: Complete visibility into pending operations and handler execution
+- **Connection Debugging**: Detailed connection state and reconnection flow
+- **Development Support**: Comprehensive information for future development and maintenance
+- **Non-Intrusive**: Advanced logging is disabled by default, so it doesn't impact normal operation
