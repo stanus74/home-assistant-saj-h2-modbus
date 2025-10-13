@@ -18,7 +18,7 @@ from .modbus_utils import (
     connect_if_needed,
 )
 
-# Import of the Pending-Setter Factory and Fields
+# Import of the Pending Setter Factory and Fields
 from .charge_control import (
     ChargeSettingHandler,
     PENDING_FIELDS,
@@ -101,7 +101,7 @@ _PENDING_HANDLER_MAP_GENERATED = []
 _PENDING_HANDLER_MAP_GENERATED.append(("_charge_group", "handle_charge_settings"))
 
 # Process SIMPLE_PENDING_ATTRS to derive handler names
-# Einheitlich: alle Handler-Namen ohne 'pending_'
+# Consistent: all handler names without 'pending_'
 for attr in SIMPLE_PENDING_ATTRS:
     # Special handling for charging/discharging state to match charge_control.py naming
     if attr == "_pending_charging_state":
