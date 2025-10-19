@@ -95,25 +95,35 @@ for _, attr_path in PENDING_FIELDS:
 
 SIMPLE_PENDING_ATTRS = tuple(_simple_pending_attrs_list)
 
-# Generate PENDING_HANDLER_MAP programmatically
-_PENDING_HANDLER_MAP_GENERATED = []
-# Special case for charge group
-_PENDING_HANDLER_MAP_GENERATED.append(("_charge_group", "handle_charge_settings"))
-
-# Process SIMPLE_PENDING_ATTRS to derive handler names
-# Consistent: all handler names without 'pending_'
-for attr in SIMPLE_PENDING_ATTRS:
-    # Special handling for charging/discharging state to match charge_control.py naming
-    if attr == "_pending_charging_state":
-        handler_name = "handle_charging_state"
-    elif attr == "_pending_discharging_state":
-        handler_name = "handle_discharging_state"
-    else:
-        handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
+# Generate PENDING_HANDLER_MAP programmatically with automatic special case detection
+def _generate_pending_handler_map():
+    """Generate PENDING_HANDLER_MAP with automatic special case detection."""
+    handler_map = []
     
-    _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
+    # Special case for charge group
+    handler_map.append(("_charge_group", "handle_charge_settings"))
+    
+    # Define special case mappings for automatic detection
+    # Format: attribute_pattern -> handler_name
+    SPECIAL_CASE_MAPPINGS = {
+        "_pending_charging_state": "handle_charging_state",
+        "_pending_discharging_state": "handle_discharging_state",
+    }
+    
+    # Process SIMPLE_PENDING_ATTRS to derive handler names
+    for attr in SIMPLE_PENDING_ATTRS:
+        # Check if this attribute matches any special case
+        if attr in SPECIAL_CASE_MAPPINGS:
+            handler_name = SPECIAL_CASE_MAPPINGS[attr]
+        else:
+            # Default handler naming: remove _pending_ prefix and add handle_ prefix
+            handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
+        
+        handler_map.append((attr, handler_name))
+    
+    return handler_map
 
-PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
+PENDING_HANDLER_MAP = _generate_pending_handler_map()
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -153,6 +163,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         # One-time warning switch against log spam for missing states/AppMode
         self._warned_missing_states: bool = False
+        
+        # Performance optimization: Cache for pending checks
+        self._pending_cache: Optional[bool] = None
+        self._pending_cache_valid: bool = False
         # Pending settings
         self._pending_charge_start: Optional[str] = None
         self._pending_charge_end: Optional[str] = None
@@ -465,40 +479,60 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 _LOGGER.info(f"[ADVANCED] Total update cycle time: {elapsed}s")
 
     async def _process_pending_settings(self) -> None:
-        """Processing pending writes; now called BEFORE the reads."""
+        """Processing pending writes; now called BEFORE the reads.
+        Optimized to avoid repeated attribute checks."""
         if ADVANCED_LOGGING:
             _LOGGER.info(f"[ADVANCED] _process_pending_settings started - Total handlers: {len(PENDING_HANDLER_MAP)}")
-            # Log all pending attributes for debugging
-            pending_attrs = []
-            for attr_name, _ in PENDING_HANDLER_MAP:
-                if attr_name == "_charge_group":
-                    if any(getattr(self, f"_pending_charge_{suffix}") is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                        pending_attrs.append(attr_name)
-                elif getattr(self, attr_name) is not None:
-                    pending_attrs.append(attr_name)
-            
-            # Check discharge settings
-            for i, slot in enumerate(self._pending_discharges, start=1):
-                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                    pending_attrs.append(f"discharge{i}")
-            
-            _LOGGER.info(f"[ADVANCED] Found pending attributes: {pending_attrs}")
         
         _LOGGER.debug("Processing pending settings...")
         try:
             pending_found = False
+            
+            # Pre-collect all pending attributes to avoid repeated checks
+            pending_simple_attrs = []
+            pending_charge_attrs = []
+            pending_discharge_indices = []
+            
+            # Check simple pending attributes
+            for attr_name, _ in PENDING_HANDLER_MAP:
+                if attr_name == "_charge_group":
+                    continue  # Handle separately
+                
+                if getattr(self, attr_name) is not None:
+                    pending_simple_attrs.append(attr_name)
+            
+            # Check charge attributes
+            for suffix in CHARGE_PENDING_SUFFIXES:
+                if getattr(self, f"_pending_charge_{suffix}") is not None:
+                    pending_charge_attrs.append(suffix)
+            
+            # Check discharge attributes
+            for index, slot in enumerate(self._pending_discharges, start=1):
+                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                    pending_discharge_indices.append(index)
+            
+            if ADVANCED_LOGGING:
+                all_pending = pending_simple_attrs + ["charge_group"] if pending_charge_attrs else []
+                all_pending.extend([f"discharge{i}" for i in pending_discharge_indices])
+                _LOGGER.info(f"[ADVANCED] Found pending attributes: {all_pending}")
+            
+            # Process charge group if any charge attributes are pending
+            if pending_charge_attrs:
+                _LOGGER.debug(f"Found pending charge settings, calling handle_charge_settings")
+                try:
+                    await self._setting_handler.handle_charge_settings()
+                    pending_found = True
+                    if ADVANCED_LOGGING:
+                        _LOGGER.info(f"[ADVANCED] Handler 'handle_charge_settings' completed successfully")
+                except Exception as e:
+                    _LOGGER.error(f"Error processing charge settings: {e}", exc_info=True)
+            
+            # Process simple pending attributes
             for attr_name, handler_name in PENDING_HANDLER_MAP:
                 if attr_name == "_charge_group":
-                    if any(
-                        getattr(self, f"_pending_charge_{suffix}") is not None
-                        for suffix in CHARGE_PENDING_SUFFIXES
-                    ):
-                        _LOGGER.debug(f"Found pending charge settings, calling {handler_name}")
-                        await getattr(self._setting_handler, handler_name)()
-                        pending_found = True
-                    continue
-
-                if getattr(self, attr_name) is not None:
+                    continue  # Already handled
+                
+                if attr_name in pending_simple_attrs:
                     _LOGGER.debug(f"Found pending {attr_name}, calling {handler_name}")
                     
                     if ADVANCED_LOGGING:
@@ -518,31 +552,31 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                             "the field is properly configured in SIMPLE_REGISTER_MAP.",
                             handler_name, attr_name, exc_info=True
                         )
-                        # Continue processing other pending settings instead of failing completely
                     except Exception as e:
                         _LOGGER.error(
                             "Error executing handler '%s' for attribute '%s': %s",
                             handler_name, attr_name, e, exc_info=True
                         )
-                        # Continue processing other pending settings instead of failing completely
 
-            for index, slot in enumerate(self._pending_discharges, start=1):
-                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                    _LOGGER.debug(f"Found pending discharge settings for index {index}")
-                    try:
-                        await self._setting_handler.handle_discharge_settings_by_index(index)
-                        pending_found = True
-                    except Exception as e:
-                        _LOGGER.error(
-                            "Error processing discharge settings for index %s: %s",
-                            index, e, exc_info=True
-                        )
-                        # Continue processing other pending settings instead of failing completely
+            # Process discharge settings
+            for index in pending_discharge_indices:
+                _LOGGER.debug(f"Found pending discharge settings for index {index}")
+                try:
+                    await self._setting_handler.handle_discharge_settings_by_index(index)
+                    pending_found = True
+                except Exception as e:
+                    _LOGGER.error(
+                        "Error processing discharge settings for index %s: %s",
+                        index, e, exc_info=True
+                    )
             
             if not pending_found:
                 _LOGGER.debug("No pending settings found to process")
         except Exception as e:
             _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e, exc_info=True)
+        finally:
+            # Invalidate cache after processing pending settings
+            self._invalidate_pending_cache()
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
         """Sequential execution of readers; builds the cache."""
@@ -673,18 +707,42 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:
-        """Checks if there are pending changes in the hub (without Handler-API)."""
+        """Checks if there are pending changes in the hub (without Handler-API).
+        Uses caching to avoid repeated attribute checks."""
+        # Return cached result if valid
+        if self._pending_cache_valid:
+            return self._pending_cache
+        
+        # Check simple pending attributes
         if any(getattr(self, attr) is not None for attr in SIMPLE_PENDING_ATTRS):
+            self._pending_cache = True
+            self._pending_cache_valid = True
             return True
+        
+        # Check charge settings
         if any(
             getattr(self, f"_pending_charge_{suffix}") is not None
             for suffix in CHARGE_PENDING_SUFFIXES
         ):
+            self._pending_cache = True
+            self._pending_cache_valid = True
             return True
+        
+        # Check discharge settings
         for slot in self._pending_discharges:
             if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
+                self._pending_cache = True
+                self._pending_cache_valid = True
                 return True
+        
+        # No pending settings found
+        self._pending_cache = False
+        self._pending_cache_valid = True
         return False
+    
+    def _invalidate_pending_cache(self) -> None:
+        """Invalidate the pending cache when pending values change."""
+        self._pending_cache_valid = False
 
     def _apply_optimistic_overlay(self) -> None:
         """Marks the expected target state in the local cache,
