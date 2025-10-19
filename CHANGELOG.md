@@ -1,3 +1,23 @@
+# Changelog (v2.6.3)
+
+### 🔧 Fixed Unit Display for Passive Power Input Entities
+
+* **Removed Percentage Units:**
+  - Fixed passive power input entities to display as plain numbers instead of percentages
+  - Updated entities now show values without "%" symbol for better readability
+  - Affected entities:
+    - `SAJ Passive Grid Charge Power (Input)`
+    - `SAJ Passive Grid Discharge Power (Input)`
+    - `SAJ Passive Battery Charge Power (Input)`
+    - `SAJ Passive Battery Discharge Power (Input)`
+
+* **Benefits:**
+  - Cleaner UI display with numeric values only
+  - More intuitive representation of power settings
+  - Consistent with user expectations for input controls
+
+---
+
 # Changelog (v2.6.2)
 
 ### 🔧 Enhanced Fast Coordinator Management and Connection Handling

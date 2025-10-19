@@ -143,7 +143,7 @@ NUMBER_DEFINITIONS = [
         "max": 1100,
         "step": 100,
         "default": 0,
-        "unit": "%",
+        "unit": None,
         "setter": "set_passive_grid_charge_power",
     },
     {
@@ -153,7 +153,7 @@ NUMBER_DEFINITIONS = [
         "max": 1100,
         "step": 100,
         "default": 0,
-        "unit": "%",
+        "unit": None,
         "setter": "set_passive_grid_discharge_power",
     },
     {
@@ -163,7 +163,7 @@ NUMBER_DEFINITIONS = [
         "max": 1100,
         "step": 100,
         "default": 0,
-        "unit": "%",
+        "unit": None,
         "setter": "set_passive_bat_charge_power",
     },
     {
@@ -173,7 +173,7 @@ NUMBER_DEFINITIONS = [
         "max": 1100,
         "step": 100,
         "default": 0,
-        "unit": "%",
+        "unit": None,
         "setter": "set_passive_bat_discharge_power",
     },
 ]
