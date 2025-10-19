@@ -57,7 +57,11 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        return self._hub.data.get(f"{self._switch_type}_enabled", False)
+        # Use coordinator.data which will fall back to inverter_data if None
+        coordinator_data = self.coordinator.data
+        if coordinator_data is None:
+            coordinator_data = self._hub.inverter_data
+        return coordinator_data.get(f"{self._switch_type}_enabled", False)
 
     @property
     def available(self) -> bool:
@@ -80,10 +84,18 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             return
 
         try:
+            _LOGGER.debug(f"Calling set_{self._switch_type}({desired_state}) on hub")
             await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
             _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
+            # Check if pending value was set
+            pending_attr = f"_pending_{self._switch_type}_state"
+            pending_value = getattr(self._hub, pending_attr, None)
+            _LOGGER.debug(f"Pending {pending_attr} set to: {pending_value}")
+            
+            # Update UI state to show pending write - will be processed in next 60s cycle
             self.async_write_ha_state()
+            _LOGGER.debug(f"Pending {self._switch_type} setting will be processed in next 60s cycle")
         except Exception as e:
             _LOGGER.error(f"Failed to turn {'on' if desired_state else 'off'}: {e}")
             raise

@@ -1,3 +1,31 @@
+# Changelog (v2.6.2)
+
+### 🔧 Enhanced Fast Coordinator Management and Connection Handling
+
+* **Improved Fast Coordinator Lifecycle:**
+  - Added `_fast_unsub` attribute to properly store and manage unsubscribe callbacks for fast coordinator listeners
+  - Enhanced `start_fast_updates()` with proper listener attachment using `async_add_listener()`
+  - Improved `restart_fast_updates()` with comprehensive cleanup of old listeners and coordinators
+  - Added proper error handling for listener attachment failures
+
+* **Enhanced Modbus Client Management:**
+  - Added `_close_client()` method for safe and proper Modbus client closing with async support
+  - Updated connection handling methods to use the new `_close_client()` method
+  - Improved reconnection logic with proper client cleanup and recreation
+  - Enhanced error handling and logging throughout connection management
+
+* **Handler Name Generation Compatibility:**
+  - Modified handler name generation logic to maintain backward compatibility with existing charge/discharge state handlers
+  - Conditional logic preserves `handle_pending_` prefix for `charging_state` and `discharging_state` while using simplified naming for other attributes
+  - Ensures smooth transition during refactoring without breaking existing functionality
+
+* **Benefits:**
+  - More robust fast coordinator management with proper cleanup
+  - Improved connection stability and error handling
+  - Better resource management through proper client lifecycle handling
+  - Maintained backward compatibility during handler name refactoring
+
+
 # Changelog (v2.6.1)
 
 ### 🔧 Fix for Proper Fast Coordinator Shutdown
@@ -37,7 +65,7 @@
   - `SAJ Passive Battery Charge Power (Input)` 
   - `SAJ Passive Battery Discharge Power (Input)` - ... Register 363AH
   
-
+ 
 * These new input methods allow for precise control of passive battery charge & discharge power.
 see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
 
@@ -64,7 +92,7 @@ see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussi
 
   * Introduced a 10s fast coordinator 
   * Can be disabled via simple adjustment in hub.py, 
-    
+  
     Energy sensors are polled every 10 seconds: 
 
       - sensor.saj_total_load_power
@@ -74,7 +102,7 @@ see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussi
       - sensor.saj_inverter_power
       - sensor.saj_grid_power
 
-
+ 
 This is the default setting. Can be disabled in hub.py line 27:
 
 `FAST_POLL_DEFAULT = True # True or False`
@@ -121,6 +149,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 * **Optimistic state overlay (`_optimistic_overlay`)** for faster UI feedback during pending changes.
 * **Single-use warning logic (`_warned_missing_states`)** to reduce log noise for known issues.
 
+---
 
 # Changelog (v2.4.0)
 
@@ -160,6 +189,8 @@ This is the default setting. Can be disabled in hub.py line 27:
 - Cleaned up unused imports (`Dict`, `NamedTuple`, `Any`, `UnitOfTime`) from `const.py` to reduce code noise.
 - some more cleanup
 
+---
+
 # Changelog (v2.3.1)
 
 ### Bug Fixes
@@ -175,6 +206,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 - **Centralized Type Aliases:**
   - Moved `ModbusClient` and `Lock` type aliases to `custom_components/saj_h2_modbus/const.py` for better code organization and maintainability.
 
+---
 
 # Changelog (v2.3.0)
 
@@ -194,6 +226,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 - **Apparent Power Sensor Unit Fix:**
   - Corrected unit of measurement for **all** apparent power sensors (VA) to ensure proper categorization with the `APPARENT_POWER` device class. This resolves unit mismatch errors and enables Home Assistant to store long-term statistics correctly.
 
+---
 
 # Changelog (v2.2.4)
 
@@ -226,11 +259,12 @@ This is the default setting. Can be disabled in hub.py line 27:
   - **Affected:** Base classes in number.py and text.py were modified to include device_info
   - **Benefit:** Proper device grouping and identification in Home Assistant
 
-
 ### Code Optimizations
 
 - **Simplified Reset Time Logic:** Introduced `reset_period` attribute in `SajModbusSensorEntityDescription` to simplify `native_last_reset_time` logic. This makes the code more maintainable and less error-prone.
 - **Code Cleanup:** Removed unused variable `self._closing` from SAJModbusHub class.
+
+---
 
 # Changelog (v2.2.3)
 
@@ -256,6 +290,8 @@ All power limit entities (0x364D-0x3650) have:
 
 ## **Important: 1000 is 100%**
 
+---
+
 # Changelog (v2.2.2)
 
 ### Fix for Sensor Configuration of Periodic Energy Meters
@@ -272,12 +308,15 @@ All power limit entities (0x364D-0x3650) have:
 
 These changes ensure more accurate energy data representation and reliable switch status reporting in Home Assistant.
 
+---
 
 # Changelog (v2.2.1)
 
 ### Fixed
 
 Fixed an issue where enabling multiple sensors caused the Modbus adapter to become unresponsive due to excessive read requests. Removed the custom `async_update` method (sensor.py), using the base class implementation instead. Sensors now update only via the coordinator's regular refresh interval, reducing load and preventing communication failures.
+
+---
 
 # Changelog (v2.2.0)
 
@@ -286,76 +325,4 @@ Fixed an issue where enabling multiple sensors caused the Modbus adapter to beco
 - **Support for multiple discharge time windows**
 
   - New input entity "SAJ Discharge_time_enable (Input)" for controlling the discharge **"Time Enable"** register (0x3605)
-  - Direct access to the discharge time enable register for **binary** Time Slot selection (e.g., 1 = Time 1, 3 = Time 1 and Time 2,... 127 All 7 Slots)
-  - Support for multiple discharge time windows (Discharge 1-7)
-  - New entities for Discharge 2-7 start and end times
-  - New entities for Discharge 2-7 day mask (weekday selection)
-  - New entities for Discharge 2-7 power percent settings
-
-
-- Support for `input_number` entities to provide a better user interface for numeric settings
-- Bidirectional synchronization between `number` entities and `input_number` entities
-- Thread-safe implementation for handling state changes from different threads
-
-
-### Changed
-- Improved error handling and logging for better troubleshooting
-- Updated code to use thread-safe methods for asynchronous operations
-- Code optimization in `number.py`: Parameterized classes for discharge entities
-- Code optimization in `text.py`: Introduction of a base class for time entities
-- Reduction of code duplication through dynamic method selection
-- Change unit_of_measuremnt to show graphical chart for Inverter Power Factor R,S,T Phase
-
-### Documentation
-- Added instructions for setting up `input_number` entities in configuration.yaml
-- Added explanation of how the integration works with or without `input_number` entities
-
-
-
-# Changelog (v2.1.0)
-
-#### ✨ New Sensor + Number Entity: "SAJ App Mode (Input)
-
-- **sensor.saj_app_mode** added (register `0x3647`)
-- A new number entity `saj_app_mode_input` was added for writing to Modbus register `0x3647`.
-- Range: 0–3, step: 1, default: 0.
- 
-    **0 Self-use_mode** - Self-consumption mode
-    **1 time_mode** - Time-controlled mode 
-    **2 backup_mode** - Backup mode
-    **3 passive_mode** - Passive mode
-
-
-### Change Domain for HACS compatibility
-- from saj_modbus to saj_h2_modbus, as there was already an integration with this domain in the HACS directory. 
-
-### 🚀 Code Optimizations
-- Introduced a robust `ModbusConnection` async context manager for auto-connect and safe close.
-- Implemented retry logic with exponential backoff for all Modbus read/write operations via `_retry_with_backoff`.
-- Added support for reconnecting if the Modbus client is disconnected mid-operation.
-
-#### 🌐 Global Configuration
-- Introduced `ModbusGlobalConfig` with `set_modbus_config()` to avoid redundant host/port arguments.
-- Simplified usage in readers and hub: host/port only needs to be configured once.
-
-#### 🧠 Error Handling Enhancements
-- Unified logging across retries with optional `task_name` for better traceability.
-- Improved error transparency for non-retriable exceptions and unexpected disconnections.
-
-#### 🧩 Code Structure & Maintainability
-- Extracted all charge/discharge/export logic into a new module: `charge_control.py`.
-  - Centralizes logic for all pending settings.
-  - Cleaner, more modular hub and platform code.
-
-
-- **Refactored `charge_control.py` for Better Maintainability**
-  - Introduced central `REGISTERS` constant for all register addresses.
-  - Reduced code redundancy by creating shared helper methods:
-    - `_handle_power_settings` for charge/discharge settings.
-    - `_handle_power_state` for charging/discharging states.
-    - `_handle_simple_register` for basic register operations.
-  - Improved error handling consistency across all operations.
-  - Added comprehensive German docstrings for better documentation.
-  - Enhanced code structure with clearer method responsibilities.
-
-
+  - Direct access to the discharge time enable

@@ -13,7 +13,8 @@
     }
   },
   "error": {
-    "already_configured": "O dispositivo já se encontra configurado"
+    "already_configured": "O dispositivo já se encontra configurado",
+    "invalid_scan_interval": "O intervalo de varredura deve ser de pelo menos 60 segundos"
   },
   "abort": {
     "already_configured": "O dispositivo já se encontra configurado"

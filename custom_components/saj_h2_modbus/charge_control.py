@@ -149,18 +149,19 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
             ok = await self._hub._write_register(address, int(value))
             if ok:
                 _LOGGER.info("Successfully set %s to: %s", label, value)
+                # Only reset pending value on successful write
+                try:
+                    setattr(self._hub, f"_pending_{pending_attr}", None)
+                except Exception:
+                    pass
             else:
                 _LOGGER.error("Failed to write %s", label)
+                # Keep pending value so it can be retried later
             return ok
         except Exception as e:
             _LOGGER.error("Error writing %s: %s", label, e)
+            # Keep pending value so it can be retried later
             return False
-        finally:
-            # ALWAYS reset pending value so it doesn't get stuck
-            try:
-                setattr(self._hub, f"_pending_{pending_attr}", None)
-            except Exception:
-                pass
 
     return handler
 
@@ -222,29 +223,11 @@ class ChargeSettingHandler:
             # Initialize day_mask and power_percent with default values if not provided
             if mode.startswith("discharge"):
                 index = int(mode.replace("discharge", "")) - 1
-                day_mask_value = self._hub._pending_discharges[index].get(
-                    "day_mask", 127
-                )
-                power_percent_value = self._hub._pending_discharges[index].get(
-                    "power_percent", 5
-                )
+                day_mask_value = self._hub._pending_discharges[index].get("day_mask")
+                power_percent_value = self._hub._pending_discharges[index].get("power_percent")
             else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", 127)
-                power_percent_value = getattr(
-                    self._hub, f"_pending_{mode}_power_percent", 5
-                )
-
-            if mode.startswith("discharge"):
-                index = int(mode.replace("discharge", "")) - 1
-                day_mask_value = self._hub._pending_discharges[index]["day_mask"]
-                power_percent_value = self._hub._pending_discharges[index][
-                    "power_percent"
-                ]
-            else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", None)
-                power_percent_value = getattr(
-                    self._hub, f"_pending_{mode}_power_percent", None
-                )
+                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask")
+                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent")
 
             # Always call _update_day_mask_and_power for modes that have it
             # The _update_day_mask_and_power method handles reading current values and applying defaults
@@ -312,12 +295,8 @@ class ChargeSettingHandler:
                 f"(day_mask: {current_day_mask}, power_percent: {current_power_percent})"
             )
 
-            new_day_mask = (
-                day_mask if day_mask is not None else 127
-            )  # Default to 127 if no day_mask is provided
-            new_power_percent = (
-                power_percent if power_percent is not None else 5
-            )  # Default to 5 if no power_percent is provided
+            new_day_mask = current_day_mask if day_mask is None else day_mask
+            new_power_percent = current_power_percent if power_percent is None else power_percent
             _LOGGER.debug(
                 f"Calculated new day_mask: {new_day_mask}, "
                 f"new_power_percent: {new_power_percent} for {label}"
@@ -347,12 +326,15 @@ class ChargeSettingHandler:
         except Exception as e:
             _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
 
-    async def handle_pending_charging_state(self) -> None:
+    async def handle_charging_state(self) -> None:
         """Handles the pending charging state (robust, without default writes)."""
+        _LOGGER.debug("handle_charging_state called")
         desired = self._hub._pending_charging_state
         if desired is None:
+            _LOGGER.debug("No pending charging state to handle")
             return
 
+        _LOGGER.debug(f"Processing pending charging state: {desired}")
         chg, dchg = await asyncio.gather(
             self._hub.get_charging_state(),  # Optional[bool]
             self._hub.get_discharging_state(),  # Optional[bool]
@@ -365,30 +347,38 @@ class ChargeSettingHandler:
         # Write if register exists
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
-        _LOGGER.debug(
+        _LOGGER.info(
             "Attempting to write value %s to register %s for charging_state",
             write_value,
             hex(addr),
         )
-        _LOGGER.debug("Calling _hub._write_register for charging_state...")  # Added log
+        _LOGGER.debug("Calling _hub._write_register for charging_state...")
         ok = False  # Initialize ok to False
         try:
-            _LOGGER.debug("Executing await self._hub._write_register...")  # Added log
+            _LOGGER.debug("Executing await self._hub._write_register...")
             ok = await self._hub._write_register(addr, write_value)
-            _LOGGER.debug(
+            _LOGGER.info(
                 "await self._hub._write_register completed. Result: %s", ok
-            )  # Added log
+            )
             if ok:
                 self._hub.inverter_data["is_charging"] = bool(desired)
+                _LOGGER.info(f"Successfully wrote charging state: {desired}")
+                # Only reset pending value on successful write
+                self._hub._pending_charging_state = None
         except Exception as e:
             _LOGGER.error(
                 "Error writing charging_state to register %s: %s", hex(addr), e
             )
             ok = False  # Ensure ok is False if an exception occurs
-        await self._handle_power_state(charge_state=desired)
-        self._hub._pending_charging_state = None
+            # Keep pending value so it can be retried later
+        
+        # Only handle power state if the write was successful
+        if ok:
+            await self._handle_power_state(charge_state=desired)
+        
+        _LOGGER.debug("handle_charging_state completed")
 
-    async def handle_pending_discharging_state(self) -> None:
+    async def handle_discharging_state(self) -> None:
         """Handles the pending discharging state (robust, without default writes)."""
         desired = self._hub._pending_discharging_state
         if desired is None:
@@ -406,11 +396,23 @@ class ChargeSettingHandler:
             return
 
         addr = REGISTERS["discharging_state"]
-        ok = await self._hub._write_register(addr, 1 if desired else 0)
+        ok = False  # Initialize ok to False
+        try:
+            ok = await self._hub._write_register(addr, 1 if desired else 0)
+            if ok:
+                self._hub.inverter_data["is_discharging"] = bool(desired)
+                # Only reset pending value on successful write
+                self._hub._pending_discharging_state = None
+        except Exception as e:
+            _LOGGER.error(
+                "Error writing discharging_state to register %s: %s", hex(addr), e
+            )
+            ok = False  # Ensure ok is False if an exception occurs
+            # Keep pending value so it can be retried later
+        
+        # Only handle power state if the write was successful
         if ok:
-            self._hub.inverter_data["is_discharging"] = bool(desired)
-        await self._handle_power_state(discharge_state=desired)
-        self._hub._pending_discharging_state = None
+            await self._handle_power_state(discharge_state=desired)
 
     async def _handle_power_state(
         self,

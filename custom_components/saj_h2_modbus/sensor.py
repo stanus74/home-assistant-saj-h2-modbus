@@ -62,7 +62,17 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        value = self.coordinator.data.get(self.entity_description.key)
+        # Use coordinator.data which will fall back to inverter_data if None
+        coordinator_data = self.coordinator.data
+        if coordinator_data is None:
+            # For sensors, we need to check if this is the main hub or fast coordinator
+            if hasattr(self.coordinator, 'inverter_data'):
+                coordinator_data = self.coordinator.inverter_data
+            else:
+                _LOGGER.debug(f"Coordinator data not yet available for sensor {self._attr_name}")
+                return None
+        
+        value = coordinator_data.get(self.entity_description.key)
         if value is None:
             _LOGGER.debug(f"No data for sensor {self._attr_name}")
         return value

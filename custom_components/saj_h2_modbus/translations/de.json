@@ -12,7 +12,8 @@
       }
     },
     "error": {
-      "already_configured": "Gerät ist bereits konfiguriert"
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen"
     },
     "abort": {
       "already_configured": "Gerät ist bereits konfiguriert"
