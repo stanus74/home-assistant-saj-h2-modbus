@@ -85,13 +85,25 @@ class SajTimeTextEntity(TextEntity):
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
-        # Set default times: 01:00 for start times, 01:10 for end times
-        if "start" in name.lower():
-            self._attr_native_value = "01:00"
-        elif "end" in name.lower():
-            self._attr_native_value = "01:10"
+        # Set default times:
+        # - Charging: 01:00 for start, 01:10 for end
+        # - Discharging: 02:00 for start, 02:10 for end
+        if "discharge" in name.lower():
+            # Discharge slots use 02:00-02:10
+            if "start" in name.lower():
+                self._attr_native_value = "02:00"
+            elif "end" in name.lower():
+                self._attr_native_value = "02:10"
+            else:
+                self._attr_native_value = "02:00"  # Fallback
         else:
-            self._attr_native_value = "01:00"  # Fallback
+            # Charge slots use 01:00-01:10
+            if "start" in name.lower():
+                self._attr_native_value = "01:00"
+            elif "end" in name.lower():
+                self._attr_native_value = "01:10"
+            else:
+                self._attr_native_value = "01:00"  # Fallback
         # Regex that enforces HH:MM: Hours from 00 to 23, minutes from 00 to 59
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"

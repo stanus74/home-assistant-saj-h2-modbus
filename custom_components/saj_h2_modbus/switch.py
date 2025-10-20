@@ -86,11 +86,14 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         try:
             _LOGGER.debug(f"Calling set_{self._switch_type}({desired_state}) on hub")
             
-            # When enabling, ensure default values are set if not already configured
+            # First, set the switch state
+            await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
+            
+            # Then, when enabling, ensure default values are set if not already configured
+            # This ensures power values are set AFTER the switch state, so they are processed together
             if desired_state:
                 await self._ensure_default_values()
             
-            await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
             _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
             # Check if pending value was set
@@ -124,20 +127,27 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             
             for i in range(7):
                 if time_enable & (1 << i):  # Slot is enabled
-                    start_attr = f"_pending_discharge{i+1}_start"
-                    end_attr = f"_pending_discharge{i+1}_end"
-                    power_attr = f"_pending_discharge{i+1}_power_percent"
+                    # Check if user has already set pending values (from Card)
+                    slot = self._hub._pending_discharges[i]
                     
-                    # Check if values are in pending discharges list
-                    if i < len(self._hub._pending_discharges):
-                        slot = self._hub._pending_discharges[i]
-                        if slot.get("start") is None:
-                            await getattr(self._hub, f"set_discharge{i+1}_start")("01:00")
-                        if slot.get("end") is None:
-                            await getattr(self._hub, f"set_discharge{i+1}_end")("01:10")
-                        if slot.get("power_percent") is None:
-                            await getattr(self._hub, f"set_discharge{i+1}_power_percent")(5)
-                    _LOGGER.info(f"Set default values for discharge slot {i+1}: 01:00-01:10, 5%")
+                    # Check current values from inverter_data
+                    current_start = self._hub.inverter_data.get(f"discharge{i+1}_start", "00:00")
+                    current_end = self._hub.inverter_data.get(f"discharge{i+1}_end", "00:00")
+                    
+                    # Set defaults only if NO pending value exists AND current value is not set
+                    if slot.get("start") is None and current_start == "00:00":
+                        await getattr(self._hub, f"set_discharge{i+1}_start")("02:00")
+                        _LOGGER.info(f"Set default start time for discharge slot {i+1}: 02:00")
+                    
+                    if slot.get("end") is None and current_end == "00:00":
+                        await getattr(self._hub, f"set_discharge{i+1}_end")("02:10")
+                        _LOGGER.info(f"Set default end time for discharge slot {i+1}: 02:10")
+                    
+                    # Always set power to 5% if no pending value exists
+                    # This ensures the Card's default value (5%) is used
+                    if slot.get("power_percent") is None:
+                        await getattr(self._hub, f"set_discharge{i+1}_power_percent")(5)
+                        _LOGGER.info(f"Set default power for discharge slot {i+1}: 5%")
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._set_state(True)

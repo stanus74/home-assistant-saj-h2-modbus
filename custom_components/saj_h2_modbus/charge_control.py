@@ -293,8 +293,10 @@ class ChargeSettingHandler:
 
     async def handle_settings(self, mode: str, label: str) -> None:
         """Handles settings dynamically based on mode."""
+        _LOGGER.info(f"[PENDING DEBUG] handle_settings called for mode={mode}, label={label}")
         try:
             registers = REGISTERS[mode]
+            _LOGGER.info(f"[PENDING DEBUG] Registers for {mode}: {registers}")
 
             for attr in ["start", "end"]:
                 if mode.startswith("discharge"):
@@ -305,6 +307,7 @@ class ChargeSettingHandler:
 
                 if value is not None:
                     reg_key = f"{attr}_time"
+                    _LOGGER.info(f"[PENDING DEBUG] Writing {attr} time: {value}")
                     await self._write_time_register(
                         registers[reg_key], value, f"{label} {attr}"
                     )
@@ -316,20 +319,29 @@ class ChargeSettingHandler:
                 day_mask_value = self._hub._pending_discharges[index].get("day_mask")
                 power_percent_value = self._hub._pending_discharges[index].get("power_percent")
             else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask")
-                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent")
+                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", None)
+                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent", None)
+            
+            _LOGGER.info(
+                f"[PENDING DEBUG] handle_settings for {label}: "
+                f"day_mask={day_mask_value}, power_percent={power_percent_value}"
+            )
 
             if "day_mask_power" in registers:
+                _LOGGER.info(f"[PENDING DEBUG] Calling _update_day_mask_and_power for {label}")
                 await self._update_day_mask_and_power(
                     registers["day_mask_power"],
                     day_mask_value,
                     power_percent_value,
                     label,
                 )
+            else:
+                _LOGGER.warning(f"[PENDING DEBUG] No day_mask_power register found for {mode}")
 
         except Exception as e:
-            _LOGGER.error(f"Error handling {label} settings: {e}")
+            _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
         finally:
+            _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
             self._reset_pending_values(mode)
 
     async def handle_charge_settings(self) -> None:
@@ -359,8 +371,8 @@ class ChargeSettingHandler:
         label: str,
     ) -> None:
         """Updates the day mask and power percentage, reading current values if not provided."""
-        _LOGGER.debug(
-            f"Attempting to update day_mask_power for {label}. "
+        _LOGGER.info(
+            f"[PENDING DEBUG] _update_day_mask_and_power called for {label}. "
             f"Provided day_mask: {day_mask}, power_percent: {power_percent}"
         )
         try:
@@ -383,8 +395,17 @@ class ChargeSettingHandler:
                 f"(day_mask: {current_day_mask}, power_percent: {current_power_percent})"
             )
 
+            # Use current day_mask if not provided
             new_day_mask = current_day_mask if day_mask is None else day_mask
-            new_power_percent = current_power_percent if power_percent is None else power_percent
+            
+            # For power_percent: Use 5% default if None (instead of current value from register)
+            # This ensures the Card's default value (5%) is used when user hasn't changed it
+            if power_percent is None:
+                new_power_percent = 5  # Default value
+                _LOGGER.debug(f"Using default power_percent: 5% for {label}")
+            else:
+                new_power_percent = power_percent
+            
             _LOGGER.debug(
                 f"Calculated new day_mask: {new_day_mask}, "
                 f"new_power_percent: {new_power_percent} for {label}"

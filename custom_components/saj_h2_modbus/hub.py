@@ -404,7 +404,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # 1. Sammle alle Pending-Attribute mit ihren Handlern
             pending = self._get_pending_handlers()
             
-            if not pending:
+            # 1b. Check for discharge pending settings (separate from handlers)
+            discharge_pending = [
+                idx for idx, slot in enumerate(self._pending_discharges, start=1)
+                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
+            ]
+            
+            if not pending and not discharge_pending:
                 _LOGGER.debug("No pending settings found to process")
                 return
             
@@ -424,11 +430,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 if k == "_charge_group" or k.startswith("_pending_charge_")
             }
             
-            # Discharge Handler: Pro Index separate Verarbeitung
-            discharge_pending = [
-                idx for idx, slot in enumerate(self._pending_discharges, start=1)
-                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
-            ]
+            # Discharge Handler: Already collected above, just log
+            if discharge_pending:
+                _LOGGER.info(f"[PENDING DEBUG] Found discharge pending for indices: {discharge_pending}")
+                for idx in discharge_pending:
+                    slot = self._pending_discharges[idx - 1]
+                    _LOGGER.info(
+                        f"[PENDING DEBUG] Discharge{idx} pending values: "
+                        f"start={slot.get('start')}, end={slot.get('end')}, "
+                        f"day_mask={slot.get('day_mask')}, power_percent={slot.get('power_percent')}"
+                    )
             
             results = []
             
