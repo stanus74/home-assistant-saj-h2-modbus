@@ -85,7 +85,13 @@ class SajTimeTextEntity(TextEntity):
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
-        self._attr_native_value = "00:00"
+        # Set default times: 01:00 for start times, 01:10 for end times
+        if "start" in name.lower():
+            self._attr_native_value = "01:00"
+        elif "end" in name.lower():
+            self._attr_native_value = "01:10"
+        else:
+            self._attr_native_value = "01:00"  # Fallback
         # Regex that enforces HH:MM: Hours from 00 to 23, minutes from 00 to 59
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"

@@ -1,8 +1,12 @@
 import asyncio
 import logging
-from typing import Optional, Any, List, Dict, Tuple
+from typing import Optional, Any, List, Dict, Tuple, Callable
 
 _LOGGER = logging.getLogger(__name__)
+
+# Retry configuration for handler write operations
+MAX_HANDLER_RETRIES = 3
+HANDLER_RETRY_DELAY = 1.0  # seconds
 
 # --- Definitions for Pending Setter ---
 PENDING_FIELDS: List[tuple[str, str]] = (
@@ -57,7 +61,13 @@ REGISTERS = {
     "export_limit": 0x365A,
     "app_mode": 0x3647,
     "charging_state": 0x3604,
+    # Register 0x3605 is a BITMASK for discharge slot enable:
+    # Bit 0 (value 1) = Discharge Slot 1 enabled
+    # Bit 1 (value 2) = Discharge Slot 2 enabled
+    # Bit 2 (value 4) = Discharge Slot 3 enabled
+    # etc. Value 3 = Slots 1+2 enabled
     "discharging_state": 0x3605,
+    "discharge_time_enable": 0x3605,  # Same register - bitmask for slot enable
     "battery_on_grid_discharge_depth": 0x3644,
     "battery_off_grid_discharge_depth": 0x3645,
     "battery_capacity_charge_upper_limit": 0x3646,
@@ -65,7 +75,6 @@ REGISTERS = {
     "battery_discharge_power_limit": 0x364E,
     "grid_max_charge_power": 0x364F,
     "grid_max_discharge_power": 0x3650,
-    "discharge_time_enable": 0x3605,
     "passive_charge_enable": 0x3636,
     "passive_grid_charge_power": 0x3637,
     "passive_grid_discharge_power": 0x3638,
@@ -74,12 +83,14 @@ REGISTERS = {
 }
 
 # Mapping of simple pending attributes to their register addresses and labels
+# NOTE: discharge_time_enable shares register 0x3605 with discharging_state (bitmask)
+# Both handlers need to coordinate writes to avoid conflicts
 SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
     "export_limit": (REGISTERS["export_limit"], "export limit"),
     "app_mode": (REGISTERS["app_mode"], "app mode"),
     "discharge_time_enable": (
         REGISTERS["discharge_time_enable"],
-        "discharge time enable",
+        "discharge time enable (bitmask)",
     ),
     "battery_on_grid_discharge_depth": (
         REGISTERS["battery_on_grid_discharge_depth"],
@@ -133,7 +144,11 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 
 
 def _make_simple_handler(pending_attr: str, address: int, label: str):
-    """Factory for simple register handlers that read the pending value, write on success, and reset the pending field."""
+    """Factory for simple register handlers with retry logic.
+    
+    Attempts to write the pending value up to MAX_HANDLER_RETRIES times
+    with HANDLER_RETRY_DELAY between attempts.
+    """
 
     async def handler(self) -> bool:
         # Get pending value from hub
@@ -142,26 +157,35 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
             _LOGGER.debug("Skip %s: no pending value", pending_attr)
             return False
 
-        try:
-            if address is None:
-                _LOGGER.warning("%s register not configured; skip write", pending_attr)
-                return False
-            ok = await self._hub._write_register(address, int(value))
-            if ok:
-                _LOGGER.info("Successfully set %s to: %s", label, value)
-                # Only reset pending value on successful write
-                try:
-                    setattr(self._hub, f"_pending_{pending_attr}", None)
-                except Exception:
-                    pass
-            else:
-                _LOGGER.error("Failed to write %s", label)
-                # Keep pending value so it can be retried later
-            return ok
-        except Exception as e:
-            _LOGGER.error("Error writing %s: %s", label, e)
-            # Keep pending value so it can be retried later
+        if address is None:
+            _LOGGER.warning("%s register not configured; skip write", pending_attr)
             return False
+
+        # Retry loop
+        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
+            try:
+                ok = await self._hub._write_register(address, int(value))
+                if ok:
+                    _LOGGER.info("Successfully set %s to: %s (attempt %d/%d)",
+                                label, value, attempt, MAX_HANDLER_RETRIES)
+                    try:
+                        setattr(self._hub, f"_pending_{pending_attr}", None)
+                    except Exception:
+                        pass
+                    return True
+                else:
+                    _LOGGER.warning("Failed to write %s (attempt %d/%d)",
+                                   label, attempt, MAX_HANDLER_RETRIES)
+            except Exception as e:
+                _LOGGER.error("Error writing %s (attempt %d/%d): %s",
+                             label, attempt, MAX_HANDLER_RETRIES, e)
+            
+            # Wait before retry (except on last attempt)
+            if attempt < MAX_HANDLER_RETRIES:
+                await asyncio.sleep(HANDLER_RETRY_DELAY)
+        
+        _LOGGER.error("Failed to write %s after %d attempts", label, MAX_HANDLER_RETRIES)
+        return False
 
     return handler
 
@@ -172,9 +196,7 @@ def make_pending_setter(attr_path: str):
     async def setter(self, value: Any) -> None:
         """Sets a pending value on the hub."""
         try:
-            # This logic handles both simple attributes and nested dictionary attributes
             if "[" in attr_path:
-                # Handle nested dictionary access like "discharges[0][start]"
                 parts = attr_path.replace("]", "").split("[")
                 obj = getattr(self, f"_pending_{parts[0]}")
                 for i, key in enumerate(parts[1:]):
@@ -183,9 +205,11 @@ def make_pending_setter(attr_path: str):
                         break
                     obj = obj[int(key) if key.isdigit() else key]
             else:
-                # Handle simple attribute access like "charge_start"
-                # Write directly to dedicated _pending_<field> attribute on the hub
                 setattr(self, f"_pending_{attr_path}", value)
+            
+            # Invalidate pending cache when a value is set (for both nested and simple)
+            if hasattr(self, '_invalidate_pending_cache'):
+                self._invalidate_pending_cache()
         except Exception as e:
             _LOGGER.error(
                 f"Error setting pending attribute '{attr_path}': {e}", exc_info=True
@@ -195,15 +219,83 @@ def make_pending_setter(attr_path: str):
 
 
 class ChargeSettingHandler:
+    """Handler für alle Charge/Discharge-Settings mit Decorator-Pattern.
+    
+    Handler registrieren sich selbst via @_register_handler(pending_attr_name).
+    Dies ermöglicht:
+    - Explizite Registrierung ohne Magic-Strings
+    - Einfaches Hinzufügen neuer Handler
+    - Zentrale Verwaltung ohne externe Maps
+    - Bessere Fehlerbehandlung
+    """
+    
     def __init__(self, hub):
         self._hub = hub
+        self._handlers: Dict[str, Callable] = {}
+        self._register_handlers()
+    
+    def _register_handler(self, pending_attr: str) -> Callable:
+        """Decorator zum Registrieren von Handler-Funktionen.
+        
+        Args:
+            pending_attr: Name des Pending-Attributs (z.B. "_pending_charging_state")
+        
+        Returns:
+            Decorator-Funktion
+        """
+        def decorator(func: Callable) -> Callable:
+            self._handlers[pending_attr] = func
+            _LOGGER.debug(f"Registered handler for '{pending_attr}': {func.__name__}")
+            return func
+        return decorator
+    
+    def get_handlers(self) -> Dict[str, Callable]:
+        """Gibt alle registrierten Handler zurück."""
+        return self._handlers.copy()
+    
+    def _register_handlers(self) -> None:
+        """Registriere alle Handler: dynamisch aus SIMPLE_REGISTER_MAP + Spezialfälle."""
+        # 1. Dynamische Handler aus SIMPLE_REGISTER_MAP
+        for attr_name in SIMPLE_REGISTER_MAP:
+            addr, label = SIMPLE_REGISTER_MAP[attr_name]
+            pending_attr = f"_pending_{attr_name}"
+            # _make_simple_handler gibt eine ungebundene Funktion zurück
+            # Wir müssen sie als Methode an self binden
+            unbound_handler = _make_simple_handler(attr_name, addr, label)
+            bound_handler = unbound_handler.__get__(self, self.__class__)
+            self._handlers[pending_attr] = bound_handler
+            _LOGGER.debug(f"Registered dynamic handler for '{pending_attr}'")
+        
+        # 2. Spezialfälle: Charge-Gruppe
+        self._handlers["_charge_group"] = self._handle_charge_group
+        _LOGGER.debug("Registered special handler for '_charge_group'")
+        
+        # 3. Spezialfälle: Power State Handler
+        self._handlers["_pending_charging_state"] = self.handle_charging_state
+        _LOGGER.debug("Registered special handler for '_pending_charging_state'")
+        
+        self._handlers["_pending_discharging_state"] = self.handle_discharging_state
+        _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
+    
+    # ========== STATISCHE HANDLER (Charge-Einstellungen) ==========
+    
+    async def _handle_charge_group(self) -> bool:
+        """Direct handler for charge group settings.
+        
+        Processes all charge settings as a group:
+        - start time
+        - end time
+        - day_mask
+        - power_percent
+        """
+        await self.handle_charge_settings()
+        return True
 
     async def handle_settings(self, mode: str, label: str) -> None:
         """Handles settings dynamically based on mode."""
         try:
             registers = REGISTERS[mode]
 
-            # Handle start_time and end_time
             for attr in ["start", "end"]:
                 if mode.startswith("discharge"):
                     index = int(mode.replace("discharge", "")) - 1
@@ -217,10 +309,8 @@ class ChargeSettingHandler:
                         registers[reg_key], value, f"{label} {attr}"
                     )
 
-            # Handle day_mask and power_percent as a combined register
             day_mask_value = None
             power_percent_value = None
-            # Initialize day_mask and power_percent with default values if not provided
             if mode.startswith("discharge"):
                 index = int(mode.replace("discharge", "")) - 1
                 day_mask_value = self._hub._pending_discharges[index].get("day_mask")
@@ -229,8 +319,6 @@ class ChargeSettingHandler:
                 day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask")
                 power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent")
 
-            # Always call _update_day_mask_and_power for modes that have it
-            # The _update_day_mask_and_power method handles reading current values and applying defaults
             if "day_mask_power" in registers:
                 await self._update_day_mask_and_power(
                     registers["day_mask_power"],
@@ -326,6 +414,8 @@ class ChargeSettingHandler:
         except Exception as e:
             _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
 
+    # ========== POWER STATE HANDLER (Charging/Discharging) ==========
+    
     async def handle_charging_state(self) -> None:
         """Handles the pending charging state (robust, without default writes)."""
         _LOGGER.debug("handle_charging_state called")
@@ -336,15 +426,14 @@ class ChargeSettingHandler:
 
         _LOGGER.debug(f"Processing pending charging state: {desired}")
         chg, dchg = await asyncio.gather(
-            self._hub.get_charging_state(),  # Optional[bool]
-            self._hub.get_discharging_state(),  # Optional[bool]
+            self._hub.get_charging_state(),
+            self._hub.get_discharging_state(),
         )
         app_mode = self._hub.inverter_data.get("AppMode")
         if chg is None or dchg is None or app_mode is None:
             _LOGGER.debug("Deferring pending charging_state: prerequisites not ready")
             return
 
-        # Write if register exists
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
         _LOGGER.info(
@@ -352,10 +441,8 @@ class ChargeSettingHandler:
             write_value,
             hex(addr),
         )
-        _LOGGER.debug("Calling _hub._write_register for charging_state...")
-        ok = False  # Initialize ok to False
+        ok = False
         try:
-            _LOGGER.debug("Executing await self._hub._write_register...")
             ok = await self._hub._write_register(addr, write_value)
             _LOGGER.info(
                 "await self._hub._write_register completed. Result: %s", ok
@@ -363,63 +450,61 @@ class ChargeSettingHandler:
             if ok:
                 self._hub.inverter_data["is_charging"] = bool(desired)
                 _LOGGER.info(f"Successfully wrote charging state: {desired}")
-                # Only reset pending value on successful write
                 self._hub._pending_charging_state = None
         except Exception as e:
             _LOGGER.error(
                 "Error writing charging_state to register %s: %s", hex(addr), e
             )
-            ok = False  # Ensure ok is False if an exception occurs
-            # Keep pending value so it can be retried later
+            ok = False
         
-        # Only handle power state if the write was successful
         if ok:
             await self._handle_power_state(charge_state=desired)
         
         _LOGGER.debug("handle_charging_state completed")
 
     async def handle_discharging_state(self) -> None:
-        """Handles the pending discharging state (robust, without default writes)."""
+        """Handles the pending discharging state.
+        
+        This handler manages:
+        1. Register 0x3605 (Discharge Slots Bitmask):
+           - When discharging is turned OFF: writes 0 to disable all slots
+           - When discharging is turned ON: does NOT write (slots controlled by discharge_time_enable)
+        2. AppMode (0x3647):
+           - Updates based on charging/discharging state
+        """
         desired = self._hub._pending_discharging_state
         if desired is None:
             return
 
-        chg, dchg = await asyncio.gather(
-            self._hub.get_charging_state(),  # Optional[bool]
-            self._hub.get_discharging_state(),  # Optional[bool]
-        )
-        app_mode = self._hub.inverter_data.get("AppMode")
-        if chg is None or dchg is None or app_mode is None:
-            _LOGGER.debug(
-                "Deferring pending discharging_state: prerequisites not ready"
-            )
-            return
-
-        addr = REGISTERS["discharging_state"]
-        ok = False  # Initialize ok to False
-        try:
-            ok = await self._hub._write_register(addr, 1 if desired else 0)
-            if ok:
-                self._hub.inverter_data["is_discharging"] = bool(desired)
-                # Only reset pending value on successful write
-                self._hub._pending_discharging_state = None
-        except Exception as e:
-            _LOGGER.error(
-                "Error writing discharging_state to register %s: %s", hex(addr), e
-            )
-            ok = False  # Ensure ok is False if an exception occurs
-            # Keep pending value so it can be retried later
+        _LOGGER.debug(f"Processing discharging state change: {desired}")
         
-        # Only handle power state if the write was successful
-        if ok:
-            await self._handle_power_state(discharge_state=desired)
+        addr = REGISTERS["discharging_state"]
+        
+        # If discharging is being turned OFF, write 0 to register 0x3605 to disable all slots
+        if not desired:
+            _LOGGER.info("Discharging turned OFF, writing 0 to register 0x3605 to disable all slots")
+            ok = await self._hub._write_register(addr, 0)
+            if not ok:
+                _LOGGER.error("Failed to write 0 to register 0x3605")
+        # If discharging is being turned ON, do NOT write to 0x3605
+        # The slots are controlled by discharge_time_enable (bitmask)
+        else:
+            _LOGGER.debug("Discharging turned ON, slots controlled by discharge_time_enable")
+        
+        # Get current charging state
+        chg = await self._hub.get_charging_state()
+        
+        # Clear pending state
+        self._hub._pending_discharging_state = None
+        
+        # Update AppMode based on both charging and discharging states
+        await self._handle_power_state(charge_state=chg, discharge_state=desired)
 
     async def _handle_power_state(
         self,
         charge_state: Optional[bool] = None,
         discharge_state: Optional[bool] = None,
     ) -> None:
-        # Get charge/discharge flags from hub, if not passed
         chg, dchg = await asyncio.gather(
             (
                 self._hub.get_charging_state()
@@ -432,7 +517,6 @@ class ChargeSettingHandler:
                 else asyncio.sleep(0, result=discharge_state)
             ),
         )
-        # If states not ready yet: skip and try again in next cycle
         if chg is None or dchg is None:
             _LOGGER.debug(
                 "Skip power-state handling: state not ready (chg=%s, dchg=%s)",
@@ -441,20 +525,15 @@ class ChargeSettingHandler:
             )
             return
 
-        # AppMode must also be present – no more default writes!
         app_mode = self._hub.inverter_data.get("AppMode")
         if app_mode is None:
             _LOGGER.debug("Skip power-state handling: AppMode not ready")
             return
 
-        # Example: if one of the modes is active, ensure AppMode
         desired_mode = 1 if (chg or dchg) else 0
         if app_mode != desired_mode:
             _LOGGER.info("Updating AppMode from %s to %s", app_mode, desired_mode)
             await self._hub._write_register(REGISTERS["app_mode"], desired_mode)
-
-        # Further, safely execute writes based on chg/dchg here ...
-        # (e.g. set limits when (dis-)charging is active)
 
     async def _write_time_register(
         self, address: int, time_str: str, label: str
@@ -477,12 +556,3 @@ class ChargeSettingHandler:
             _LOGGER.info(f"Successfully set {label}: {time_str}")
         else:
             _LOGGER.error(f"Failed to write {label}")
-
-
-# Dynamically add simple register handlers to ChargeSettingHandler
-for _attr, (_addr, _label) in SIMPLE_REGISTER_MAP.items():
-    setattr(
-        ChargeSettingHandler,
-        f"handle_{_attr}",
-        _make_simple_handler(_attr, _addr, _label),
-    )

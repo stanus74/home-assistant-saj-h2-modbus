@@ -85,6 +85,11 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
         try:
             _LOGGER.debug(f"Calling set_{self._switch_type}({desired_state}) on hub")
+            
+            # When enabling, ensure default values are set if not already configured
+            if desired_state:
+                await self._ensure_default_values()
+            
             await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             self._last_switch_time = time.time()
             _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
@@ -99,6 +104,40 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         except Exception as e:
             _LOGGER.error(f"Failed to turn {'on' if desired_state else 'off'}: {e}")
             raise
+
+    async def _ensure_default_values(self) -> None:
+        """Ensure default time and power values are set when enabling."""
+        if self._switch_type == "charging":
+            # Set default charge times and power if not already set
+            if getattr(self._hub, "_pending_charge_start", None) is None:
+                await self._hub.set_charge_start("01:00")
+            if getattr(self._hub, "_pending_charge_end", None) is None:
+                await self._hub.set_charge_end("01:10")
+            if getattr(self._hub, "_pending_charge_power_percent", None) is None:
+                await self._hub.set_charge_power_percent(5)
+            _LOGGER.info("Set default charging values: 01:00-01:10, 5%")
+        elif self._switch_type == "discharging":
+            # For discharging, set defaults for enabled slots
+            time_enable = self._hub.inverter_data.get("discharge_time_enable", 0)
+            if isinstance(time_enable, str):
+                time_enable = int(time_enable)
+            
+            for i in range(7):
+                if time_enable & (1 << i):  # Slot is enabled
+                    start_attr = f"_pending_discharge{i+1}_start"
+                    end_attr = f"_pending_discharge{i+1}_end"
+                    power_attr = f"_pending_discharge{i+1}_power_percent"
+                    
+                    # Check if values are in pending discharges list
+                    if i < len(self._hub._pending_discharges):
+                        slot = self._hub._pending_discharges[i]
+                        if slot.get("start") is None:
+                            await getattr(self._hub, f"set_discharge{i+1}_start")("01:00")
+                        if slot.get("end") is None:
+                            await getattr(self._hub, f"set_discharge{i+1}_end")("01:10")
+                        if slot.get("power_percent") is None:
+                            await getattr(self._hub, f"set_discharge{i+1}_power_percent")(5)
+                    _LOGGER.info(f"Set default values for discharge slot {i+1}: 01:00-01:10, 5%")
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._set_state(True)
