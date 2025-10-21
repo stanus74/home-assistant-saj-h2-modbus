@@ -337,6 +337,10 @@ class ChargeSettingHandler:
                 )
             else:
                 _LOGGER.warning(f"[PENDING DEBUG] No day_mask_power register found for {mode}")
+            
+            # CRITICAL: Update discharge_time_enable register when discharge slot is configured
+            if mode.startswith("discharge"):
+                await self._update_discharge_time_enable(mode)
 
         except Exception as e:
             _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
@@ -401,8 +405,14 @@ class ChargeSettingHandler:
             # For power_percent: Use 5% default if None (instead of current value from register)
             # This ensures the Card's default value (5%) is used when user hasn't changed it
             if power_percent is None:
-                new_power_percent = 5  # Default value
-                _LOGGER.debug(f"Using default power_percent: 5% for {label}")
+                # Default to 5% if value is missing and slot is empty (0%)
+                if current_power_percent == 0:
+                    new_power_percent = 5  # Default value
+                    _LOGGER.debug(f"Using default power_percent: 5% for {label}")
+                else:
+                    # If register already has a non-zero value, keep it
+                    new_power_percent = current_power_percent
+                    _LOGGER.debug(f"Using existing power_percent: {current_power_percent}% for {label}")
             else:
                 new_power_percent = power_percent
             
@@ -512,20 +522,18 @@ class ChargeSettingHandler:
         else:
             _LOGGER.debug("Discharging turned ON, slots controlled by discharge_time_enable")
         
-        # Get current charging state
-        chg = await self._hub.get_charging_state()
-        
         # Clear pending state
         self._hub._pending_discharging_state = None
         
-        # Update AppMode based on both charging and discharging states
-        await self._handle_power_state(charge_state=chg, discharge_state=desired)
+        # Update AppMode based on current charging state and new discharging state
+        await self._handle_power_state(discharge_state=desired)
 
-    async def _handle_power_state(
-        self,
-        charge_state: Optional[bool] = None,
-        discharge_state: Optional[bool] = None,
-    ) -> None:
+    async def _handle_power_state(self, charge_state=None, discharge_state=None) -> None:
+        """Updates AppMode based on charging and discharging states.
+        
+        When either charging or discharging is enabled, AppMode should be 1.
+        When both are disabled, AppMode should be 0.
+        """
         chg, dchg = await asyncio.gather(
             (
                 self._hub.get_charging_state()
@@ -577,3 +585,53 @@ class ChargeSettingHandler:
             _LOGGER.info(f"Successfully set {label}: {time_str}")
         else:
             _LOGGER.error(f"Failed to write {label}")
+    
+    async def _update_discharge_time_enable(self, mode: str) -> None:
+        """Update discharge_time_enable register (0x3605) to enable the configured slot.
+        
+        This ensures that when a discharge slot is configured (time/power values set),
+        the corresponding bit in the discharge_time_enable register is automatically set.
+        
+        Args:
+            mode: The discharge mode (e.g., "discharge1", "discharge2", etc.)
+        """
+        try:
+            # Extract slot index from mode (e.g., "discharge1" -> 0)
+            slot_index = int(mode.replace("discharge", "")) - 1
+            
+            # Read current discharge_time_enable value
+            addr = REGISTERS["discharge_time_enable"]
+            regs = await self._hub._read_registers(addr)
+            if not regs:
+                _LOGGER.error(f"Failed to read discharge_time_enable register at {hex(addr)}")
+                return
+            
+            current_value = regs[0]
+            _LOGGER.debug(f"Current discharge_time_enable: {current_value} (binary: {bin(current_value)})")
+            
+            # Calculate new value with the slot bit set
+            slot_bit = 1 << slot_index
+            new_value = current_value | slot_bit
+            
+            # Only write if value changed
+            if new_value != current_value:
+                _LOGGER.info(
+                    f"Updating discharge_time_enable from {current_value} to {new_value} "
+                    f"(enabling slot {slot_index + 1})"
+                )
+                success = await self._hub._write_register(addr, new_value)
+                if success:
+                    _LOGGER.info(
+                        f"Successfully enabled {mode} in discharge_time_enable register "
+                        f"(bit {slot_index} set)"
+                    )
+                else:
+                    _LOGGER.error(f"Failed to write discharge_time_enable register")
+            else:
+                _LOGGER.debug(
+                    f"Slot {slot_index + 1} already enabled in discharge_time_enable "
+                    f"(value: {current_value})"
+                )
+                
+        except Exception as e:
+            _LOGGER.error(f"Error updating discharge_time_enable for {mode}: {e}", exc_info=True)
