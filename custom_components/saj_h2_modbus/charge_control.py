@@ -340,9 +340,12 @@ class ChargeSettingHandler:
 
         except Exception as e:
             _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
-        finally:
-            _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
-            self._reset_pending_values(mode)
+            # Do not reset pending values if there was an error during handling
+            return # Exit the function if an error occurred
+
+        # Reset pending values only if no exception occurred and the operation was successful
+        _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
+        self._reset_pending_values(mode)
 
     async def handle_charge_settings(self) -> None:
         await self.handle_settings("charge", "charge")
@@ -398,11 +401,11 @@ class ChargeSettingHandler:
             # Use current day_mask if not provided
             new_day_mask = current_day_mask if day_mask is None else day_mask
             
-            # For power_percent: Use 5% default if None (instead of current value from register)
-            # This ensures the Card's default value (5%) is used when user hasn't changed it
+            # Use current power_percent if not provided (preserve existing value)
+            # This ensures that if only time is changed, power_percent is not reset to default
             if power_percent is None:
-                new_power_percent = 5  # Default value
-                _LOGGER.debug(f"Using default power_percent: 5% for {label}")
+                new_power_percent = current_power_percent
+                _LOGGER.debug(f"Using current power_percent: {current_power_percent}% for {label}")
             else:
                 new_power_percent = power_percent
             
