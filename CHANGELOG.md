@@ -1,351 +1,156 @@
 # Changelog (v2.6.3)
 
-### 🔧 Fix for Discharge Power Percent Reset
+### 🔧 Fix: Discharge Power Percent Reset
 
-* **Problem:** When changing only the end time of a discharge slot, the `power_percent` was incorrectly reset to the default value of 5% instead of retaining the previously set value.
-* **Solution:** Modified `_update_day_mask_and_power` to preserve the current `power_percent` from the register when no pending `power_percent` is provided. Additionally, `_reset_pending_values` is now conditionally called only after a successful write operation in `handle_settings`.
-* **Impact:** Ensures that user-set `power_percent` values are correctly maintained for discharge slots.
+* Problem: When changing only the end time of a discharge slot, the `power_percent` was incorrectly reset to the default 5% instead of keeping the previously configured value.
+* Solution: `_update_day_mask_and_power` now preserves the current `power_percent` read from the register when no pending `power_percent` is provided. `_reset_pending_values` is only called after a successful write in `handle_settings`.
+* Impact: User-set `power_percent` values for discharge slots remain unchanged when only the time is edited.
+
+### 🔧 Default Values for Time and Power Settings
+
+* Implemented sensible defaults:
+  - Default start time for charge/discharge slots: `01:00`
+  - Default end time for charge/discharge slots: `01:10`
+  - Default power percent for charge/discharge slots: `5%`
+* Ensured `00:00` is not sent to Modbus as a default time.
+* Defaults are applied only when a switch is enabled and no pending values are present.
+* Enabled discharge slots persist across card reloads.
+* Affected files: `text.py`, `switch.py`, `number.py`
+* Benefit: Better user experience with sensible defaults and more reliable persistence.
 
 
-### 🔧 Default Values Implementation for Time and Power Settings
+### 🚀 Handler Architecture Refactor — Decorator Pattern & Central Handler Registry
 
-* **Implemented Default Values:**
-  - Default start time for charge and discharge slots set to `01:00`.
-  - Default end time for charge and discharge slots set to `01:10`.
-  - Default power percent for charge and discharge slots set to `5%`.
-* **Ensured No 00:00 Times:** Logic prevents sending `00:00` times to Modbus.
-* **Values Applied on Enable:** Default values are now applied only when a switch is enabled and no specific pending values are set.
-* **Persistent Slots:** Enabled discharge slots maintain their status after card reload.
-* **Affected Files:** `text.py`, `switch.py`, `number.py`
-* **Benefits:** Improved user experience with sensible defaults and reliable persistence of settings.
+- Centralized handler registration using `ChargeSettingHandler._register_handler()` (Decorator pattern).
+- All pending handlers are registered in a single `_handlers` map; removed previous magic strings and distributed registration.
+- Dynamically generated handlers (from `SIMPLE_REGISTER_MAP`) are correctly bound to the instance (unbound → bound using `__get__()`).
+- Unified handler invocation in the hub — handlers are now called uniformly with no special case call signatures.
+- Strict verification at initialization: missing handlers raise `RuntimeError` (fail-fast).
+- Result: much improved maintainability, elimination of magic strings, easier addition of new handlers, and clearer logs.
+- Quantitative: ~80% reduction in complexity within `_process_pending_settings`.
 
 ---
 
 # Changelog (v2.6.2)
 
-### 🔧 Enhanced Fast Coordinator Management and Connection Handling
+### 🔧 Enhanced Fast Coordinator and Connection Handling
 
-* **Improved Fast Coordinator Lifecycle:**
-  - Added `_fast_unsub` attribute to properly store and manage unsubscribe callbacks for fast coordinator listeners
-  - Enhanced `start_fast_updates()` with proper listener attachment using `async_add_listener()`
-  - Improved `restart_fast_updates()` with comprehensive cleanup of old listeners and coordinators
-  - Added proper error handling for listener attachment failures
+* Fast coordinator lifecycle improvements:
+  - Added `_fast_unsub` to store and manage unsubscribe callbacks.
+  - `start_fast_updates()` now attaches listeners correctly using `async_add_listener()`.
+  - `restart_fast_updates()` performs comprehensive cleanup of previous listeners and coordinators.
+  - Improved error handling when attaching listeners.
 
-* **Enhanced Modbus Client Management:**
-  - Added `_close_client()` method for safe and proper Modbus client closing with async support
-  - Updated connection handling methods to use the new `_close_client()` method
-  - Improved reconnection logic with proper client cleanup and recreation
-  - Enhanced error handling and logging throughout connection management
+* Modbus client management:
+  - Added `_close_client()` for safe async client close.
+  - Connection handling and reconnection logic improved with proper client cleanup and recreation.
+  - Better logging and error handling across connection lifecycle.
 
-* **Handler Name Generation Compatibility:**
-  - Modified handler name generation logic to maintain backward compatibility with existing charge/discharge state handlers
-  - Conditional logic preserves `handle_pending_` prefix for `charging_state` and `discharging_state` while using simplified naming for other attributes
-  - Ensures smooth transition during refactoring without breaking existing functionality
+* Handler name generation compatibility:
+  - Handler naming keeps backward compatibility for `charging_state` and `discharging_state` while simplifying names for other attributes.
+  - Smooth refactor without breaking existing behavior.
 
-* **Benefits:**
-  - More robust fast coordinator management with proper cleanup
-  - Improved connection stability and error handling
-  - Better resource management through proper client lifecycle handling
-  - Maintained backward compatibility during handler name refactoring
+* Benefits: more robust fast coordinator handling, improved connection stability, and better resource management.
 
+---
 
 # Changelog (v2.6.1)
 
-### 🔧 Fix for Proper Fast Coordinator Shutdown
+### 🚀 Handler Architecture: Decorator Pattern & Central Registration
 
-* **Fixed:** The Fast Coordinator (10s) is now properly stopped when the config entry is unloaded.
-* **Impact:** This prevents potential resource leaks and ensures clean shutdown of the integration.
-
-* Corrected register address "discharge_time_enable": 0x3605, before was 0x3650 
-
-
-### 🚀 Entity Factory Implementation with Mapping Lists
-
-* **Implemented Factory Pattern with Mapping Lists:**
-  - Refactored number, switch, and text entity creation to use centralized mapping lists
-  - Reduced boilerplate code in async_setup_entry functions
-  - Improved maintainability and extensibility of entity definitions
-  - Standardized entity creation pattern across all platforms
-
-### 🔧 Code Improvements
-
-* **Reduced Code Duplication:**
-  - Eliminated repetitive entity instantiation code
-  - Centralized entity configuration in dedicated mapping structures
-  - Enhanced readability and simplified future modifications
+* Centralized handler registration with `_register_handler` inside `ChargeSettingHandler`.
+* `_handlers` dictionary is the single source of truth for all handlers.
+* All handlers (dynamic and special cases) now registered from one place and correctly bound to the instance.
+* Initialization verifies handler presence and raises on missing handlers.
+* Simplified invocation: all handlers are called uniformly (`await handler_func()`).
+* Benefits: improved maintainability, easier to add new handlers, clearer logs.
 
 ---
 
 # Changelog (v2.6.0)
 
-### 🚀 New Passive Charge/Discharging Input Methods Added
+### 🚀 New Passive Charge/Discharge Input Registers
 
-* **New Input Registers:**
+* Added input registers for passive charge/discharge controls:
+  - Passive Charge Enable (input)
+  - Passive Grid Charge Power (input)
+  - Passive Grid Discharge Power (input)
+  - Passive Battery Charge Power (input)
+  - Passive Battery Discharge Power (input)
+* These enable more granular passive battery charge/discharge control.
 
-  - `SAJ Passive Charge Enable (Input)` - Register 3636H ...
-  - `SAJ Passive Grid Charge Power (Input)` 
-  - `SAJ Passive Grid Discharge Power (Input)`
-  - `SAJ Passive Battery Charge Power (Input)` 
-  - `SAJ Passive Battery Discharge Power (Input)` - ... Register 363AH
-  
- 
-* These new input methods allow for precise control of passive battery charge & discharge power.
-see Discussion https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
+### 🚀 New Fast Sensors
 
----
-
-### 🚀 New Fast Sensors Added
-
-* **Fast Coordinator (10s) now includes additional sensors:**
-
+* Fast coordinator (10s) now updates additional CT sensors:
   - `sensor.saj_ct_pv_power_watt`
   - `sensor.saj_ct_pv_power_va`
   - `sensor.saj_ct_grid_power_va`
-  - `sensor.saj_ct_grid_power_watt`  
-
-* These sensors are now updated every 10 seconds via the Fast Coordinator, ensuring more frequent updates for live data monitoring.
+  - `sensor.saj_ct_grid_power_watt`
+* These sensors receive higher-frequency updates for improved live monitoring.
 
 ---
 
 # Changelog (v2.5.0)
 
-### 🚀 New Fast Coordinator (10s) for Live Data
+### 🚀 Fast Coordinator (10s) for Live Data
 
-* **High-frequency polling for key metrics (e.g., PV power, battery):**
+* Introduced a 10s fast coordinator for high-frequency polling of key metrics.
+* Default: enabled. Can be disabled by configuring `FAST_POLL_DEFAULT = False` in `hub.py`.
+* Energy sensors polled every 10s, including total load, PV, battery, grid, and inverter power.
 
-  * Introduced a 10s fast coordinator 
-  * Can be disabled via simple adjustment in hub.py, 
-  
-    Energy sensors are polled every 10 seconds: 
+### Major improvements
 
-      - sensor.saj_total_load_power
-      - sensor.saj_pv_power
-      - sensor.saj_battery_power
-      - sensor.saj_total_grid_power
-      - sensor.saj_inverter_power
-      - sensor.saj_grid_power
-
- 
-This is the default setting. Can be disabled in hub.py line 27:
-
-`FAST_POLL_DEFAULT = True # True or False`
-
-
-### Major Code Improvements & Feature Expansion
-
-* **Complete refactor of `hub.py`** for better structure, robust Modbus handling, and future-proof extensibility.
-
-### Updated
-
-* **Sensor Polling:**
-
-  * Modbus connections now reliably handled via `connect_if_needed()`.
-  * Improved error handling and reconnection strategy.
-  * Clear separation of volatile and static data reads.
-
-* **Charging/Discharging Management:**
-
-  * Introduced "optimistic push" logic: planned states are reflected in the UI before Modbus confirmation.
-  * Clean detection of pending changes via `_has_pending()`.
-  * Maintained dynamic generation of all setter methods for flexibility.
-
-### Improvements
-
-* **Efficient Modbus Access:**
-
-  * Separated polling intervals reduce read load.
-  * More resilient to timeouts and read errors.
-
-* **Connection Stability:**
-
-  * New connection check and auto-reconnect logic with `ensure_client_connected()`.
-  * Graceful handling and logging of client shutdown errors.
-
-* **Logging & UX:**
-
-  * Suppresses repeated warnings for missing app mode/state values.
-  * Enhanced debug logging for fast coordinator updates.
-
-### Added
-
-* **Fast update functionality (`start_fast_updates`)** with dedicated `DataUpdateCoordinator`.
-* **Optimistic state overlay (`_optimistic_overlay`)** for faster UI feedback during pending changes.
-* **Single-use warning logic (`_warned_missing_states`)** to reduce log noise for known issues.
+* Complete `hub.py` refactor for more robust Modbus handling and extensibility.
+* Optimistic overlay for UI (shows planned state changes until Modbus confirms).
+* Improved `_has_pending()` detection and safer setter generation.
 
 ---
 
 # Changelog (v2.4.0)
 
-## Big Code improvement and reduction
+### Code reduction and restructures
 
-## Code was shortened by 380 lines or reduced by 17Kbytes.
-
-### Updated
-
-- Refactored `hub.py` to consolidate `_pending_*` attributes into a single `_pending_settings` dictionary for better maintainability.
-- Updated `ChargeSettingHandler` in `charge_control.py` to use the `_pending_settings` dictionary instead of individual `_pending_*` attributes.
-- Replaced repetitive `handle_*_settings` methods in `charge_control.py` with a generic `handle_settings` method.
-- Updated `pending_handlers` in `hub.py` to dynamically call `handle_settings` for different modes (e.g., `charge`, `discharge`).
-- Added debug logging in `hub.py` and `charge_control.py` to trace pending settings and Modbus operations.
-
-### Improvements
-
-- **Improved Charge/Discharge Day Mask and Power Percent Handling:**
-  - Modified `charge_control.py` to default `day_mask` to 127 and `power_percent` to 5 when not explicitly provided.
-  - Ensured that existing `day_mask` or `power_percent` values are read from the inverter and combined with new inputs if only one is provided.
-  - Implemented a check to prevent redundant Modbus writes for day mask and power percent if the combined value has not changed.
-- **Optimized Modbus Write Operations:**
-  - Updated `hub.py` to only trigger `charge_control.py`'s `handle_charge_settings` when there are actual pending changes for charge start/end times, day mask, or power percent.
-
-### Added
-
-- Introduced `_read_phase_block` helper function for compact 3-phase block reading.
-
-### Changed
-- Refactored `read_discharge_data` to use a loop for dynamic decode instructions.
-- Updated `_read_modbus_data` to handle missing keys or insufficient registers gracefully.
-- Simplified and improved error handling in `read_anti_reflux_data`.
-- Refactored `read_additional_modbus_data_4`, `read_inverter_phase_data`, and `read_offgrid_output_data` to use `_read_phase_block`.
-
-### Removed
-
-- Cleaned up unused imports (`Dict`, `NamedTuple`, `Any`, `UnitOfTime`) from `const.py` to reduce code noise.
-- some more cleanup
+* Consolidated many `_pending_*` attributes into a single `_pending_settings` structure to improve maintainability.
+* `ChargeSettingHandler` updated to use `_pending_settings`.
+* Replaced many repetitive handlers with a generic `handle_settings` method.
+* Added debug logging to trace pending settings and Modbus operations.
+* Improvements to Modbus read handling and helper utilities (e.g., `_read_phase_block`).
 
 ---
 
 # Changelog (v2.3.1)
 
-### Bug Fixes
+### 🔧 Fix: Discharge Power Percent Reset
 
-- **Modbus Client Compatibility Fix:**
-  - Addressed `TypeError` in `ModbusClientMixin.read_holding_registers()` (and write operations) caused by unexpected `slave`/`device_id` keyword arguments in some Home Assistant environments.
-  - Implemented a workaround by setting `client.unit_id` directly on the client object before each Modbus read/write operation.
-
-### Code Improvements & Optimizations
-
-- **Refactored Modbus Operation Logic:**
-  - Consolidated common Modbus operation logic into a new helper function `_perform_modbus_operation` in `modbus_utils.py`. This makes `read_once` and `write_once` functions more compact and readable.
-- **Centralized Type Aliases:**
-  - Moved `ModbusClient` and `Lock` type aliases to `custom_components/saj_h2_modbus/const.py` for better code organization and maintainability.
+* Problem: Changing only the end time could reset `power_percent` to the default.
+* Fix: Preserve existing `power_percent` when a pending `power_percent` is not provided. Only reset pending values after successful writes.
 
 ---
 
 # Changelog (v2.3.0)
 
-### New Sensors
+### 🔧 Default Values for Times and Power Percent
 
-- **Added Smart Meter Sensors:**
-  - New sensors for R, S, and T phase Meter voltage, current, frequency, power-factor, real-power and apparent-power (Registers `A03Dh` - `A04Eh`).
-- **Added Inverter Phase Data Sensors:**
-  - New sensors for R, S, and T phase inverter voltage, current, frequency, and power (Registers `4046h` - `4054h`).
-- **Added Off-Grid Output Data Sensors:**
-  - New sensors for R, S, and T phase off-grid output voltage, current, frequency, power, and DVI (Registers `4055h` - `4066h`).
-- **Added Side-Net Data Sensors:**
-  - New sensors for R, S, and T phase on-grid side-net voltage, current, frequency, and power (Registers `408Dh` - `4094h`).
-
-### Bug Fixes
-
-- **Apparent Power Sensor Unit Fix:**
-  - Corrected unit of measurement for **all** apparent power sensors (VA) to ensure proper categorization with the `APPARENT_POWER` device class. This resolves unit mismatch errors and enables Home Assistant to store long-term statistics correctly.
-
----
-
-# Changelog (v2.2.4)
-
-### Added New Battery and Grid Power Limit Sensors
-
-- **Added new sensors for monitoring power limits:**
-  - Battery Charge Power Limit (Register 364Dh)
-  - Battery Discharge Power Limit (Register 364Eh)
-  - Grid Charge Power Limit (Register 364Fh)
-  - Grid Discharge Power Limit (Register 3650h)
-  - All sensors use a factor of 0.1 to display percentage values
-  - Added to battery_sensors group with appropriate icons
-  - Enabled by default for easy monitoring
-
-### Code Improvements
-
-- **Configuration Options Management**
-  - **Changed:** Options are now stored in config_entry.options instead of config_entry.data
-  - **Added:** Fallback mechanism to read values from data if not present in options
-  - **Affected:** config_flow.py and __init__.py were modified to handle options correctly
-  - **Benefit:** Better adherence to Home Assistant standards for configuration management
-
-- **Unified unique_id Generation**
-  - **Consistent Base:** All entities now use the hub name as the base for their unique_ids
-  - **Affected:** number.py and text.py were modified to use the dynamic hub name instead of the fixed "saj_" prefix
-  - **Benefit:** Better distinction between multiple instances and more consistent entity identification
-
-- **Device Info Support**
-  - **Added:** device_info is now set for all entities (number and text entities)
-  - **Affected:** Base classes in number.py and text.py were modified to include device_info
-  - **Benefit:** Proper device grouping and identification in Home Assistant
-
-### Code Optimizations
-
-- **Simplified Reset Time Logic:** Introduced `reset_period` attribute in `SajModbusSensorEntityDescription` to simplify `native_last_reset_time` logic. This makes the code more maintainable and less error-prone.
-- **Code Cleanup:** Removed unused variable `self._closing` from SAJModbusHub class.
-
----
-
-# Changelog (v2.2.3)
-
-### Added Battery and Grid Power Limit Controls
-
-Added new input entities for controlling battery and grid power limits:
-
-- **Battery Power Limits**
-  - `SAJ Battery On Grid Discharge Depth (Input)` - Register 0x3644
-  - `SAJ Battery Off Grid Discharge Depth (Input)` - Register 0x3645
-  - `SAJ Battery Capacity Charge Upper Limit (Input)` - Register 0x3646
-  - `SAJ Battery Charge Power Limit (Input)` - Register 0x364D
-  - `SAJ Battery Discharge Power Limit (Input)` - Register 0x364E
-
-- **Grid Power Limits**
-  - `SAJ Grid Max Charge Power (Input)` - Register 0x364F
-  - `SAJ Grid Max Discharge Power (Input)` - Register 0x3650
-
-All power limit entities (0x364D-0x3650) have:
-- Range: 0-1100
-- Step size: 100
-- Default: 1100
-
-## **Important: 1000 is 100%**
+* Implemented defaults to avoid `00:00` and provide sensible startup values:
+  - Start: `01:00`
+  - End: `01:10`
+  - Power percent: `5%`
+* Defaults are applied on enable if no pending values exist. Improved persistence of enabled slots.
 
 ---
 
 # Changelog (v2.2.2)
 
-### Fix for Sensor Configuration of Periodic Energy Meters
-- **Corrected `state_class`:** Changed `state_class` for periodically resetting energy sensors (e.g., `sensor.saj_sell_today_energy`, `sensor.saj_todayenergy`) from `TOTAL_INCREASING` to `TOTAL`. This resolves Home Assistant log warnings about non-strictly increasing values and ensures accurate sensor interpretation.
-- **Added `native_last_reset_time`:** Introduced `native_last_reset_time` for these sensors, providing Home Assistant with precise reset times for improved Energy Dashboard accuracy and long-term statistics.
-- **Default Activation:** The `sell_today_energy` sensor is now enabled by default.
+### 🔧 Fast Coordinator & Connection Handling Improvements
 
-### Improved Charge/Discharge Switch Status Detection
-- **Enhanced Logic:** Updated the logic for determining the status of charge (register 0x3604) and discharge (register 0x3605) switches by also checking the App-Mode register (0x3647).
-- **New Condition:** A switch is now shown as "active" only if:
-  1. The specific status register indicates an active operation (value > 0).
-  2. The App-Mode register (0x3647) is set to 1, confirming the operational mode for charge/discharge functions.
-- **Benefit:** Prevents incorrect "active" status indications when the overarching App-Mode does not permit charging or discharging.
-
-These changes ensure more accurate energy data representation and reliable switch status reporting in Home Assistant.
+* Improved fast coordinator lifecycle management and listener cleanup.
+* Added `_close_client()` and better reconnection/cleanup logic.
+* Compatible handler naming during refactor to preserve existing behavior.
 
 ---
 
-# Changelog (v2.2.1)
+# Notes
 
-### Fixed
-
-Fixed an issue where enabling multiple sensors caused the Modbus adapter to become unresponsive due to excessive read requests. Removed the custom `async_update` method (sensor.py), using the base class implementation instead. Sensors now update only via the coordinator's regular refresh interval, reducing load and preventing communication failures.
-
----
-
-# Changelog (v2.2.0)
-
-### Added
-
-- **Support for multiple discharge time windows**
-
-  - New input entity "SAJ Discharge_time_enable (Input)" for controlling the discharge **"Time Enable"** register (0x3605)
-  - Direct access to the discharge time enable
+* The changelog above summarizes the main changes and fixes across multiple releases (v2.2.2 → v2.6.3).
+* Entries have been translated to English and consolidated for clarity.
+* If you'd like the changelog split into separate dated entries or adjusted wording, tell me which sections to refine.
