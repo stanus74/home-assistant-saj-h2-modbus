@@ -1,20 +1,23 @@
 # Changelog (v2.6.3)
 
-### 🔧 Fixed Unit Display for Passive Power Input Entities
+### 🔧 Fix for Discharge Power Percent Reset
 
-* **Removed Percentage Units:**
-  - Fixed passive power input entities to display as plain numbers instead of percentages
-  - Updated entities now show values without "%" symbol for better readability
-  - Affected entities:
-    - `SAJ Passive Grid Charge Power (Input)`
-    - `SAJ Passive Grid Discharge Power (Input)`
-    - `SAJ Passive Battery Charge Power (Input)`
-    - `SAJ Passive Battery Discharge Power (Input)`
+* **Problem:** When changing only the end time of a discharge slot, the `power_percent` was incorrectly reset to the default value of 5% instead of retaining the previously set value.
+* **Solution:** Modified `_update_day_mask_and_power` to preserve the current `power_percent` from the register when no pending `power_percent` is provided. Additionally, `_reset_pending_values` is now conditionally called only after a successful write operation in `handle_settings`.
+* **Impact:** Ensures that user-set `power_percent` values are correctly maintained for discharge slots.
 
-* **Benefits:**
-  - Cleaner UI display with numeric values only
-  - More intuitive representation of power settings
-  - Consistent with user expectations for input controls
+
+### 🔧 Default Values Implementation for Time and Power Settings
+
+* **Implemented Default Values:**
+  - Default start time for charge and discharge slots set to `01:00`.
+  - Default end time for charge and discharge slots set to `01:10`.
+  - Default power percent for charge and discharge slots set to `5%`.
+* **Ensured No 00:00 Times:** Logic prevents sending `00:00` times to Modbus.
+* **Values Applied on Enable:** Default values are now applied only when a switch is enabled and no specific pending values are set.
+* **Persistent Slots:** Enabled discharge slots maintain their status after card reload.
+* **Affected Files:** `text.py`, `switch.py`, `number.py`
+* **Benefits:** Improved user experience with sensible defaults and reliable persistence of settings.
 
 ---
 
