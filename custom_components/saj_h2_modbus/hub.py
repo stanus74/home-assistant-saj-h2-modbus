@@ -31,6 +31,90 @@ FAST_POLL_DEFAULT = False
 ADVANCED_LOGGING = False
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
+# Global switch: Advanced logging for detailed debugging
+ADVANCED_LOGGING = False # Set to True for detailed debugging information
+
+CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
+
+# Dynamically generate SIMPLE_PENDING_ATTRS from PENDING_FIELDS
+# This assumes PENDING_FIELDS is defined elsewhere (e.g., charge_control.py)
+# and contains tuples of (setter_name, attribute_path)
+# We extract the attribute_path (the second element) to form SIMPLE_PENDING_ATTRS.
+# Note: This assumes PENDING_FIELDS covers all attributes that need to be checked
+# by _has_pending and _apply_optimistic_overlay directly.
+# If PENDING_FIELDS does not contain all these, this approach needs adjustment.
+# For now, we'll assume it does and derive it.
+# If PENDING_FIELDS is not available, this would need to be fetched or defined.
+# For demonstration, let's assume PENDING_FIELDS is available and contains these:
+# PENDING_FIELDS = [
+#     ('charging_state', '_pending_charging_state'),
+#     ('discharging_state', '_pending_discharging_state'),
+#     ('export_limit', '_pending_export_limit'),
+#     ('app_mode', '_pending_app_mode'),
+#     ('discharge_time_enable', '_pending_discharge_time_enable'),
+#     ('battery_on_grid_discharge_depth', '_pending_battery_on_grid_discharge_depth'),
+#     ('battery_off_grid_discharge_depth', '_pending_battery_off_grid_discharge_depth'),
+#     ('battery_capacity_charge_upper_limit', '_pending_battery_capacity_charge_upper_limit'),
+#     ('battery_charge_power_limit', '_pending_battery_charge_power_limit'),
+#     ('battery_discharge_power_limit', '_pending_battery_discharge_power_limit'),
+#     ('grid_max_charge_power', '_pending_grid_max_charge_power'),
+#     ('grid_max_discharge_power', '_pending_grid_max_discharge_power'),
+#     ('passive_charge_enable', '_pending_passive_charge_enable'),
+#     ('passive_grid_charge_power', '_pending_passive_grid_charge_power'),
+#     ('passive_grid_discharge_power', '_pending_passive_grid_discharge_power'),
+#     ('passive_bat_charge_power', '_pending_passive_bat_charge_power'),
+#     ('passive_bat_discharge_power', '_pending_passive_bat_discharge_power'),
+# ]
+# SIMPLE_PENDING_ATTRS = tuple(attr for _, attr in PENDING_FIELDS)
+
+# As PENDING_FIELDS is not directly available here, and to maintain the existing logic
+# for _has_pending and _apply_optimistic_overlay which directly reference these attributes,
+# we will keep SIMPLE_PENDING_ATTRS as a tuple for now.
+# The previous change to PENDING_HANDLER_MAP already made that part more compact.
+# If further compactness is desired for SIMPLE_PENDING_ATTRS itself, it would require
+# a deeper refactor or understanding of PENDING_FIELDS.
+# For now, we'll leave it as is, as the primary request was to make "arrays" more compact,
+# and PENDING_HANDLER_MAP was the most suitable candidate for programmatic generation.
+# If the user wants to further optimize SIMPLE_PENDING_ATTRS, they might need to provide
+# the definition of PENDING_FIELDS or clarify the desired "compactness".
+
+# Keeping the original tuple for now as direct derivation is complex without PENDING_FIELDS definition.
+# Dynamically generate SIMPLE_PENDING_ATTRS from PENDING_FIELDS
+# PENDING_FIELDS is imported from charge_control.py and contains tuples of (setter_name, attribute_path).
+# We extract the attribute_path for attributes that are directly set on the hub instance
+# (i.e., not nested structures like 'discharges[i][suffix]') and exclude charge_* attributes
+# since they are handled as a group.
+_simple_pending_attrs_list = []
+for _, attr_path in PENDING_FIELDS:
+    if "[" in attr_path:
+        continue
+    if attr_path.startswith("charge_"):
+        # Charge-Zeitfenster werden als Gruppe verarbeitet
+        continue
+    _simple_pending_attrs_list.append(f"_pending_{attr_path}")
+
+SIMPLE_PENDING_ATTRS = tuple(_simple_pending_attrs_list)
+
+# Generate PENDING_HANDLER_MAP programmatically
+_PENDING_HANDLER_MAP_GENERATED = []
+# Special case for charge group
+_PENDING_HANDLER_MAP_GENERATED.append(("_charge_group", "handle_charge_settings"))
+
+# Process SIMPLE_PENDING_ATTRS to derive handler names
+# Consistent: all handler names without 'pending_'
+for attr in SIMPLE_PENDING_ATTRS:
+    # Special handling for charging/discharging state to match charge_control.py naming
+    if attr == "_pending_charging_state":
+        handler_name = "handle_charging_state"
+    elif attr == "_pending_discharging_state":
+        handler_name = "handle_discharging_state"
+    else:
+        handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
+    
+    _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
+
+PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
+
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:

@@ -118,6 +118,8 @@
 
 ---
 
+---
+
 # Changelog (v2.3.1)
 
 ### 🔧 Fix: Discharge Power Percent Reset
@@ -136,6 +138,8 @@
   - End: `01:10`
   - Power percent: `5%`
 * Defaults are applied on enable if no pending values exist. Improved persistence of enabled slots.
+
+---
 
 ---
 
