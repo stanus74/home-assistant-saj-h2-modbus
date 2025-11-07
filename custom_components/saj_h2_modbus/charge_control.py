@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from typing import Optional, Any, List, Dict, Tuple, Callable
 
 _LOGGER = logging.getLogger(__name__)
@@ -277,61 +278,196 @@ class ChargeSettingHandler:
         self._handlers["_pending_discharging_state"] = self.handle_discharging_state
         _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
     
+    # ========== HELPER METHODS ==========
+    
+    def _is_valid_time_format(self, time_str: str) -> bool:
+        """Validates time format HH:MM."""
+        if not isinstance(time_str, str):
+            return False
+        
+        parts = time_str.split(":")
+        if len(parts) != 2:
+            return False
+        
+        try:
+            hours, minutes = map(int, parts)
+            return 0 <= hours < 24 and 0 <= minutes < 60
+        except (ValueError, TypeError):
+            return False
+
     # ========== STATISCHE HANDLER (Charge-Einstellungen) ==========
     
     async def _handle_charge_group(self) -> bool:
         """Direct handler for charge group settings.
         
-        Processes all charge settings as a group:
-        - start time
-        - end time
-        - day_mask
-        - power_percent
+        Writes charge settings WITHOUT checking if charging is enabled.
+        State will be enabled afterwards by power state handler.
+        
+        Only pending values are written - no reading from Modbus needed.
         """
-        await self.handle_charge_settings()
-        return True
+        _LOGGER.debug("Processing _handle_charge_group")
+        
+        # Werte aus Pending abrufen UND LOGGEN
+        start = self._hub._pending_charge_start
+        end = self._hub._pending_charge_end
+        power = self._hub._pending_charge_power_percent
+        days = self._hub._pending_charge_day_mask
+        
+        # DEBUG: Log all pending values
+        _LOGGER.info(
+            f"[CHARGE DEBUG] Pending values at handler entry: "
+            f"start={start}, end={end}, power={power}, days={days}"
+        )
+
+        # Check if ANY value is pending (at least one must be set)
+        if start is None and end is None and power is None and days is None:
+            _LOGGER.debug("No charge settings pending, skipping write.")
+            # Clear pending values
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
+
+        # Validierung der Werte (nur die gesetzten)
+        if start is not None and not self._is_valid_time_format(start):
+            _LOGGER.error(f"Ungültiges Zeitformat für Start: {start}")
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
+        
+        if end is not None and not self._is_valid_time_format(end):
+            _LOGGER.error(f"Ungültiges Zeitformat für Ende: {end}")
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
+        
+        if power is not None and not (0 <= power <= 100):
+            _LOGGER.error(f"Ungültiger Leistungsbereich: {power}%. Erwartet 0-100.")
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
+        
+        if days is not None and not (0 <= days <= 127):
+            _LOGGER.error(f"Ungültige Tagesmaske: {days}. Erwartet 0-127.")
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
+
+        # Schreiben der Werte (NUR die gesetzten)
+        try:
+            # Write start time if pending
+            if start is not None:
+                await self._write_time_register(REGISTERS["charge"]["start_time"], start, "charge start time")
+            
+            # Write end time if pending
+            if end is not None:
+                await self._write_time_register(REGISTERS["charge"]["end_time"], end, "charge end time")
+            
+            # Write power/day_mask if at least one is pending
+            if power is not None or days is not None:
+                await self._update_day_mask_and_power(
+                    REGISTERS["charge"]["day_mask_power"], 
+                    days,  # None if not changed
+                    power, # None if not changed
+                    "charge day mask and power"
+                )
+            
+            # Log what was written
+            changed = []
+            if start is not None:
+                changed.append(f"start={start}")
+            if end is not None:
+                changed.append(f"end={end}")
+            if power is not None:
+                changed.append(f"power={power}%")
+            if days is not None:
+                changed.append(f"days={days}")
+            
+            _LOGGER.info(f"Charging-Konfiguration geschrieben: {', '.join(changed)}")
+            
+            # Clear pending values AFTER successful write
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return True
+        except Exception as e:
+            _LOGGER.error(f"Fehler beim Schreiben der Charging-Konfiguration: {e}", exc_info=True)
+            # Clear on write error (prevents endless retry)
+            self._hub._pending_charge_start = None
+            self._hub._pending_charge_end = None
+            self._hub._pending_charge_power_percent = None
+            self._hub._pending_charge_day_mask = None
+            return False
 
     async def handle_settings(self, mode: str, label: str) -> None:
-        """Handles settings dynamically based on mode."""
+        """Handles settings dynamically based on mode.
+        
+        Writes discharge settings WITHOUT checking if discharging is enabled.
+        State will be enabled afterwards by power state handler (if pending).
+        """
         _LOGGER.info(f"[PENDING DEBUG] handle_settings called for mode={mode}, label={label}")
+        
+        if mode == "charge":
+            _LOGGER.warning("handle_settings called for 'charge', use _handle_charge_group instead.")
+            return
+
         try:
             registers = REGISTERS[mode]
             _LOGGER.info(f"[PENDING DEBUG] Registers for {mode}: {registers}")
 
-            for attr in ["start", "end"]:
-                if mode.startswith("discharge"):
-                    index = int(mode.replace("discharge", "")) - 1
-                    value = self._hub._pending_discharges[index][attr]
+            # For discharge slots, we need to get the pending values from the _pending_discharges list
+            index = int(mode.replace("discharge", "")) - 1
+            slot_pending = self._hub._pending_discharges[index]
+
+            start_value = slot_pending.get("start")
+            end_value = slot_pending.get("end")
+            day_mask_value = slot_pending.get("day_mask")
+            power_percent_value = slot_pending.get("power_percent")
+
+            # Only write if there are pending values for this slot
+            if not any(v is not None for v in [start_value, end_value, day_mask_value, power_percent_value]):
+                _LOGGER.debug(f"No pending values for discharge slot {index+1}, skipping write.")
+                return
+
+            # Write start and end times if available
+            if start_value is not None:
+                if not self._is_valid_time_format(start_value):
+                    _LOGGER.error(f"Ungültiges Zeitformat für Start ({start_value}) von {label}.")
                 else:
-                    value = getattr(self._hub, f"_pending_{mode}_{attr}", None)
-
-                if value is not None:
-                    reg_key = f"{attr}_time"
-                    _LOGGER.info(f"[PENDING DEBUG] Writing {attr} time: {value}")
-                    await self._write_time_register(
-                        registers[reg_key], value, f"{label} {attr}"
-                    )
-
-            day_mask_value = None
-            power_percent_value = None
-            if mode.startswith("discharge"):
-                index = int(mode.replace("discharge", "")) - 1
-                day_mask_value = self._hub._pending_discharges[index].get("day_mask")
-                power_percent_value = self._hub._pending_discharges[index].get("power_percent")
-            else:
-                day_mask_value = getattr(self._hub, f"_pending_{mode}_day_mask", None)
-                power_percent_value = getattr(self._hub, f"_pending_{mode}_power_percent", None)
+                    _LOGGER.info(f"[PENDING DEBUG] Writing start time: {start_value}")
+                    await self._write_time_register(registers["start_time"], start_value, f"{label} start")
             
-            _LOGGER.info(
-                f"[PENDING DEBUG] handle_settings for {label}: "
-                f"day_mask={day_mask_value}, power_percent={power_percent_value}"
-            )
+            if end_value is not None:
+                if not self._is_valid_time_format(end_value):
+                    _LOGGER.error(f"Ungültiges Zeitformat für Ende ({end_value}) von {label}.")
+                else:
+                    _LOGGER.info(f"[PENDING DEBUG] Writing end time: {end_value}")
+                    await self._write_time_register(registers["end_time"], end_value, f"{label} end")
 
+            # Handle day mask and power percent
             if "day_mask_power" in registers:
+                # If day_mask is not explicitly set, use 127 (all days)
+                effective_day_mask = day_mask_value if day_mask_value is not None else 127
+                
+                # Validate power_percent
+                if power_percent_value is not None and not (0 <= power_percent_value <= 100):
+                    _LOGGER.error(f"Ungültiger Leistungsbereich für {label}: {power_percent_value}%. Erwartet 0-100.")
+                    power_percent_value = None
+
                 _LOGGER.info(f"[PENDING DEBUG] Calling _update_day_mask_and_power for {label}")
                 await self._update_day_mask_and_power(
                     registers["day_mask_power"],
-                    day_mask_value,
+                    effective_day_mask,
                     power_percent_value,
                     label,
                 )
@@ -340,15 +476,16 @@ class ChargeSettingHandler:
 
         except Exception as e:
             _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
-            # Do not reset pending values if there was an error during handling
-            return # Exit the function if an error occurred
+            return
 
-        # Reset pending values only if no exception occurred and the operation was successful
+        # Reset pending values for this specific discharge slot
         _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
         self._reset_pending_values(mode)
 
     async def handle_charge_settings(self) -> None:
-        await self.handle_settings("charge", "charge")
+        # This method is now deprecated, _handle_charge_group is the direct handler
+        _LOGGER.warning("handle_charge_settings wurde aufgerufen, sollte aber _handle_charge_group verwenden. Ignoriere.")
+        pass
 
     async def handle_discharge_settings_by_index(self, index: int) -> None:
         mode = f"discharge{index}"
@@ -474,7 +611,9 @@ class ChargeSettingHandler:
             if ok:
                 self._hub.inverter_data["is_charging"] = bool(desired)
                 _LOGGER.info(f"Successfully wrote charging state: {desired}")
+                # Clear immediately after successful write
                 self._hub._pending_charging_state = None
+                _LOGGER.debug("Cleared _pending_charging_state after successful write")
         except Exception as e:
             _LOGGER.error(
                 "Error writing charging_state to register %s: %s", hex(addr), e
@@ -510,16 +649,20 @@ class ChargeSettingHandler:
             ok = await self._hub._write_register(addr, 0)
             if not ok:
                 _LOGGER.error("Failed to write 0 to register 0x3605")
+            else:
+                # Clear immediately after successful write
+                self._hub._pending_discharging_state = None
+                _LOGGER.debug("Cleared _pending_discharging_state after successful write (OFF)")
         # If discharging is being turned ON, do NOT write to 0x3605
         # The slots are controlled by discharge_time_enable (bitmask)
         else:
             _LOGGER.debug("Discharging turned ON, slots controlled by discharge_time_enable")
+            # Clear pending state even when not writing (ON state doesn't write register)
+            self._hub._pending_discharging_state = None
+            _LOGGER.debug("Cleared _pending_discharging_state (ON state, no write needed)")
         
         # Get current charging state
         chg = await self._hub.get_charging_state()
-        
-        # Clear pending state
-        self._hub._pending_discharging_state = None
         
         # Update AppMode based on both charging and discharging states
         await self._handle_power_state(charge_state=chg, discharge_state=desired)
@@ -529,6 +672,7 @@ class ChargeSettingHandler:
         charge_state: Optional[bool] = None,
         discharge_state: Optional[bool] = None,
     ) -> None:
+        """Update AppMode based on charging/discharging states."""
         chg, dchg = await asyncio.gather(
             (
                 self._hub.get_charging_state()

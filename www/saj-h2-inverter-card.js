@@ -253,27 +253,31 @@ class SajH2InverterCard extends HTMLElement {
     const chargeDayMask = parseInt(mask.state) || 0;
     const chargePower = parseInt(power.state) || 0;
     const chargingEnabled = sw.state === 'on';
-    // Read pending_write status directly from the hass object
     const pendingWrite = sw.attributes?.pending_write === true;
+
+    // Only disable inputs during Modbus transfer (pending write), NOT when disabled
+    const inputsDisabled = pendingWrite;
 
     const html = `
       <div class="section charging-section">
-        <div class="section-header">Charging Settings (Version 1.1.7)</div>
+        <div class="section-header">Charging Settings</div>
+        ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. Settings can be edited and will be applied when enabled.</div>' : ''}
+        ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
           <div class="subsection-header">Charging Time & Power</div>
           <div class="time-power-container">
             <div class="time-power-row">
-              ${this._renderTimeSelects('charge', chargeStart, chargeEnd, chargePower, pendingWrite)}
+              ${this._renderTimeSelects('charge', chargeStart, chargeEnd, chargePower, inputsDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="charge-power" class="power-slider" min="0" max="25" step="1" value="${chargePower}" ${pendingWrite ? 'disabled' : ''} />
+              <input type="range" id="charge-power" class="power-slider" min="0" max="25" step="1" value="${chargePower}" ${inputsDisabled ? 'disabled' : ''} />
             </div>
           </div>
         </div>
         <div class="subsection">
           <div class="subsection-header">Charging Days</div>
           <div class="days-selection">
-            ${this._renderDayCheckboxes('charge', chargeDayMask, pendingWrite)}
+            ${this._renderDayCheckboxes('charge', chargeDayMask, inputsDisabled)}
           </div>
         </div>
         <div class="subsection">
@@ -297,11 +301,14 @@ class SajH2InverterCard extends HTMLElement {
     }
 
     const dischargingEnabled = sw.state === 'on';
-    // Read pending_write status directly from the hass object
     const pendingWrite = sw.attributes?.pending_write === true;
     const timeEnableValue = parseInt(timeEnableEntity.state) || 0;
-    let slotErrors = [];
+    
+    // Only disable slot settings during Modbus transfer (pending write), NOT when disabled
+    const inputsDisabled = pendingWrite;
 
+    // Collect slot configuration and errors
+    let slotErrors = [];
     const slots = (this._entities.dischargeSlots || []).map((slotConfig, i) => {
       if (!slotConfig) return { index: i, valid: false };
 
@@ -328,18 +335,16 @@ class SajH2InverterCard extends HTMLElement {
     const visibleSlots = this._showAllSlots ? slots : slots.slice(0, 1);
     const hiddenSlotsCount = slots.length - visibleSlots.length;
     
-    let slotHtml = visibleSlots.map(s => this._renderDischargeSlot(s, pendingWrite)).join('');
+    let slotHtml = visibleSlots.map(s => this._renderDischargeSlot(s, inputsDisabled)).join('');
     if (slotErrors.length > 0) {
         slotHtml = `<ha-alert alert-type="warning" title="Discharge Slot Entity Errors">${slotErrors.join('; ')}</ha-alert>` + slotHtml;
     }
 
-    // "Show more Slots" Button nur anzeigen wenn Slots versteckt sind
     const showMoreButton = hiddenSlotsCount > 0 ? `
       <button id="show-more-slots" class="show-more-button">
         Show ${hiddenSlotsCount} more Slot${hiddenSlotsCount > 1 ? 's' : ''}
       </button>` : '';
     
-    // "Show less Slots" Button nur anzeigen wenn alle Slots sichtbar sind
     const showLessButton = this._showAllSlots ? `
       <button id="show-less-slots" class="show-more-button">
         Show less Slots
@@ -348,6 +353,8 @@ class SajH2InverterCard extends HTMLElement {
     const html = `
       <div class="section discharging-section">
         <div class="section-header">Discharging Settings</div>
+        ${!dischargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Discharging is currently disabled. Settings can be edited and will be applied when enabled.</div>' : ''}
+        ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
           <div class="subsection-header">Discharge Time Slots</div>
           <div class="discharge-slots">
@@ -371,9 +378,9 @@ class SajH2InverterCard extends HTMLElement {
     }
     // Check if the timeEnable entity itself is pending
     const timeEnablePending = this._hass.states[this._entities.timeEnable]?.attributes?.pending_write === true;
-    // Controls inside the slot are disabled if parent switch OR timeEnable is pending, OR if slot is not enabled
-    const contentDisabled = parentPendingWrite || timeEnablePending || !slot.enabled;
-    // The slot's enable checkbox is disabled only if parent OR timeEnable is pending
+    // Controls inside the slot are disabled ONLY during Modbus transfer (pending write)
+    // They remain enabled even if slot is not enabled - user can configure while disabled
+    const contentDisabled = parentPendingWrite || timeEnablePending;
     const checkboxDisabled = parentPendingWrite || timeEnablePending;
 
     return `
@@ -940,7 +947,7 @@ class SajH2InverterCard extends HTMLElement {
       .power-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 40px; box-sizing: border-box; }
       .power-value {
         display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px;
-        border: 1px solid var(--input-ink-color, var(--divider-color)); border-radius: 8px;
+        border: 1px solid var(--input-ink-color, var,--divider-color)); border-radius: 8px;
         background-color: var(--input-fill-color, var,--card-background-color)); font-size: 1.1em; font-weight: 500;
         color: var(--primary-text-color); min-width: 60px; min-height: 40px; box-sizing: border-box; text-align: center;
         transition: background-color 0.2s ease, border-color 0.2s ease;
