@@ -7,7 +7,7 @@
  * - Protects specific input interactions (time, range) from disruptive re-renders.
  *
  * @author stanu74 
- * @version 1.1.5
+ * @version 1.1.6
  */
 
 class SajH2InverterCard extends HTMLElement {
@@ -39,7 +39,7 @@ class SajH2InverterCard extends HTMLElement {
   constructor() {
     super();
 
-    console.log(`[SAJ H2 Inverter Card] Version: 1.1.5`);
+    console.log(`[SAJ H2 Inverter Card] Version: 1.1.6`);
     
     this.attachShadow({ mode: 'open' }); // Attach Shadow DOM
     
@@ -260,7 +260,7 @@ class SajH2InverterCard extends HTMLElement {
 
     const html = `
       <div class="section charging-section">
-        <div class="section-header">Charging Settings</div>
+        <div class="section-header">Charging Settings (Version 1.1.6)</div>
         ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. Settings can be edited and will be applied when enabled.</div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
@@ -532,7 +532,7 @@ class SajH2InverterCard extends HTMLElement {
     // Charge Time Inputs
     this._setupTimeListeners('charge', this._entities.chargeStart, this._entities.chargeEnd);
 
-    // Charge Power Slider
+    // Charge Power Slider - MIT DEBOUNCING
     const slider = q('#charge-power');
     if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -542,8 +542,8 @@ class SajH2InverterCard extends HTMLElement {
              if (powerValueDisplay) powerValueDisplay.textContent = `${value}%`;
              this._updateSingleSliderStyle(slider); // Update track fill
         });
-         slider.addEventListener('change', e => { // Send value to HA only on change (release)
-             this._setEntityValue(this._entities.chargePower, parseInt(e.target.value, 10), 'number');
+         slider.addEventListener('change', e => { // Send value to HA with debouncing (release)
+             this._debouncedSliderChange('charge-power', this._entities.chargePower, e.target.value, 800);
          });
     }
 
@@ -635,7 +635,7 @@ class SajH2InverterCard extends HTMLElement {
       // Slot Time Inputs
       this._setupTimeListeners(`slot-${i}`, slotConfig.startTime, slotConfig.endTime);
 
-      // Slot Power Slider
+      // Slot Power Slider - MIT DEBOUNCING
       const slider = q(`#slot-${i}-power`);
       if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -645,8 +645,8 @@ class SajH2InverterCard extends HTMLElement {
           if (powerValueDisplay) powerValueDisplay.textContent = `${value}%`;
           this._updateSingleSliderStyle(slider); // Update track fill
         });
-        slider.addEventListener('change', e => { // Send value to HA only on change (release)
-          this._setEntityValue(slotConfig.power, parseInt(e.target.value, 10), 'number');
+        slider.addEventListener('change', e => { // Send value to HA with debouncing (release)
+          this._debouncedSliderChange(`slot-${i}-power`, slotConfig.power, e.target.value, 800);
         });
       }
 

@@ -410,17 +410,15 @@ class ChargeSettingHandler:
             return False
 
     async def handle_settings(self, mode: str, label: str) -> None:
-        """Handles settings dynamically based on mode.
-        
-        Writes discharge settings WITHOUT checking if discharging is enabled.
-        State will be enabled afterwards by power state handler (if pending).
-        """
+        """Handles settings dynamically based on mode."""
         _LOGGER.info(f"[PENDING DEBUG] handle_settings called for mode={mode}, label={label}")
         
-        if mode == "charge":
-            _LOGGER.warning("handle_settings called for 'charge', use _handle_charge_group instead.")
-            return
-
+        # Diese Prüfung ist überflüssig, da handle_settings NUR für Discharge-Slots aufgerufen wird
+        # if mode == "charge":
+        #     _LOGGER.warning("handle_settings called for 'charge', use _handle_charge_group instead.")
+        #     return
+        
+        # Mode ist IMMER "discharge1" bis "discharge7" → Prüfung kann weg
         try:
             registers = REGISTERS[mode]
             _LOGGER.info(f"[PENDING DEBUG] Registers for {mode}: {registers}")
@@ -481,11 +479,6 @@ class ChargeSettingHandler:
         # Reset pending values for this specific discharge slot
         _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
         self._reset_pending_values(mode)
-
-    async def handle_charge_settings(self) -> None:
-        # This method is now deprecated, _handle_charge_group is the direct handler
-        _LOGGER.warning("handle_charge_settings wurde aufgerufen, sollte aber _handle_charge_group verwenden. Ignoriere.")
-        pass
 
     async def handle_discharge_settings_by_index(self, index: int) -> None:
         mode = f"discharge{index}"
