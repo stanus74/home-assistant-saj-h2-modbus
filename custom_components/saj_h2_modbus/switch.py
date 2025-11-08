@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from homeassistant.components.switch import SwitchEntity
@@ -57,11 +58,44 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        # Use coordinator.data which will fall back to inverter_data if None
-        coordinator_data = self.coordinator.data
-        if coordinator_data is None:
-            coordinator_data = self._hub.inverter_data
-        return coordinator_data.get(f"{self._switch_type}_enabled", False)
+        """Return true if switch is on.
+        
+        Uses cached derived state that checks BOTH raw register value AND AppMode (0x3647).
+        This ensures the switch only shows "on" when BOTH conditions are met:
+        - charging_enabled (0x3604) > 0 OR discharging_enabled (0x3605 bitmask) > 0
+        - AppMode (0x3647) == 1
+        
+        This is a SYNCHRONOUS property and must not block - reads from cached inverter_data.
+        """
+        try:
+            data = self._hub.inverter_data
+            
+            if self._switch_type == "charging":
+                # Check BOTH charging_enabled (0x3604) AND AppMode (0x3647)
+                charging_enabled = data.get("charging_enabled")
+                app_mode = data.get("AppMode")
+                
+                if charging_enabled is None or app_mode is None:
+                    return False
+                
+                return bool(charging_enabled > 0 and app_mode == 1)
+                
+            elif self._switch_type == "discharging":
+                # Check BOTH discharging_enabled (0x3605 bitmask) AND AppMode (0x3647)
+                discharging_enabled = data.get("discharging_enabled")
+                app_mode = data.get("AppMode")
+                
+                if discharging_enabled is None or app_mode is None:
+                    return False
+                
+                return bool(discharging_enabled > 0 and app_mode == 1)
+                
+        except Exception as e:
+            _LOGGER.warning(f"Error getting {self._switch_type} state: {e}")
+            return False
+        
+        # Fallback (should never reach here with current switch types)
+        return False
 
     @property
     def available(self) -> bool:
@@ -103,8 +137,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             self.async_write_ha_state()
             _LOGGER.debug(
                 f"Pending {self._switch_type} setting will be processed in next update cycle "
-                f"(pending settings will be written to Modbus if mode is enabled)"
-            )
+                     )
         except Exception as e:
             _LOGGER.error(f"Failed to set {self._switch_type} state: {e}")
             raise

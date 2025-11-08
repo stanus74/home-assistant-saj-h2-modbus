@@ -29,6 +29,3 @@ Skipping this step may result in a broken or outdated InverterCard!
 ✅ Make sure the **correct InverterCard version number** appears in the card header.
 ❌ If it doesn't, you're still using a cached (old) version.
 
----
-
-Let me know if you'd like this as a downloadable file or styled component.
