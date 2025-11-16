@@ -1,15 +1,9 @@
-### ⚠️ Important Notice – New InverterCard Version
+## ⚠️ Important Notice – New InverterCard Version
+
 
 To avoid inconsistent system states caused by using the **InverterCard simultaneously in a browser and the Home Assistant smartphone app**, the card has been reworked.
 
-#### 🔧 New Behavior:
-
-* **Start time, end time, power, and energy** are now written periodically once set.
-* **Charging/Discharging Enable or Disable** must be **explicitly confirmed by pressing the button** – this acts as a manual confirmation.
-
----
-
-#### 🔁 Cache Notice – Required After Updating the InverterCard:
+### 🔁 Cache Notice – Required After Updating the InverterCard:
 
 ##### 📱 **For Home Assistant App Users (Smartphones):**
 
@@ -29,3 +23,4 @@ Skipping this step may result in a broken or outdated InverterCard!
 ✅ Make sure the **correct InverterCard version number** appears in the card header.
 ❌ If it doesn't, you're still using a cached (old) version.
 
+---
