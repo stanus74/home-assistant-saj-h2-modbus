@@ -12,20 +12,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-TEXT_DEFINITIONS = [
-    {
-        "key": "charge_start_time",
-        "name": "Charge Start Time",
-        "unique_id_suffix": "_charge_start_time",
-        "setter": "set_charge_start",
-    },
-    {
-        "key": "charge_end_time",
-        "name": "Charge End Time",
-        "unique_id_suffix": "_charge_end_time",
-        "setter": "set_charge_end",
-    },
-]
+# Removed old TEXT_DEFINITIONS - now handled dynamically
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -38,16 +25,31 @@ async def async_setup_entry(
 
     entities = []
 
-    # Add charge entities
-    for desc in TEXT_DEFINITIONS:
-        entity = SajTimeTextEntity(
-            hub=hub,
-            name=f"SAJ {desc['name']} (Time)",
-            unique_id=f"{hub.name}{desc['unique_id_suffix']}",
-            set_method=getattr(hub, desc["setter"]),
-            device_info=device_info
-        )
-        entities.append(entity)
+    # Add charge entities for indices 1-7
+    for i in range(1, 8):
+        prefix = str(i)
+        for desc in [
+            {
+                "key": f"charge{prefix}_start_time",
+                "name": f"Charge{prefix} Start Time",
+                "unique_id_suffix": f"_charge{prefix}_start_time",
+                "setter": f"set_charge{prefix}_start",
+            },
+            {
+                "key": f"charge{prefix}_end_time",
+                "name": f"Charge{prefix} End Time",
+                "unique_id_suffix": f"_charge{prefix}_end_time",
+                "setter": f"set_charge{prefix}_end",
+            },
+        ]:
+            entity = SajTimeTextEntity(
+                hub=hub,
+                name=f"SAJ {desc['name']} (Time)",
+                unique_id=f"{hub.name}{desc['unique_id_suffix']}",
+                set_method=getattr(hub, desc["setter"]),
+                device_info=device_info
+            )
+            entities.append(entity)
 
     # Discharge Start/End Time Entities (1-7)
     for i in range(1, 8):

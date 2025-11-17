@@ -12,7 +12,8 @@ HANDLER_RETRY_DELAY = 1.0  # seconds
 # --- Definitions for Pending Setter ---
 PENDING_FIELDS: List[tuple[str, str]] = (
     [
-        (f"charge_{suffix}", f"charge_{suffix}")
+        (f"charge{i}_{suffix}", f"charges[{i-1}][{suffix}]")
+        for i in range(1, 8)
         for suffix in ["start", "end", "day_mask", "power_percent"]
     ]
     + [
@@ -25,6 +26,7 @@ PENDING_FIELDS: List[tuple[str, str]] = (
         ("charging", "charging_state"),
         ("discharging", "discharging_state"),
         ("app_mode", "app_mode"),
+        ("charge_time_enable", "charge_time_enable"),
         ("discharge_time_enable", "discharge_time_enable"),
         ("battery_on_grid_discharge_depth", "battery_on_grid_discharge_depth"),
         ("battery_off_grid_discharge_depth", "battery_off_grid_discharge_depth"),
@@ -42,14 +44,18 @@ PENDING_FIELDS: List[tuple[str, str]] = (
 )
 
 # --- Centralized Modbus Address Definitions ---
+CHARGE_BLOCK_START_ADDRESSES = [0x3606 + i * 3 for i in range(7)]
 DISCHARGE_BLOCK_START_ADDRESSES = [0x361B + i * 3 for i in range(7)]
 
 # --- Register Definitions ---
 REGISTERS = {
-    "charge": {
-        "start_time": 0x3606,
-        "end_time": 0x3607,
-        "day_mask_power": 0x3608,
+    **{
+        f"charge{i+1}": {
+            "start_time": CHARGE_BLOCK_START_ADDRESSES[i],
+            "end_time": CHARGE_BLOCK_START_ADDRESSES[i] + 1,
+            "day_mask_power": CHARGE_BLOCK_START_ADDRESSES[i] + 2,
+        }
+        for i in range(7)
     },
     **{
         f"discharge{i+1}": {
@@ -62,13 +68,9 @@ REGISTERS = {
     "export_limit": 0x365A,
     "app_mode": 0x3647,
     "charging_state": 0x3604,
-    # Register 0x3605 is a BITMASK for discharge slot enable:
-    # Bit 0 (value 1) = Discharge Slot 1 enabled
-    # Bit 1 (value 2) = Discharge Slot 2 enabled
-    # Bit 2 (value 4) = Discharge Slot 3 enabled
-    # etc. Value 3 = Slots 1+2 enabled
+    "charge_time_enable": 0x3604,
     "discharging_state": 0x3605,
-    "discharge_time_enable": 0x3605,  # Same register - bitmask for slot enable
+    "discharge_time_enable": 0x3605,
     "battery_on_grid_discharge_depth": 0x3644,
     "battery_off_grid_discharge_depth": 0x3645,
     "battery_capacity_charge_upper_limit": 0x3646,
@@ -85,10 +87,15 @@ REGISTERS = {
 
 # Mapping of simple pending attributes to their register addresses and labels
 # NOTE: discharge_time_enable shares register 0x3605 with discharging_state (bitmask)
+# NOTE: charge_time_enable shares register 0x3604 with charging_state
 # Both handlers need to coordinate writes to avoid conflicts
 SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
     "export_limit": (REGISTERS["export_limit"], "export limit"),
     "app_mode": (REGISTERS["app_mode"], "app mode"),
+    "charge_time_enable": (
+        REGISTERS["charge_time_enable"],
+        "charge time enable",
+    ),
     "discharge_time_enable": (
         REGISTERS["discharge_time_enable"],
         "discharge time enable (bitmask)",
@@ -220,15 +227,7 @@ def make_pending_setter(attr_path: str):
 
 
 class ChargeSettingHandler:
-    """Handler für alle Charge/Discharge-Settings mit Decorator-Pattern.
-    
-    Handler registrieren sich selbst via @_register_handler(pending_attr_name).
-    Dies ermöglicht:
-    - Explizite Registrierung ohne Magic-Strings
-    - Einfaches Hinzufügen neuer Handler
-    - Zentrale Verwaltung ohne externe Maps
-    - Bessere Fehlerbehandlung
-    """
+    """Handler für alle Charge/Discharge-Settings mit Decorator-Pattern."""
     
     def __init__(self, hub):
         self._hub = hub
@@ -267,11 +266,7 @@ class ChargeSettingHandler:
             self._handlers[pending_attr] = bound_handler
             _LOGGER.debug(f"Registered dynamic handler for '{pending_attr}'")
         
-        # 2. Spezialfälle: Charge-Gruppe
-        self._handlers["_charge_group"] = self._handle_charge_group
-        _LOGGER.debug("Registered special handler for '_charge_group'")
-        
-        # 3. Spezialfälle: Power State Handler
+        # 2. Spezialfälle: Power State Handler
         self._handlers["_pending_charging_state"] = self.handle_charging_state
         _LOGGER.debug("Registered special handler for '_pending_charging_state'")
         
@@ -295,137 +290,24 @@ class ChargeSettingHandler:
         except (ValueError, TypeError):
             return False
 
-    # ========== STATISCHE HANDLER (Charge-Einstellungen) ==========
-    
-    async def _handle_charge_group(self) -> bool:
-        """Direct handler for charge group settings.
-        
-        Writes charge settings WITHOUT checking if charging is enabled.
-        State will be enabled afterwards by power state handler.
-        
-        Only pending values are written - no reading from Modbus needed.
-        """
-        _LOGGER.debug("Processing _handle_charge_group")
-        
-        # Werte aus Pending abrufen UND LOGGEN
-        start = self._hub._pending_charge_start
-        end = self._hub._pending_charge_end
-        power = self._hub._pending_charge_power_percent
-        days = self._hub._pending_charge_day_mask
-        
-        # DEBUG: Log all pending values
-        _LOGGER.info(
-            f"[CHARGE DEBUG] Pending values at handler entry: "
-            f"start={start}, end={end}, power={power}, days={days}"
-        )
-
-        # Check if ANY value is pending (at least one must be set)
-        if start is None and end is None and power is None and days is None:
-            _LOGGER.debug("No charge settings pending, skipping write.")
-            # Clear pending values
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
-
-        # Validierung der Werte (nur die gesetzten)
-        if start is not None and not self._is_valid_time_format(start):
-            _LOGGER.error(f"Ungültiges Zeitformat für Start: {start}")
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
-        
-        if end is not None and not self._is_valid_time_format(end):
-            _LOGGER.error(f"Ungültiges Zeitformat für Ende: {end}")
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
-        
-        if power is not None and not (0 <= power <= 100):
-            _LOGGER.error(f"Ungültiger Leistungsbereich: {power}%. Erwartet 0-100.")
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
-        
-        if days is not None and not (0 <= days <= 127):
-            _LOGGER.error(f"Ungültige Tagesmaske: {days}. Erwartet 0-127.")
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
-
-        # Schreiben der Werte (NUR die gesetzten)
-        try:
-            # Write start time if pending
-            if start is not None:
-                await self._write_time_register(REGISTERS["charge"]["start_time"], start, "charge start time")
-            
-            # Write end time if pending
-            if end is not None:
-                await self._write_time_register(REGISTERS["charge"]["end_time"], end, "charge end time")
-            
-            # Write power/day_mask if at least one is pending
-            if power is not None or days is not None:
-                await self._update_day_mask_and_power(
-                    REGISTERS["charge"]["day_mask_power"], 
-                    days,  # None if not changed
-                    power, # None if not changed
-                    "charge day mask and power"
-                )
-            
-            # Log what was written
-            changed = []
-            if start is not None:
-                changed.append(f"start={start}")
-            if end is not None:
-                changed.append(f"end={end}")
-            if power is not None:
-                changed.append(f"power={power}%")
-            if days is not None:
-                changed.append(f"days={days}")
-            
-            _LOGGER.info(f"Charging-Konfiguration geschrieben: {', '.join(changed)}")
-            
-            # Clear pending values AFTER successful write
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return True
-        except Exception as e:
-            _LOGGER.error(f"Fehler beim Schreiben der Charging-Konfiguration: {e}", exc_info=True)
-            # Clear on write error (prevents endless retry)
-            self._hub._pending_charge_start = None
-            self._hub._pending_charge_end = None
-            self._hub._pending_charge_power_percent = None
-            self._hub._pending_charge_day_mask = None
-            return False
+    # ========== STATISCHE HANDLER (Charge-Einstellungen) - REMOVED ==========
+    # _handle_charge_group is no longer needed - replaced by handle_charge_settings_by_index
 
     async def handle_settings(self, mode: str, label: str) -> None:
-        """Handles settings dynamically based on mode."""
+        """Handles settings dynamically based on mode (charge1-7 or discharge1-7)."""
         _LOGGER.info(f"[PENDING DEBUG] handle_settings called for mode={mode}, label={label}")
         
-        # Diese Prüfung ist überflüssig, da handle_settings NUR für Discharge-Slots aufgerufen wird
-        # if mode == "charge":
-        #     _LOGGER.warning("handle_settings called for 'charge', use _handle_charge_group instead.")
-        #     return
-        
-        # Mode ist IMMER "discharge1" bis "discharge7" → Prüfung kann weg
         try:
             registers = REGISTERS[mode]
             _LOGGER.info(f"[PENDING DEBUG] Registers for {mode}: {registers}")
 
-            # For discharge slots, we need to get the pending values from the _pending_discharges list
-            index = int(mode.replace("discharge", "")) - 1
-            slot_pending = self._hub._pending_discharges[index]
+            # Determine if this is a charge or discharge slot
+            if mode.startswith("charge"):
+                index = int(mode.replace("charge", "")) - 1
+                slot_pending = self._hub._pending_charges[index]
+            else:  # discharge
+                index = int(mode.replace("discharge", "")) - 1
+                slot_pending = self._hub._pending_discharges[index]
 
             start_value = slot_pending.get("start")
             end_value = slot_pending.get("end")
@@ -434,7 +316,7 @@ class ChargeSettingHandler:
 
             # Only write if there are pending values for this slot
             if not any(v is not None for v in [start_value, end_value, day_mask_value, power_percent_value]):
-                _LOGGER.debug(f"No pending values for discharge slot {index+1}, skipping write.")
+                _LOGGER.debug(f"No pending values for {mode}, skipping write.")
                 return
 
             # Write start and end times if available
@@ -476,26 +358,34 @@ class ChargeSettingHandler:
             _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
             return
 
-        # Reset pending values for this specific discharge slot
+        # Reset pending values for this specific slot
         _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
         self._reset_pending_values(mode)
 
+    async def handle_charge_settings_by_index(self, index: int) -> None:
+        """Handle charge settings for a specific slot index (1-7)."""
+        mode = f"charge{index}"
+        await self.handle_settings(mode, mode)
+
     async def handle_discharge_settings_by_index(self, index: int) -> None:
+        """Handle discharge settings for a specific slot index (1-7)."""
         mode = f"discharge{index}"
         await self.handle_settings(mode, mode)
 
     def _reset_pending_values(self, mode: str) -> None:
+        """Reset pending values for a charge or discharge slot."""
         attributes = ["start", "end", "day_mask", "power_percent"]
-        if mode.startswith("discharge"):
+        if mode.startswith("charge"):
+            index = int(mode.replace("charge", "")) - 1
+            for attr in attributes:
+                self._hub._pending_charges[index][attr] = None
+        elif mode.startswith("discharge"):
             index = int(mode.replace("discharge", "")) - 1
             for attr in attributes:
                 self._hub._pending_discharges[index][attr] = None
-        else:
-            for attr in attributes:
-                pending_attr = f"_pending_{mode}_{attr}"
-                if hasattr(self._hub, pending_attr):
-                    setattr(self._hub, pending_attr, None)
 
+    # ========== HELPER METHODS (Reading/Writing Registers) ==========
+    
     async def _update_day_mask_and_power(
         self,
         address: int,
@@ -503,7 +393,11 @@ class ChargeSettingHandler:
         power_percent: Optional[int],
         label: str,
     ) -> None:
-        """Updates the day mask and power percentage, reading current values if not provided."""
+        """Updates the day mask and power percentage, reading current values if not provided.
+        
+        If power_percent is None and the register has never been set (both day_mask and power are 0),
+        uses a default of 10% to ensure the time slot is actually active.
+        """
         _LOGGER.info(
             f"[PENDING DEBUG] _update_day_mask_and_power called for {label}. "
             f"Provided day_mask: {day_mask}, power_percent: {power_percent}"
@@ -531,13 +425,22 @@ class ChargeSettingHandler:
             # Use current day_mask if not provided
             new_day_mask = current_day_mask if day_mask is None else day_mask
             
-            # Use current power_percent if not provided (preserve existing value)
-            # This ensures that if only time is changed, power_percent is not reset to default
-            if power_percent is None:
+            # Handle power_percent:
+            # 1. If explicitly provided, use it
+            # 2. If register is uninitialized (0/0), use default 10%
+            # 3. Otherwise preserve current value
+            if power_percent is not None:
+                new_power_percent = power_percent
+            elif current_value == 0:
+                # Register never initialized - use default 10% to make slot active
+                new_power_percent = 10
+                _LOGGER.info(
+                    f"Register for {label} uninitialized, using default power_percent: 10%"
+                )
+            else:
+                # Preserve existing power_percent
                 new_power_percent = current_power_percent
                 _LOGGER.debug(f"Using current power_percent: {current_power_percent}% for {label}")
-            else:
-                new_power_percent = power_percent
             
             _LOGGER.debug(
                 f"Calculated new day_mask: {new_day_mask}, "
@@ -567,6 +470,28 @@ class ChargeSettingHandler:
                 _LOGGER.error(f"Failed to write {label} day_mask_power")
         except Exception as e:
             _LOGGER.error(f"Error updating day mask and power for {label}: {e}")
+
+    async def _write_time_register(
+        self, address: int, time_str: str, label: str
+    ) -> None:
+        """Writes a time register in HH:MM format"""
+        parts = time_str.split(":")
+        if len(parts) != 2:
+            _LOGGER.error(f"Invalid time format for {label}: {time_str}")
+            return
+
+        try:
+            hours, minutes = map(int, parts)
+        except ValueError:
+            _LOGGER.error(f"Non-integer time parts for {label}: {time_str}")
+            return
+
+        value = (hours << 8) | minutes
+        success = await self._hub._write_register(address, value)
+        if success:
+            _LOGGER.info(f"Successfully set {label}: {time_str}")
+        else:
+            _LOGGER.error(f"Failed to write {label}")
 
     # ========== POWER STATE HANDLER (Charging/Discharging) ==========
     
@@ -695,25 +620,3 @@ class ChargeSettingHandler:
         if app_mode != desired_mode:
             _LOGGER.info("Updating AppMode from %s to %s", app_mode, desired_mode)
             await self._hub._write_register(REGISTERS["app_mode"], desired_mode)
-
-    async def _write_time_register(
-        self, address: int, time_str: str, label: str
-    ) -> None:
-        """Writes a time register in HH:MM format"""
-        parts = time_str.split(":")
-        if len(parts) != 2:
-            _LOGGER.error(f"Invalid time format for {label}: {time_str}")
-            return
-
-        try:
-            hours, minutes = map(int, parts)
-        except ValueError:
-            _LOGGER.error(f"Non-integer time parts for {label}: {time_str}")
-            return
-
-        value = (hours << 8) | minutes
-        success = await self._hub._write_register(address, value)
-        if success:
-            _LOGGER.info(f"Successfully set {label}: {time_str}")
-        else:
-            _LOGGER.error(f"Failed to write {label}")
