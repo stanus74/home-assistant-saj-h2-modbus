@@ -10,7 +10,7 @@ NUMBER_DEFINITIONS = [
         "key": "charge_time_enable",
         "name": "Charge Time Enable",
         "min": 0,
-        "max": 127,
+        "max": 127,  # Changed from 1 to 127 - bitmask for 7 slots (bit 0-6)
         "step": 1,
         "default": 0,
         "unit": None,
