@@ -4,7 +4,7 @@
  * Shows discharge time slots in a weekly calendar view
  * 
  * @author stanu74
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 class SajDischargeScheduleCard extends HTMLElement {
@@ -14,7 +14,7 @@ class SajDischargeScheduleCard extends HTMLElement {
     this._config = null;
     this._hass = null;
     
-    console.log('[SAJ Discharge Schedule Card] Version 1.0.0');
+    console.log('[SAJ Discharge Schedule Card] Version 1.0.1');
   }
 
   setConfig(config) {
@@ -68,19 +68,46 @@ class SajDischargeScheduleCard extends HTMLElement {
     const mode = this._config.mode;
     const prefix = mode === 'charge' ? 'charge' : 'discharge';
     const slots = [];
+    
+    console.log(`[Schedule Card] Looking for ${prefix} sensors...`);
 
     for (let i = 1; i <= this._config.slotCount; i++) {
+      // Slot 1 has NO number, slots 2-7 have _X
       const slotNum = i === 1 ? '' : `_${i}`;
-      const startEntity = this._hass.states[`sensor.saj_${prefix}${slotNum}_start_time`];
-      const endEntity = this._hass.states[`sensor.saj_${prefix}${slotNum}_end_time`];
-      const powerEntity = this._hass.states[`sensor.saj_${prefix}${i}_power_percent`];
-      const dayMaskEntity = this._hass.states[`sensor.saj_${prefix}${i}_day_mask`];
+      
+      // Build entity IDs with correct pattern
+      const startEntityId = `sensor.saj_${prefix}${slotNum}_start_time`;
+      const endEntityId = `sensor.saj_${prefix}${slotNum}_end_time`;
+      const powerEntityId = `sensor.saj_${prefix}${slotNum}_power_percent`;
+      const dayMaskEntityId = `sensor.saj_${prefix}${slotNum}_day_mask`;
+      
+      // Get entities from hass
+      const startEntity = this._hass.states[startEntityId];
+      const endEntity = this._hass.states[endEntityId];
+      const powerEntity = this._hass.states[powerEntityId];
+      const dayMaskEntity = this._hass.states[dayMaskEntityId];
+
+      // Debug logging
+      if (!startEntity) {
+        console.warn(`[Schedule Card] Entity not found: ${startEntityId}`);
+      }
+      if (!endEntity) {
+        console.warn(`[Schedule Card] Entity not found: ${endEntityId}`);
+      }
+      if (!powerEntity) {
+        console.warn(`[Schedule Card] Entity not found: ${powerEntityId}`);
+      }
+      if (!dayMaskEntity) {
+        console.warn(`[Schedule Card] Entity not found: ${dayMaskEntityId}`);
+      }
 
       if (startEntity && endEntity) {
         const startTime = startEntity.state;
         const endTime = endEntity.state;
-        const power = powerEntity ? parseInt(powerEntity.state) : 0;
-        const dayMask = dayMaskEntity ? parseInt(dayMaskEntity.state) : 127;
+        const power = powerEntity ? parseInt(powerEntity.state) || 0 : 0;
+        const dayMask = dayMaskEntity ? parseInt(dayMaskEntity.state) || 127 : 127;
+
+        console.log(`[Schedule Card] Slot ${i}: ${startTime}-${endTime}, Power: ${power}%, Days: ${dayMask}`);
 
         // Parse time strings (HH:MM)
         const startMatch = startTime.match(/(\d{1,2}):(\d{2})/);
@@ -102,10 +129,13 @@ class SajDischargeScheduleCard extends HTMLElement {
             dayMask,
             enabled: power > 0 && dayMask > 0
           });
+        } else {
+          console.warn(`[Schedule Card] Invalid time format for slot ${i}: ${startTime} - ${endTime}`);
         }
       }
     }
-
+    
+    console.log(`[Schedule Card] Found ${slots.length} valid slots:`, slots);
     return slots;
   }
 
@@ -115,6 +145,25 @@ class SajDischargeScheduleCard extends HTMLElement {
     
     for (let h = this._config.startHour; h < this._config.endHour; h += this._config.hourStep) {
       hours.push(h);
+    }
+
+    // Show debug message if no slots found
+    if (slots.length === 0) {
+      return `
+        <div class="debug-message">
+          <h3>⚠️ No slots found</h3>
+          <p>Please check if the following sensors exist:</p>
+          <ul>
+            <li>sensor.saj_discharge_start_time (slot 1 - no number)</li>
+            <li>sensor.saj_discharge_end_time</li>
+            <li>sensor.saj_discharge_power_percent</li>
+            <li>sensor.saj_discharge_day_mask</li>
+            <li>sensor.saj_discharge_2_start_time (slot 2-7 - with number)</li>
+            <li>... (through _7)</li>
+          </ul>
+          <p>Open browser console (F12) for more details.</p>
+        </div>
+      `;
     }
 
     let html = '<div class="schedule-table">';
@@ -261,30 +310,30 @@ class SajDischargeScheduleCard extends HTMLElement {
       
       .day-cell, .time-cell {
         display: table-cell;
-        padding: 8px 4px;
+        padding: 4px 2px; /* Reduced from 8px 4px */
         text-align: center;
         border: 1px solid var(--divider-color);
         vertical-align: middle;
         position: relative;
-        font-size: 0.9em;
+        font-size: 0.85em; /* Slightly smaller font */
         white-space: nowrap;
       }
       
       .header-cell {
         background-color: var(--secondary-background-color);
         font-weight: 600;
-        font-size: 0.85em;
+        font-size: 0.8em; /* Reduced from 0.85em */
         color: var(--secondary-text-color);
         position: sticky;
         top: 0;
         z-index: 11;
-        padding: 8px 4px;
+        padding: 4px 2px; /* Reduced from 8px 4px */
       }
       
       .time-cell {
         font-weight: 500;
         background-color: var(--secondary-background-color);
-        min-width: 60px;
+        min-width: 30px; /* Reduced from 60px (50%) */
         position: sticky;
         left: 0;
         z-index: 5;
@@ -297,9 +346,9 @@ class SajDischargeScheduleCard extends HTMLElement {
       }
       
       .day-cell {
-        min-width: 80px;
+        min-width: 40px; /* Reduced from 80px (50%) */
         width: auto;
-        height: 40px;
+        height: 20px; /* Reduced from 40px (50%) */
         transition: background-color 0.2s ease;
       }
       
@@ -342,7 +391,7 @@ class SajDischargeScheduleCard extends HTMLElement {
       .power-label {
         position: relative;
         z-index: 1;
-        font-size: 0.75em;
+        font-size: 0.65em; /* Reduced from 0.75em */
         font-weight: 600;
         color: var(--text-primary-color);
         text-shadow: 0 0 2px rgba(0,0,0,0.5);
@@ -380,6 +429,36 @@ class SajDischargeScheduleCard extends HTMLElement {
         color: var(--secondary-text-color);
       }
       
+      .debug-message {
+        padding: 20px;
+        background-color: rgba(var(--rgb-warning-color), 0.1);
+        border: 2px solid var(--warning-color);
+        border-radius: 8px;
+        margin: 16px;
+      }
+      
+      .debug-message h3 {
+        margin: 0 0 12px 0;
+        color: var(--warning-color);
+      }
+      
+      .debug-message p {
+        margin: 8px 0;
+        color: var(--primary-text-color);
+      }
+      
+      .debug-message ul {
+        margin: 8px 0;
+        padding-left: 24px;
+        color: var(--secondary-text-color);
+      }
+      
+      .debug-message li {
+        margin: 4px 0;
+        font-family: monospace;
+        font-size: 0.9em;
+      }
+      
       /* Scrollbar styling for better UX */
       .card-content::-webkit-scrollbar {
         width: 8px;
@@ -407,24 +486,24 @@ class SajDischargeScheduleCard extends HTMLElement {
         }
         
         .day-cell {
-          min-width: 60px;
-          padding: 6px 2px;
-          font-size: 0.8em;
+          min-width: 30px; /* Further reduced for mobile */
+          padding: 3px 1px;
+          font-size: 0.75em;
         }
         
         .time-cell {
-          min-width: 50px;
-          padding: 6px 2px;
-          font-size: 0.8em;
+          min-width: 25px; /* Further reduced for mobile */
+          padding: 3px 1px;
+          font-size: 0.75em;
         }
         
         .header-cell {
-          font-size: 0.75em;
-          padding: 6px 2px;
+          font-size: 0.7em;
+          padding: 3px 1px;
         }
         
         .power-label {
-          font-size: 0.7em;
+          font-size: 0.6em;
         }
       }
       
@@ -434,13 +513,13 @@ class SajDischargeScheduleCard extends HTMLElement {
         }
         
         .day-cell {
-          min-width: 100px;
-          padding: 10px 6px;
+          min-width: 50px; /* 50% of original 100px */
+          padding: 5px 3px;
         }
         
         .time-cell {
-          min-width: 70px;
-          padding: 10px 6px;
+          min-width: 35px; /* 50% of original 70px */
+          padding: 5px 3px;
         }
       }
     `;
