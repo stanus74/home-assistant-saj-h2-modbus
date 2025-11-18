@@ -92,6 +92,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
         self.fast_enabled: bool = FAST_POLL_DEFAULT if fast_enabled is None else fast_enabled
+        self._fast_coordinator = None
 
         self._reconnecting = False
         self._max_retries = 2
