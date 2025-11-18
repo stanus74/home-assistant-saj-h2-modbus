@@ -440,8 +440,8 @@ class SajH2InverterCard extends HTMLElement {
     if (!slot.valid) {
         return `<div class="discharge-slot invalid">Slot ${slot.index+1}: Configuration Error</div>`;
     }
-    // Check if the timeEnable entity itself is pending
-    const timeEnablePending = this._hass.states[this._entities.timeEnable]?.attributes?.pending_write === true;
+    // FIX: Use correct entity for discharge timeEnable
+    const timeEnablePending = this._hass.states[this._entities.dischargeTimeEnable]?.attributes?.pending_write === true;
     // Controls inside the slot are disabled ONLY during Modbus transfer (pending write)
     // They remain enabled even if slot is not enabled - user can configure while disabled
     const contentDisabled = parentPendingWrite || timeEnablePending;
@@ -595,7 +595,7 @@ class SajH2InverterCard extends HTMLElement {
       });
     }
 
-    // Charge Toggle Button
+    // Charge Toggle Button - REMOVE automatic slot value sending
     const toggle = q('#charging-toggle');
     if (toggle && !toggle.hasAttribute('data-listener-added')) {
       toggle.setAttribute('data-listener-added', 'true');
@@ -608,11 +608,11 @@ class SajH2InverterCard extends HTMLElement {
         }
         const newState = currentState === 'on' ? 'off' : 'on';
         
+        // Only toggle the switch - let charge_control.py handle register writes
         this._hass.callService('switch', `turn_${newState}`, { entity_id: entityId });
         
-        // When turning ON, send values for all enabled slots
-        if (newState === 'on') {
-          this._sendEnabledChargeSlotValues();
+        if (this._debug) {
+          console.log(`[saj-h2-inverter-card] Charging switch toggled to ${newState}. charge_control.py will handle register writes.`);
         }
       });
     }
@@ -670,55 +670,6 @@ class SajH2InverterCard extends HTMLElement {
     });
   }
 
-  // Send values for enabled charge slots
-  _sendEnabledChargeSlotValues() {
-    try {
-      const timeEnableEntityId = this._entities.chargeTimeEnable;
-      const timeEnableState = this._hass.states[timeEnableEntityId];
-      
-      if (!timeEnableState) {
-        console.warn(`[saj-h2-inverter-card] Entity ${timeEnableEntityId} not found in hass state.`);
-        return;
-      }
-      
-      const enabledMask = parseInt(timeEnableState.state || '0');
-      if (!enabledMask) {
-        console.info('[saj-h2-inverter-card] No charge slots enabled. Nothing to send.');
-        return;
-      }
-      
-      console.info(`[saj-h2-inverter-card] Sending values for enabled charge slots: ${enabledMask.toString(2)}`);
-      
-      (this._entities.chargeSlots || []).forEach((slotConfig, i) => {
-        if ((enabledMask & (1 << i)) && slotConfig) {
-          const slotNumber = i + 1;
-          
-          const startTime = this._hass.states[slotConfig.startTime]?.state || '00:00';
-          const endTime = this._hass.states[slotConfig.endTime]?.state || '00:00';
-          const power = parseInt(this._hass.states[slotConfig.power]?.state || '100');
-          const dayMask = parseInt(this._hass.states[slotConfig.dayMask]?.state || '127');
-          
-          console.info(`[saj-h2-inverter-card] Charge Slot ${slotNumber}: sending ${startTime}-${endTime}, ${power}%, mask=${dayMask}`);
-          
-          if (slotConfig.startTime) {
-            this._setEntityValue(slotConfig.startTime, startTime, 'text');
-          }
-          if (slotConfig.endTime) {
-            this._setEntityValue(slotConfig.endTime, endTime, 'text');
-          }
-          if (slotConfig.power) {
-            this._setEntityValue(slotConfig.power, power, 'number');
-          }
-          if (slotConfig.dayMask) {
-            this._setEntityValue(slotConfig.dayMask, dayMask, 'number');
-          }
-        }
-      });
-    } catch (error) {
-      console.error('[saj-h2-inverter-card] Error in _sendEnabledChargeSlotValues:', error);
-    }
-  }
-
   // Add listeners for the discharging section
   _addDischargingEventListeners() {
     const q = sel => this.shadowRoot.querySelector(sel);
@@ -745,7 +696,7 @@ class SajH2InverterCard extends HTMLElement {
       });
     }
 
-    // Discharge Toggle Button
+    // Discharge Toggle Button - REMOVE automatic slot value sending
     const toggle = q('#discharging-toggle');
     if (toggle && !toggle.hasAttribute('data-listener-added')) {
       toggle.setAttribute('data-listener-added', 'true');
@@ -758,18 +709,17 @@ class SajH2InverterCard extends HTMLElement {
         }
         const newState = currentState === 'on' ? 'off' : 'on';
         
-        // First turn on/off the switch
+        // Only toggle the switch - let charge_control.py handle register writes
         this._hass.callService('switch', `turn_${newState}`, { entity_id: entityId });
         
-        // When turning ON, send values for all enabled slots
-        if (newState === 'on') {
-          this._sendEnabledSlotValues();
+        if (this._debug) {
+          console.log(`[saj-h2-inverter-card] Discharging switch toggled to ${newState}. charge_control.py will handle register writes.`);
         }
       });
     }
 
     // Discharge Slot Listeners
-    const timeEnableEntityId = this._entities.timeEnable;
+    const timeEnableEntityId = this._entities.dischargeTimeEnable; // FIX: Use correct entity
     (this._entities.dischargeSlots || []).forEach((slotConfig, i) => {
       if (!slotConfig) return;
       const slotElement = q(`#slot-${i}-enabled`)?.closest('.discharge-slot');
@@ -824,58 +774,11 @@ class SajH2InverterCard extends HTMLElement {
   }
 
   // Send values for enabled slots to ensure proper configuration
-  _sendEnabledSlotValues() {
-    try {
-      // Get the currently enabled slots
-      const timeEnableEntityId = this._entities.timeEnable;
-      const timeEnableState = this._hass.states[timeEnableEntityId];
-      
-      if (!timeEnableState) {
-        console.warn(`[saj-h2-inverter-card] Entity ${timeEnableEntityId} not found in hass state.`);
-        return;
-      }
-      
-      const enabledMask = parseInt(timeEnableState.state || '0');
-      if (!enabledMask) {
-        console.info('[saj-h2-inverter-card] No discharge slots enabled. Nothing to send.');
-        return;
-      }
-      
-      console.info(`[saj-h2-inverter-card] Sending values for enabled discharge slots: ${enabledMask.toString(2)}`);
-      
-      // For each enabled slot, send its current configuration values
-      (this._entities.dischargeSlots || []).forEach((slotConfig, i) => {
-        // Check if this slot bit is set in the mask
-        if ((enabledMask & (1 << i)) && slotConfig) {
-          const slotNumber = i + 1;
-          
-          // Get current values for this slot
-          const startTime = this._hass.states[slotConfig.startTime]?.state || '00:00';
-          const endTime = this._hass.states[slotConfig.endTime]?.state || '00:00';
-          const power = parseInt(this._hass.states[slotConfig.power]?.state || '5');
-          const dayMask = parseInt(this._hass.states[slotConfig.dayMask]?.state || '127'); // Default all days
-          
-          console.info(`[saj-h2-inverter-card] Slot ${slotNumber}: sending ${startTime}-${endTime}, ${power}%, mask=${dayMask}`);
-          
-          // Send values to Home Assistant
-          if (slotConfig.startTime) {
-            this._setEntityValue(slotConfig.startTime, startTime, 'text');
-          }
-          if (slotConfig.endTime) {
-            this._setEntityValue(slotConfig.endTime, endTime, 'text');
-          }
-          if (slotConfig.power) {
-            this._setEntityValue(slotConfig.power, power, 'number');
-          }
-          if (slotConfig.dayMask) {
-            this._setEntityValue(slotConfig.dayMask, dayMask, 'number');
-          }
-        }
-      });
-    } catch (error) {
-      console.error('[saj-h2-inverter-card] Error in _sendEnabledSlotValues:', error);
-    }
-  }
+  // REMOVED: This function is no longer called - slots are configured independently via card
+  // _sendEnabledSlotValues() {}
+  
+  // REMOVED: This function is no longer called - charging slots are configured independently via card
+  // _sendEnabledChargeSlotValues() {}
 
   // Helper to setup time input listeners
   _setupTimeListeners(prefix, startEntity, endEntity) {

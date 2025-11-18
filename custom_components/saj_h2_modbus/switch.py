@@ -60,35 +60,23 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
     def is_on(self) -> bool:
         """Return true if switch is on.
         
-        Uses cached derived state that checks BOTH raw register value AND AppMode (0x3647).
-        This ensures the switch only shows "on" when BOTH conditions are met:
-        - charging_enabled (0x3604) > 0 OR discharging_enabled (0x3605 bitmask) > 0
-        - AppMode (0x3647) == 1
-        
-        This is a SYNCHRONOUS property and must not block - reads from cached inverter_data.
+        Simplified to only check register values without AppMode dependency.
+        This ensures immediate UI feedback like in version 2.6.0.
         """
         try:
             data = self._hub.inverter_data
             
             if self._switch_type == "charging":
-                # Check BOTH charging_enabled (0x3604) AND AppMode (0x3647)
                 charging_enabled = data.get("charging_enabled")
-                app_mode = data.get("AppMode")
-                
-                if charging_enabled is None or app_mode is None:
+                if charging_enabled is None:
                     return False
-                
-                return bool(charging_enabled > 0 and app_mode == 1)
+                return bool(charging_enabled > 0)
                 
             elif self._switch_type == "discharging":
-                # Check BOTH discharging_enabled (0x3605 bitmask) AND AppMode (0x3647)
                 discharging_enabled = data.get("discharging_enabled")
-                app_mode = data.get("AppMode")
-                
-                if discharging_enabled is None or app_mode is None:
+                if discharging_enabled is None:
                     return False
-                
-                return bool(discharging_enabled > 0 and app_mode == 1)
+                return bool(discharging_enabled > 0)
                 
         except Exception as e:
             _LOGGER.warning(f"Error getting {self._switch_type} state: {e}")
@@ -111,7 +99,8 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
     async def _set_state(self, desired_state: bool) -> None:
         """Set the switch state with shared logic.
         
-        Toggling on/off triggers pending settings processing in next update cycle.
+        Sets pending state and triggers processing in next update cycle.
+        Does NOT apply optimistic updates to avoid conflicts with card slot configurations.
         """
         if self.is_on == desired_state:
             _LOGGER.debug(f"{self._switch_type.capitalize()} already {'on' if desired_state else 'off'}")
@@ -123,7 +112,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         try:
             _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
             
-            # Set the state (charging_state or discharging_state)
+            # Set the pending state - will be processed in next coordinator update
             await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
             
             self._last_switch_time = time.time()
@@ -136,8 +125,8 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             # UI will show pending status via extra_state_attributes
             self.async_write_ha_state()
             _LOGGER.debug(
-                f"Pending {self._switch_type} setting will be processed in next update cycle "
-                     )
+                f"Pending {self._switch_type} setting will be processed in next update cycle"
+            )
         except Exception as e:
             _LOGGER.error(f"Failed to set {self._switch_type} state: {e}")
             raise

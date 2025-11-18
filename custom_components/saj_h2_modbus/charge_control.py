@@ -496,7 +496,12 @@ class ChargeSettingHandler:
     # ========== POWER STATE HANDLER (Charging/Discharging) ==========
     
     async def handle_charging_state(self) -> None:
-        """Handles the pending charging state (robust, without default writes)."""
+        """Handles the pending charging state.
+        
+        Writes to register 0x3604:
+        - OFF: writes 0 to disable
+        - ON: writes 1 to enable (charging control)
+        """
         _LOGGER.debug("handle_charging_state called")
         desired = self._hub._pending_charging_state
         if desired is None:
@@ -504,54 +509,38 @@ class ChargeSettingHandler:
             return
 
         _LOGGER.debug(f"Processing pending charging state: {desired}")
-        chg, dchg = await asyncio.gather(
-            self._hub.get_charging_state(),
-            self._hub.get_discharging_state(),
-        )
-        app_mode = self._hub.inverter_data.get("AppMode")
-        if chg is None or dchg is None or app_mode is None:
-            _LOGGER.debug("Deferring pending charging_state: prerequisites not ready")
-            return
-
+        
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
+        
         _LOGGER.info(
-            "Attempting to write value %s to register %s for charging_state",
-            write_value,
-            hex(addr),
+            f"Charging turned {'ON' if desired else 'OFF'}, writing {write_value} to register 0x3604"
         )
-        ok = False
-        try:
-            ok = await self._hub._write_register(addr, write_value)
-            _LOGGER.info(
-                "await self._hub._write_register completed. Result: %s", ok
-            )
-            if ok:
-                self._hub.inverter_data["is_charging"] = bool(desired)
-                _LOGGER.info(f"Successfully wrote charging state: {desired}")
-                # Clear immediately after successful write
-                self._hub._pending_charging_state = None
-                _LOGGER.debug("Cleared _pending_charging_state after successful write")
-        except Exception as e:
-            _LOGGER.error(
-                "Error writing charging_state to register %s: %s", hex(addr), e
-            )
-            ok = False
         
-        if ok:
-            await self._handle_power_state(charge_state=desired)
+        ok = await self._hub._write_register(addr, write_value)
+        if not ok:
+            _LOGGER.error(f"Failed to write {write_value} to register 0x3604")
+        else:
+            _LOGGER.info(f"Successfully wrote {write_value} to register 0x3604")
+            self._hub.inverter_data["charging_enabled"] = write_value
+            # Clear immediately after successful write
+            self._hub._pending_charging_state = None
+            _LOGGER.debug("Cleared _pending_charging_state after successful write")
         
-        _LOGGER.debug("handle_charging_state completed")
+        # Get current discharging state
+        dchg = await self._hub.get_discharging_state()
+        
+        # Update AppMode based on both charging and discharging states
+        await self._handle_power_state(charge_state=desired, discharge_state=dchg)
 
     async def handle_discharging_state(self) -> None:
         """Handles the pending discharging state.
         
-        This handler manages:
-        1. Register 0x3605 (Discharge Slots Bitmask):
-           - When discharging is turned OFF: writes 0 to disable all slots
-           - When discharging is turned ON: does NOT write (slots controlled by discharge_time_enable)
-        2. AppMode (0x3647):
-           - Updates based on charging/discharging state
+        Writes to register 0x3605 (Bitmask):
+        - OFF: writes 0 to disable all slots
+        - ON: writes 1 (0b0000001) to enable first slot only
+        
+        Card can later modify this bitmask to enable multiple slots.
         """
         desired = self._hub._pending_discharging_state
         if desired is None:
@@ -561,23 +550,26 @@ class ChargeSettingHandler:
         
         addr = REGISTERS["discharging_state"]
         
-        # If discharging is being turned OFF, write 0 to register 0x3605 to disable all slots
+        # Write to register 0x3605 based on desired state
         if not desired:
+            # Discharging OFF: write 0 to disable all slots
             _LOGGER.info("Discharging turned OFF, writing 0 to register 0x3605 to disable all slots")
-            ok = await self._hub._write_register(addr, 0)
-            if not ok:
-                _LOGGER.error("Failed to write 0 to register 0x3605")
-            else:
-                # Clear immediately after successful write
-                self._hub._pending_discharging_state = None
-                _LOGGER.debug("Cleared _pending_discharging_state after successful write (OFF)")
-        # If discharging is being turned ON, do NOT write to 0x3605
-        # The slots are controlled by discharge_time_enable (bitmask)
+            write_value = 0
         else:
-            _LOGGER.debug("Discharging turned ON, slots controlled by discharge_time_enable")
-            # Clear pending state even when not writing (ON state doesn't write register)
+            # Discharging ON: write 1 (enable first slot only)
+            # Card can later enable additional slots by modifying the bitmask
+            _LOGGER.info("Discharging turned ON, writing 1 to register 0x3605 to enable first slot")
+            write_value = 1
+        
+        ok = await self._hub._write_register(addr, write_value)
+        if not ok:
+            _LOGGER.error(f"Failed to write {write_value} to register 0x3605")
+        else:
+            _LOGGER.info(f"Successfully wrote {write_value} to register 0x3605")
+            self._hub.inverter_data["discharging_enabled"] = write_value
+            # Clear immediately after successful write
             self._hub._pending_discharging_state = None
-            _LOGGER.debug("Cleared _pending_discharging_state (ON state, no write needed)")
+            _LOGGER.debug(f"Cleared _pending_discharging_state after successful write ({'ON' if desired else 'OFF'})")
         
         # Get current charging state
         chg = await self._hub.get_charging_state()
