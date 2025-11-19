@@ -25,6 +25,10 @@ Skipping this step may result in a broken or outdated InverterCard!
 
 ---
 
+<img width="1221" height="864" alt="Bildschirmfoto_20251119_112226" src="https://github.com/user-attachments/assets/5a9e8ccf-56cf-4a86-bf45-4db70fca844d" />
+
+
+
 ## In Console Tab you must see the SAJ Inerter Card Version 
 
 <img width="853" height="753" alt="Bildschirmfoto_20251119_111855" src="https://github.com/user-attachments/assets/21bb86f0-9c49-4b89-97a8-10a3f4b7bb16" />
