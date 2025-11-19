@@ -12,12 +12,12 @@ Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.c
 
 It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inverter.
 
-## Features
+## Features 
 
 - Installation through Config Flow UI
 - Over 330 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
-- Smart Modbus connection management - especially for AIO3
+- Smart Modbus connection management - especially for AIO3 
 
 - **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-Use Mode** (to charge the battery with grid power) 
 
@@ -33,7 +33,7 @@ This integration is available in the HACS default repository.
 
 ## Configuration
 
-1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and 
+1. Navigate to the "Integrations" page in your configuration, then click "Add Integration and 
 select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval 
 
