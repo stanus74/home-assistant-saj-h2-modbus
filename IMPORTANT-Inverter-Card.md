@@ -24,5 +24,4 @@ Skipping this step may result in a broken or outdated InverterCard!
 ❌ If it doesn't, you're still using a cached (old) version.
 
 ---
-
-<img width="608" height="542" alt="Bildschirmfoto_20251118_175352" src="https://github.com/user-attachments/assets/1c8c39db-8a64-4c01-ac32-ead87eac7624" />
+<img width="1293" height="900" alt="Bildschirmfoto_20251119_111344" src="https://github.com/user-attachments/assets/8afceccd-343c-4d13-ad9b-aa9f26abf7ea" />
