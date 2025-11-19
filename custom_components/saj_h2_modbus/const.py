@@ -401,6 +401,10 @@ information_sensors = [
     {"name": "Battery 4 Fault", "key": "Bat4FaultMSG", "icon": "alert", "enable": False},
     {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": False},
     {"name": "App Mode", "key": "AppMode", "icon": "information-outline", "enable": True},
+    
+    # New entities from register 0x3604/0x3605
+    {"name": "Charge Time Enable Bitmask", "key": "charge_time_enable", "icon": "clock-check", "enable": True},
+    {"name": "Discharge Time Enable Bitmask", "key": "discharge_time_enable", "icon": "clock-check", "enable": True},
 ]
 
 # Sensors that are always increasing (lifetime totals)

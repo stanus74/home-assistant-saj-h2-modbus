@@ -332,8 +332,8 @@ async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
     """Reads the Charge registers."""
     # Read the Charge registers directly with the sensor names
     decode_instructions = [
-        ("charging_enabled_raw", "16u", 1),    # 0x3604
-        ("discharging_enabled_raw", "16u", 1), # 0x3605
+        ("charge_time_enable", "16u", 1),      # 0x3604 - RAW bitmask value (0-127)
+        ("discharge_time_enable", "16u", 1),   # 0x3605 - RAW bitmask value (0-127)
         ("charge_start_time", "16u", 1),       # 0x3606
         ("charge_end_time", "16u", 1),         # 0x3607
         ("charge_power_raw", "16u", 1),        # 0x3608
@@ -350,8 +350,9 @@ async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
             data["charge_day_mask"] = (power_value >> 8) & 0xFF
             data["charge_power_percent"] = power_value & 0xFF
 
-            data["charging_enabled"] = data.pop("charging_enabled_raw") > 0
-            data["discharging_enabled"] = data.pop("discharging_enabled_raw") > 0
+            # Create boolean sensors for compatibility (derived from raw values)
+            data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
+            data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
 
         except Exception as e:
             _LOGGER.error(f"Error processing Charge data: {e}")

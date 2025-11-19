@@ -7,24 +7,14 @@ _LOGGER = logging.getLogger(__name__)
 
 NUMBER_DEFINITIONS = [
     {
-        "key": "charge_day_mask",
-        "name": "Charge Day Mask",
+        "key": "charge_time_enable",
+        "name": "Charge Time Enable",
         "min": 0,
-        "max": 127,
+        "max": 127,  # Changed from 1 to 127 - bitmask for 7 slots (bit 0-6)
         "step": 1,
-        "default": 127,
+        "default": 0,
         "unit": None,
-        "setter": "set_charge_day_mask",
-    },
-    {
-        "key": "charge_power_percent",
-        "name": "Charge Power Percent",
-        "min": 0,
-        "max": 100,
-        "step": 1,
-        "default": 5,
-        "unit": "%",
-        "setter": "set_charge_power_percent",
+        "setter": "set_charge_time_enable",
     },
     {
         "key": "export_limit",
@@ -235,6 +225,45 @@ async def async_setup_entry(hass, entry, async_add_entities):
             device_info=device_info,
         )
         entities.append(entity)
+
+    # Add charge entities for indices 1-7
+    for i in range(1, 8):
+        prefix = str(i)
+        for desc in [
+            {
+                "key": f"charge{prefix}_day_mask",
+                "name": f"Charge{prefix} Day Mask",
+                "min": 0,
+                "max": 127,
+                "step": 1,
+                "default": 127,
+                "unit": None,
+                "setter": f"set_charge{prefix}_day_mask",
+            },
+            {
+                "key": f"charge{prefix}_power_percent",
+                "name": f"Charge{prefix} Power Percent",
+                "min": 0,
+                "max": 100,
+                "step": 1,
+                "default": 5,
+                "unit": "%",
+                "setter": f"set_charge{prefix}_power_percent",
+            },
+        ]:
+            entity = SajGenericNumberEntity(
+                hub=hub,
+                name=f"SAJ {desc['name']} (Input)",
+                unique_id=f"{hub.name}_{desc['key']}_input",
+                min_val=desc["min"],
+                max_val=desc["max"],
+                step=desc["step"],
+                default=desc["default"],
+                unit=desc["unit"],
+                set_method_name=desc["setter"],
+                device_info=device_info,
+            )
+            entities.append(entity)
 
     # Add discharge entities for indices 1-7
     for i in range(1, 8):

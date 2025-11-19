@@ -33,20 +33,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = {
         "hub": hub,
-        "fast_coordinator": None,  # Will be set later when start_fast_updates() is called
         "device_info": _create_device_info(entry)
     }
 
-   
     # Start the main coordinator scheduling
     await hub.start_main_coordinator()
     
     # Starte nur, wenn in hub aktiviert
     if hub.fast_enabled:
         await hub.start_fast_updates()
-        # Update the fast_coordinator reference in hass.data
-        hass.data[DOMAIN][entry.entry_id]["fast_coordinator"] = hub._fast_coordinator
-        # The hub already manages its own listener and cleanup
+        _LOGGER.info("Fast coordinator started (10s interval)")
     else:
         _LOGGER.info("Fast coordinator not started (disabled).")
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
