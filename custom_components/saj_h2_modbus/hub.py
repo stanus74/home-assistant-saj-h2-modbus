@@ -28,7 +28,9 @@ from .charge_control import (
 _LOGGER = logging.getLogger(__name__)
 
 FAST_POLL_DEFAULT = False
+
 ADVANCED_LOGGING = False
+
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
 # Global switch: Advanced logging for detailed debugging
