@@ -303,7 +303,7 @@ class SajH2InverterCard extends HTMLElement {
     const html = `
       <div class="section charging-section">
         <div class="section-header">Charging Settings (Version 1.2.0)</div>
-        ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. Settings can be edited and will be applied when enabled.</div>' : ''}
+        ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. <b>Start time, end time and power are essential.</b></div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
           <div class="subsection-header">Charge Time Slots</div>
@@ -417,7 +417,7 @@ class SajH2InverterCard extends HTMLElement {
     const html = `
       <div class="section discharging-section">
         <div class="section-header">Discharging Settings</div>
-        ${!dischargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Discharging is currently disabled. Settings can be edited and will be applied when enabled.</div>' : ''}
+        ${!dischargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Discharging is currently disabled. <b>Start time, end time and power are essential.</b></div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
           <div class="subsection-header">Discharge Time Slots</div>
