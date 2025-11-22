@@ -86,12 +86,12 @@ REGISTERS = {
 }
 
 # Mapping of simple pending attributes to their register addresses and labels
-# IMPORTANT: charge_time_enable and discharge_time_enable are NOT here
-# They are written ONLY by the card when slot checkboxes change
+# IMPORTANT: charge_time_enable and discharge_time_enable ADDED BACK
 SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
     "export_limit": (REGISTERS["export_limit"], "export limit"),
     "app_mode": (REGISTERS["app_mode"], "app mode"),
-    # charge_time_enable and discharge_time_enable REMOVED - card writes directly
+    "charge_time_enable": (REGISTERS["charge_time_enable"], "charge time enable"),
+    "discharge_time_enable": (REGISTERS["discharge_time_enable"], "discharge time enable"),
     "battery_on_grid_discharge_depth": (
         REGISTERS["battery_on_grid_discharge_depth"],
         "battery on grid discharge depth",
@@ -263,12 +263,7 @@ class ChargeSettingHandler:
         self._handlers["_pending_discharging_state"] = self.handle_discharging_state
         _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
         
-        # 3. time_enable handlers - only called when HA entity changes, NOT from card
-        self._handlers["_pending_charge_time_enable"] = self.handle_charge_time_enable
-        _LOGGER.debug("Registered special handler for '_pending_charge_time_enable'")
-        
-        self._handlers["_pending_discharge_time_enable"] = self.handle_discharge_time_enable
-        _LOGGER.debug("Registered special handler for '_pending_discharge_time_enable'")
+        _LOGGER.debug("time_enable handlers NOW ACTIVE via SIMPLE_REGISTER_MAP")
 
     # ========== HELPER METHODS ==========
     
@@ -321,7 +316,6 @@ class ChargeSettingHandler:
                 return
 
             # IMPORTANT: Check if slot has complete data (start, end, power are REQUIRED)
-            # Only write to time_enable register if ALL required fields are provided
             has_complete_data = (
                 start_value is not None and 
                 end_value is not None and 
@@ -333,7 +327,6 @@ class ChargeSettingHandler:
                     f"[PENDING DEBUG] {label} incomplete: start={start_value}, end={end_value}, power={power_percent_value}. "
                     f"Skipping time_enable write. Please provide start time, end time AND power."
                 )
-                # Reset pending values since they're incomplete
                 self._reset_pending_values(mode)
                 return
 
@@ -354,10 +347,8 @@ class ChargeSettingHandler:
 
             # Handle day mask and power percent
             if "day_mask_power" in registers:
-                # If day_mask is not explicitly set, use 127 (all days)
                 effective_day_mask = day_mask_value if day_mask_value is not None else 127
                 
-                # Validate power_percent
                 if power_percent_value is not None and not (0 <= power_percent_value <= 100):
                     _LOGGER.error(f"Ungültiger Leistungsbereich für {label}: {power_percent_value}%. Erwartet 0-100.")
                     power_percent_value = None
@@ -372,77 +363,76 @@ class ChargeSettingHandler:
             else:
                 _LOGGER.warning(f"[PENDING DEBUG] No day_mask_power register found for {mode}")
 
-            # Reset pending values for this specific slot (ONLY ONCE HERE!)
+            # Reset pending values for this specific slot
             _LOGGER.info(f"[PENDING DEBUG] Resetting pending values for {mode}")
             self._reset_pending_values(mode)
             
-            # ONLY NOW: After successful write of slot data, enable the slot in time_enable register
-            # This ensures slot is only activated when it has complete configuration
-            _LOGGER.info(f"[PENDING DEBUG] Starting time_enable update for {label}")
-            
-            # Add delay to allow inverter to process previous writes
-            await asyncio.sleep(1.0)
-            
-            # Read current time_enable value
-            current_regs = await self._hub._read_registers(time_enable_entity_id, 1)
-            if not current_regs:
-                _LOGGER.error(f"[PENDING DEBUG] Failed to read current time_enable for {label}")
-                return
-            
-            current_mask = current_regs[0]
-            # Set the bit for this slot (1-indexed to 0-indexed)
-            new_mask = current_mask | (1 << index)
-            
-            if new_mask == current_mask:
-                _LOGGER.debug(f"[PENDING DEBUG] {label} already enabled in time_enable ({current_mask})")
-                return
-            
-            _LOGGER.info(
-                f"[PENDING DEBUG] Enabling {label} in time_enable register: {current_mask} → {new_mask}"
-            )
-            write_ok = await self._hub._write_register(time_enable_entity_id, new_mask)
-            
-            if not write_ok:
-                _LOGGER.error(f"[PENDING DEBUG] Failed to write time_enable for {label}")
-                return
-            
-            # Wait for write to complete
-            await asyncio.sleep(0.3)
-            
-            # IMPORTANT: Read back to confirm the value was actually written
-            verify_regs = await self._hub._read_registers(time_enable_entity_id, 1)
-            if not verify_regs:
-                _LOGGER.error(f"[PENDING DEBUG] Failed to verify time_enable write for {label}")
-                return
-            
-            actual_value = verify_regs[0]
-            _LOGGER.info(
-                f"[PENDING DEBUG] Verified time_enable after write: {actual_value} "
-                f"(expected: {new_mask})"
-            )
-            
-            # Update cache with ACTUAL value from inverter
-            if is_charge:
-                self._hub.inverter_data["charge_time_enable"] = actual_value
-                # Set lock to prevent overwrites for next 10 seconds
-                import time as time_module
-                self._hub._charge_time_enable_lock_until = time_module.monotonic() + 10.0
-                _LOGGER.info(f"[PENDING DEBUG] Updated cache: charge_time_enable = {actual_value} (LOCKED for 10s)")
-            else:
-                self._hub.inverter_data["discharge_time_enable"] = actual_value
-                import time as time_module
-                self._hub._discharge_time_enable_lock_until = time_module.monotonic() + 10.0
-                _LOGGER.info(f"[PENDING DEBUG] Updated cache: discharge_time_enable = {actual_value} (LOCKED for 10s)")
-            
-            # Force immediate data update to UI
-            self._hub.async_set_updated_data(self._hub.inverter_data)
-            _LOGGER.info(f"[PENDING DEBUG] Forced UI update for {label}")
-            
-            if actual_value != new_mask:
-                _LOGGER.warning(
-                    f"[PENDING DEBUG] Inverter returned different value! "
-                    f"Wrote {new_mask}, got {actual_value}"
+            # WICHTIG: Setze time_enable Bit für SLOTS 2-7 (nicht für Slot 1!)
+            # Slot 1 wird vom Master-Switch (charging/discharging state) gesteuert
+            if index > 0:  # index 0 = Slot 1, skip it
+                _LOGGER.info(f"[PENDING DEBUG] Starting time_enable update for {label} (index {index})")
+                
+                # Add delay to allow inverter to process previous writes
+                await asyncio.sleep(1.0)
+                
+                # Read current time_enable value
+                current_regs = await self._hub._read_registers(time_enable_entity_id, 1)
+                if not current_regs:
+                    _LOGGER.error(f"[PENDING DEBUG] Failed to read current time_enable for {label}")
+                    return
+                
+                current_mask = current_regs[0]
+                # WICHTIG: Bit HINZUFÜGEN (OR), nicht ersetzen!
+                new_mask = current_mask | (1 << index)
+                
+                if new_mask == current_mask:
+                    _LOGGER.debug(f"[PENDING DEBUG] {label} already enabled in time_enable ({current_mask})")
+                    return
+                
+                _LOGGER.info(
+                    f"[PENDING DEBUG] Enabling {label} in time_enable register: "
+                    f"{current_mask} (binary: {bin(current_mask)}) → {new_mask} (binary: {bin(new_mask)})"
                 )
+                write_ok = await self._hub._write_register(time_enable_entity_id, new_mask)
+                
+                if not write_ok:
+                    _LOGGER.error(f"[PENDING DEBUG] Failed to write time_enable for {label}")
+                    return
+                
+                # Wait for write to complete
+                await asyncio.sleep(0.3)
+                
+                # IMPORTANT: Read back to confirm
+                verify_regs = await self._hub._read_registers(time_enable_entity_id, 1)
+                if not verify_regs:
+                    _LOGGER.error(f"[PENDING DEBUG] Failed to verify time_enable write for {label}")
+                    return
+                
+                actual_value = verify_regs[0]
+                _LOGGER.info(
+                    f"[PENDING DEBUG] Verified time_enable after write: {actual_value} (binary: {bin(actual_value)}) "
+                    f"(expected: {new_mask})"
+                )
+                
+                # Update cache with ACTUAL value from inverter
+                if is_charge:
+                    self._hub.inverter_data["charge_time_enable"] = actual_value
+                    _LOGGER.info(f"[PENDING DEBUG] Updated cache: charge_time_enable = {actual_value}")
+                else:
+                    self._hub.inverter_data["discharge_time_enable"] = actual_value
+                    _LOGGER.info(f"[PENDING DEBUG] Updated cache: discharge_time_enable = {actual_value}")
+                
+                # Force immediate data update to UI
+                self._hub.async_set_updated_data(self._hub.inverter_data)
+                _LOGGER.info(f"[PENDING DEBUG] Forced UI update for {label}")
+                
+                if actual_value != new_mask:
+                    _LOGGER.warning(
+                        f"[PENDING DEBUG] Inverter returned different value! "
+                        f"Wrote {new_mask}, got {actual_value}"
+                    )
+            else:
+                _LOGGER.info(f"[PENDING DEBUG] Skipping time_enable write for Slot 1 (controlled by master switch)")
 
         except Exception as e:
             _LOGGER.error(f"Error handling {label} settings: {e}", exc_info=True)
@@ -710,98 +700,5 @@ class ChargeSettingHandler:
         else:
             _LOGGER.error(f"Failed to write AppMode {desired_app_mode}")
     
-    async def handle_charge_time_enable(self) -> bool:
-        """Handle explicit charge_time_enable changes (from HA entity, not card).
-        
-        This is ONLY called when user directly changes the charge_time_enable number entity.
-        Card slot checkbox changes bypass this and write directly.
-        """
-        value = getattr(self._hub, "_pending_charge_time_enable", None)
-        if value is None:
-            _LOGGER.debug("Skip charge_time_enable: no pending value")
-            return False
-        
-        address = REGISTERS["charge_time_enable"]
-        if address is None:
-            _LOGGER.warning("charge_time_enable register not configured; skip write")
-            return False
-        
-        # Retry loop
-        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
-            try:
-                ok = await self._hub._write_register(address, int(value))
-                if ok:
-                    _LOGGER.info(
-                        "Successfully set charge_time_enable to: %s (attempt %d/%d)",
-                        value, attempt, MAX_HANDLER_RETRIES
-                    )
-                    try:
-                        setattr(self._hub, "_pending_charge_time_enable", None)
-                    except Exception:
-                        pass
-                    return True
-                else:
-                    _LOGGER.warning(
-                        "Failed to write charge_time_enable (attempt %d/%d)",
-                        attempt, MAX_HANDLER_RETRIES
-                    )
-            except Exception as e:
-                _LOGGER.error(
-                    "Error writing charge_time_enable (attempt %d/%d): %s",
-                    attempt, MAX_HANDLER_RETRIES, e
-                )
-        
-            # Wait before retry (except on last attempt)
-            if attempt < MAX_HANDLER_RETRIES:
-                await asyncio.sleep(HANDLER_RETRY_DELAY)
-        
-        _LOGGER.error("Failed to write charge_time_enable after %d attempts", MAX_HANDLER_RETRIES)
-        return False
-
-    async def handle_discharge_time_enable(self) -> bool:
-        """Handle explicit discharge_time_enable changes (from HA entity, not card).
-        
-        This is ONLY called when user directly changes the discharge_time_enable number entity.
-        Card slot checkbox changes bypass this and write directly.
-        """
-        value = getattr(self._hub, "_pending_discharge_time_enable", None)
-        if value is None:
-            _LOGGER.debug("Skip discharge_time_enable: no pending value")
-            return False
-        
-        address = REGISTERS["discharge_time_enable"]
-        if address is None:
-            _LOGGER.warning("discharge_time_enable register not configured; skip write")
-            return False
-        
-        # Retry loop
-        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
-            try:
-                ok = await self._hub._write_register(address, int(value))
-                if ok:
-                    _LOGGER.info(
-                        "Successfully set discharge_time_enable to: %s (attempt %d/%d)",
-                        value, attempt, MAX_HANDLER_RETRIES
-                    )
-                    try:
-                        setattr(self._hub, "_pending_discharge_time_enable", None)
-                    except Exception:
-                        pass
-                    return True
-                else:
-                    _LOGGER.warning(
-                        "Failed to write discharge_time_enable (attempt %d/%d)",
-                        attempt, MAX_HANDLER_RETRIES
-                    )
-            except Exception as e:
-                _LOGGER.error(
-                    "Error writing discharge_time_enable (attempt %d/%d): %s",
-                    attempt, MAX_HANDLER_RETRIES, e
-                )
-        
-            # Wait before retry (except on last attempt)
-            if attempt < MAX_HANDLER_RETRIES:
-                await asyncio.sleep(HANDLER_RETRY_DELAY)
-        
-        _LOGGER.error("Failed to write discharge_time_enable after %d attempts", MAX_HANDLER_RETRIES)
-        return False
+    # REMOVED: handle_charge_time_enable and handle_discharge_time_enable
+    # They are now auto-generated by _make_simple_handler via SIMPLE_REGISTER_MAP

@@ -131,7 +131,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         for attr_name in SIMPLE_REGISTER_MAP:
             setattr(self, f"_pending_{attr_name}", None)
         
-        # Initialize time_enable pending attributes (handled specially)
+        # Initialize time_enable pending attributes (NOW handled by simple handlers)
         self._pending_charge_time_enable: Optional[int] = None
         self._pending_discharge_time_enable: Optional[int] = None
         
@@ -139,9 +139,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
         
-        # Locks to prevent cache overwrites after writes
-        self._charge_time_enable_lock_until: Optional[float] = None
-        self._discharge_time_enable_lock_until: Optional[float] = None
+        # REMOVED: Special locks for time_enable (treated as normal registers now)
+        # self._charge_time_enable_lock_until: Optional[float] = None
+        # self._discharge_time_enable_lock_until: Optional[float] = None
+        
+        # Locks for power states remain
         self._charging_state_lock_until: Optional[float] = None
         self._discharging_state_lock_until: Optional[float] = None
         
@@ -192,9 +194,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         for attr_name in SIMPLE_REGISTER_MAP:
             expected_attrs.add(f"_pending_{attr_name}")
         
-        # Time enable attributes (special handling but still need handlers)
-        expected_attrs.add("_pending_charge_time_enable")
-        expected_attrs.add("_pending_discharge_time_enable")
+        # Time enable attributes REMOVED - card writes directly via number entity
+        # The register write is handled by:
+        # - Card slot checkbox → writes to number.saj_*_time_enable_input → writes to register
+        # - Backend slot handler → writes directly to register after slot data write
+        # No handler registration needed - would cause duplicate writes!
+        # expected_attrs.add("_pending_charge_time_enable")
+        # expected_attrs.add("_pending_discharge_time_enable")
         
         # Power state attributes (both needed for AppMode management)
         expected_attrs.add("_pending_charging_state")
@@ -645,25 +651,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 part = await method(self._client, self._read_lock)
                 if part:
                     # Check for locked values that should NOT be overwritten
-                    if self._charge_time_enable_lock_until and current_time < self._charge_time_enable_lock_until:
-                        if "charge_time_enable" in part:
-                            _LOGGER.info(
-                                f"[CACHE LOCK] Ignoring charge_time_enable from read "
-                                f"(locked until {self._charge_time_enable_lock_until - current_time:.1f}s)"
-                            )
-                            part.pop("charge_time_enable")
-                    else:
-                        self._charge_time_enable_lock_until = None
-                    
-                    if self._discharge_time_enable_lock_until and current_time < self._discharge_time_enable_lock_until:
-                        if "discharge_time_enable" in part:
-                            _LOGGER.info(
-                                f"[CACHE LOCK] Ignoring discharge_time_enable from read "
-                                f"(locked until {self._discharge_time_enable_lock_until - current_time:.1f}s)"
-                            )
-                            part.pop("discharge_time_enable")
-                    else:
-                        self._discharge_time_enable_lock_until = None
+                    # REMOVED: time_enable locks (treated as normal registers now)
                     
                     if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
                         if "charging_enabled" in part:
@@ -698,16 +686,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             except Exception as e:
                 _LOGGER.warning("Reader failed: %s", e)
         
-        # Preserve locked values in cache if they exist
-        if self._charge_time_enable_lock_until and current_time < self._charge_time_enable_lock_until:
-            if "charge_time_enable" in self.inverter_data:
-                new_cache["charge_time_enable"] = self.inverter_data["charge_time_enable"]
-                _LOGGER.info(f"[CACHE LOCK] Preserving charge_time_enable = {new_cache['charge_time_enable']}")
-        
-        if self._discharge_time_enable_lock_until and current_time < self._discharge_time_enable_lock_until:
-            if "discharge_time_enable" in self.inverter_data:
-                new_cache["discharge_time_enable"] = self.inverter_data["discharge_time_enable"]
-                _LOGGER.info(f"[CACHE LOCK] Preserving discharge_time_enable = {new_cache['discharge_time_enable']}")
+        # REMOVED: Preserve locked time_enable values (no longer locked)
         
         if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
             if "charging_enabled" in self.inverter_data:
