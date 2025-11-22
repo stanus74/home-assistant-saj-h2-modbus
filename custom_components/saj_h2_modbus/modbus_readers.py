@@ -329,26 +329,42 @@ def decode_time(value: int) -> str:
     return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
 
 async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
-    """Reads the Charge registers."""
-    # Read the Charge registers directly with the sensor names
+    """Reads the Charge registers including all 7 charge slots."""
+    # Read enable flags + all 7 charge slots (each with start_time, end_time, power_time)
     decode_instructions = [
         ("charge_time_enable", "16u", 1),      # 0x3604 - RAW bitmask value (0-127)
         ("discharge_time_enable", "16u", 1),   # 0x3605 - RAW bitmask value (0-127)
-        ("charge_start_time", "16u", 1),       # 0x3606
-        ("charge_end_time", "16u", 1),         # 0x3607
-        ("charge_power_raw", "16u", 1),        # 0x3608
     ]
+    
+    # Add 7 charge slots (each with start_time, end_time, power_time)
+    for i in range(7):
+        p = "" if i == 0 else str(i + 1)
+        decode_instructions += [
+            (f"charge{p}_start_time", "16u", 1),     # 0x3606 + (i*3)
+            (f"charge{p}_end_time", "16u", 1),       # 0x3607 + (i*3)
+            (f"charge{p}_power_raw", "16u", 1),      # 0x3608 + (i*3)
+        ]
 
-    data = await _read_modbus_data(client, lock, 0x3604, 5, decode_instructions, "charge_data_extended", default_factor=1)
+    # Read from 0x3604 to 0x361A (23 registers total: 2 + 7*3)
+    data = await _read_modbus_data(client, lock, 0x3604, 23, decode_instructions, "charge_data_extended", default_factor=1)
 
     if data:
         try:
-            data["charge_start_time"] = decode_time(data["charge_start_time"])
-            data["charge_end_time"] = decode_time(data["charge_end_time"])
-
-            power_value = data.pop("charge_power_raw")
-            data["charge_day_mask"] = (power_value >> 8) & 0xFF
-            data["charge_power_percent"] = power_value & 0xFF
+            # Process all 7 charge slots
+            for i in range(7):
+                p = "" if i == 0 else str(i + 1)
+                k_start = f"charge{p}_start_time"
+                k_end = f"charge{p}_end_time"
+                k_raw = f"charge{p}_power_raw"
+                
+                if k_start in data:
+                    data[k_start] = decode_time(data[k_start])
+                if k_end in data:
+                    data[k_end] = decode_time(data[k_end])
+                if k_raw in data:
+                    raw = data.pop(k_raw)
+                    data[f"charge{p}_day_mask"] = (raw >> 8) & 0xFF
+                    data[f"charge{p}_power_percent"] = raw & 0xFF
 
             # Create boolean sensors for compatibility (derived from raw values)
             data["charging_enabled"] = data.get("charge_time_enable", 0) > 0

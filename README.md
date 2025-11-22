@@ -4,7 +4,18 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-## <span style="color:red;">New Feature added: "Charge battery with mains power", see the Features section below</span>
+> **Disclaimer / Important Notice**
+>
+> This Home Assistant integration is an **unofficial community project** and is **not affiliated with or endorsed by SAJ**.
+>
+> The Modbus register addresses and sensor mappings used in this integration were  
+> **independently determined through empirical testing and publicly available information**.  
+> No confidential documents, proprietary materials, or NDA-protected data have been included or published.
+>
+> The register mappings in the source code are provided **solely for interoperability purposes**  
+> and are **not based on any official SAJ documentation**.  
+> Users install and use this integration **at their own risk**.
+
 
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
@@ -62,7 +73,21 @@ This is the default setting. Can be disabled in hub.py line 27:
 
 `FAST_POLL_DEFAULT = True # True or False`
 
-### 🚀 Working Mode Control (Advanced Users, new since Version 2.1)
+### 🚀 Working Mode Control 
+
+> **⚠️ Warning: Write Registers**
+>
+> This integration exposes input entities that write directly to Modbus registers.  
+> These commands change inverter behaviour in real time.
+>
+> Incorrect values can cause:
+> - wrong battery charging/discharging
+> - wrong export limit / grid behaviour
+> - inverter protection mode activation
+>
+> Use write functions carefully.  
+> The developer is not liable for any issues arising from user-applied register writes.
+
 
 This version adds support for controlling the working mode of the inverter. This feature is intended for advanced users.
 see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/CHANGELOG.md)
