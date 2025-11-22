@@ -1,3 +1,43 @@
+## [v2.6.6]
+
+### Added
+- Extended charge schedules: All 7 charge time slots with full sensor support
+
+- **Full Charge/Discharge Schedule Support**: All 7 time slots for charging and discharging
+  - 28 new charge sensors (`charge2-7`: start/end time, day mask, power percent)
+  - 28 new discharge sensors (`discharge2-7`: start/end time, day mask, power percent)
+  - All schedule sensors enabled by default
+
+### Changed
+- **Optimized Modbus Communication** (~15-20% traffic reduction):
+  - Static inverter data cached (read once at startup)
+  - Consolidated register reads: Charge (23), Discharge (21), Passive/Battery/Anti-Reflux (39)
+  - Removed duplicate `read_anti_reflux_data` function
+
+### Performance Improvements
+- Reduced Modbus operations per cycle: 17 → 16
+- Static data no longer polled every scan interval
+- Optimized skip_bytes usage for register gaps
+
+### Technical Details
+- **Cached Registers**: 0x8F00-0x8F1C (device info, versions)
+- **Consolidated Reads**: 
+  - Charge: 0x3604-0x361A (23 regs)
+  - Discharge: 0x361B-0x362F (21 regs)
+  - Passive/Config: 0x3636-0x365C (39 regs)
+
+---
+
+
+# Changelog (v2.6.5)
+
+
+- Fixed Fast Coordinator error
+- Added more charging slots (all 7)
+- Fixed minor error
+
+---
+
 # Changelog (v2.6.4)
 
 ## ⚠️ Important Notice – New InverterCard Version
@@ -40,6 +80,7 @@ Go to *Apps → Home Assistant → Storage → Clear Cache and Data*.
   - `switch.py`: `is_on` property now checks BOTH registers (discharging_enabled > 0 AND AppMode == 1)
   - Removed blocking `asyncio.run_coroutine_threadsafe()` calls → Reads directly from cache (synchronous, fast)
   - No more "took 1.001 seconds" warnings
+
 
 
 

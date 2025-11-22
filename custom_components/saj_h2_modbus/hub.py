@@ -102,6 +102,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         self._warned_missing_states: bool = False
         
+        # Cache for static inverter data (loaded only once)
+        self._inverter_static_data: Optional[Dict[str, Any]] = None
+        
+        # Pending cache for performance optimization
         self._pending_cache: Optional[bool] = None
         self._pending_cache_valid: bool = False
         
@@ -127,15 +131,26 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         for attr_name in SIMPLE_REGISTER_MAP:
             setattr(self, f"_pending_{attr_name}", None)
         
+        # Initialize time_enable pending attributes (handled specially)
+        self._pending_charge_time_enable: Optional[int] = None
+        self._pending_discharge_time_enable: Optional[int] = None
+        
         # Power state pending attributes
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
+        
+        # Locks to prevent cache overwrites after writes
+        self._charge_time_enable_lock_until: Optional[float] = None
+        self._discharge_time_enable_lock_until: Optional[float] = None
+        self._charging_state_lock_until: Optional[float] = None
+        self._discharging_state_lock_until: Optional[float] = None
         
         # Initialize handler and verify registered handlers
         self._setting_handler = ChargeSettingHandler(self)
         self._verify_and_log_handlers()
 
         # Dynamically generate all setter methods from PENDING_FIELDS
+        # Include charge_time_enable and discharge_time_enable - they can be set via entities
         for name, attr_path in PENDING_FIELDS:
             setter = make_pending_setter(attr_path)
             setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
@@ -176,6 +191,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Simple register attributes
         for attr_name in SIMPLE_REGISTER_MAP:
             expected_attrs.add(f"_pending_{attr_name}")
+        
+        # Time enable attributes (special handling but still need handlers)
+        expected_attrs.add("_pending_charge_time_enable")
+        expected_attrs.add("_pending_discharge_time_enable")
         
         # Power state attributes (both needed for AppMode management)
         expected_attrs.add("_pending_charging_state")
@@ -477,36 +496,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 if k not in power_state_pending
             }
             
-            # Log charge pending settings
+            # Log pending settings
             if charge_pending:
                 _LOGGER.info(f"[PENDING DEBUG] Found charge pending for indices: {charge_pending}")
-                for idx in charge_pending:
-                    slot = self._pending_charges[idx - 1]
-                    _LOGGER.info(
-                        f"[PENDING DEBUG] Charge{idx} pending values: "
-                        f"start={slot.get('start')}, end={slot.get('end')}, "
-                        f"day_mask={slot.get('day_mask')}, power_percent={slot.get('power_percent')}"
-                    )
-            
-            # Log discharge pending settings
+        
             if discharge_pending:
                 _LOGGER.info(f"[PENDING DEBUG] Found discharge pending for indices: {discharge_pending}")
-                for idx in discharge_pending:
-                    slot = self._pending_discharges[idx - 1]
-                    _LOGGER.info(
-                        f"[PENDING DEBUG] Discharge{idx} pending values: "
-                        f"start={slot.get('start')}, end={slot.get('end')}, "
-                        f"day_mask={slot.get('day_mask')}, power_percent={slot.get('power_percent')}"
-                    )
-            
+        
             results = []
-            
+        
             # 3a. ZUERST: Charge Settings (sequenziell pro Index)
             for charge_idx in charge_pending:
                 try:
                     if ADVANCED_LOGGING:
                         _LOGGER.debug(f"[ADVANCED] Processing charge settings for index {charge_idx}")
-                    
+                
                     await self._setting_handler.handle_charge_settings_by_index(charge_idx)
                     results.append((f"charge{charge_idx}", True))
                 except Exception as e:
@@ -514,13 +518,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         "Error processing charge settings for index %s: %s",
                         charge_idx, e, exc_info=e
                     )
-            
+        
             # 3b. DANN: Discharge Settings (sequenziell pro Index)
             for discharge_idx in discharge_pending:
                 try:
                     if ADVANCED_LOGGING:
                         _LOGGER.debug(f"[ADVANCED] Processing discharge settings for index {discharge_idx}")
-                    
+                
                     await self._setting_handler.handle_discharge_settings_by_index(discharge_idx)
                     results.append((f"discharge{discharge_idx}", True))
                 except Exception as e:
@@ -528,12 +532,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         "Error processing discharge settings for index %s: %s",
                         discharge_idx, e, exc_info=e
                     )
-            
-            # 3c. DANACH: Power State Handler
+        
+            # 3c. DANACH: Power State Handler (explizite Button-Klicks)
+            # These handle their own AppMode updates
             if power_state_pending:
                 if ADVANCED_LOGGING:
                     _LOGGER.info(f"[ADVANCED] Executing {len(power_state_pending)} power state handler(s) sequentially")
-                
+            
                 for attr_name, handler in power_state_pending.items():
                     try:
                         result = await handler()
@@ -545,12 +550,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                             "Error executing power state handler '%s': %s",
                             attr_name, e, exc_info=e
                         )
-            
+        
             # 3d. Parallele Ausführung von einfachen Handlern
             if simple_pending:
                 if ADVANCED_LOGGING:
                     _LOGGER.info(f"[ADVANCED] Executing {len(simple_pending)} simple handler(s) in parallel")
-                
+            
                 tasks = [handler() for handler in simple_pending.values()]
                 simple_results = await asyncio.gather(*tasks, return_exceptions=True)
                 
@@ -564,7 +569,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         results.append((attr_name, result))
                         if ADVANCED_LOGGING and result:
                             _LOGGER.debug(f"[ADVANCED] Handler '{attr_name}' succeeded")
-            
+        
             # 4. Summary
             successful = sum(1 for _, r in results if r is True)
             if ADVANCED_LOGGING and results:
@@ -572,13 +577,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     f"[ADVANCED] Pending processing complete: "
                     f"{successful}/{len(charge_pending) + len(discharge_pending) + len(pending)} successful"
                 )
-        
+    
         except Exception as e:
             _LOGGER.warning(
                 "Pending processing failed, continuing to read phase: %s",
                 e, exc_info=True
             )
-        
+    
         finally:
             self._invalidate_pending_cache()
 
@@ -590,8 +595,31 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         new_cache: Dict[str, Any] = {}
         await self._ensure_connected_client()
         
+        # Load static inverter data only once (on first call)
+        if self._inverter_static_data is None:
+            try:
+                _LOGGER.info("Loading static inverter data (first time only)...")
+                self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
+                    self._client, self._read_lock
+                )
+                if self._inverter_static_data:
+                    _LOGGER.info(
+                        "Static inverter data loaded successfully: SN=%s, Type=%s",
+                        self._inverter_static_data.get("sn", "Unknown"),
+                        self._inverter_static_data.get("devtype", "Unknown")
+                    )
+                else:
+                    _LOGGER.warning("Static inverter data returned empty")
+            except Exception as e:
+                _LOGGER.error("Failed to load static inverter data: %s", e)
+                self._inverter_static_data = {}
+        
+        # Always include static data in cache
+        if self._inverter_static_data:
+            new_cache.update(self._inverter_static_data)
+        
+        # Reader methods
         reader_methods = [
-            modbus_readers.read_modbus_inverter_data,
             modbus_readers.read_modbus_realtime_data,
             modbus_readers.read_additional_modbus_data_1_part_1,
             modbus_readers.read_additional_modbus_data_1_part_2,
@@ -604,17 +632,59 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             modbus_readers.read_inverter_phase_data,
             modbus_readers.read_offgrid_output_data,
             modbus_readers.read_side_net_data,
-            modbus_readers.read_passive_battery_data,
+            modbus_readers.read_passive_battery_data,  # Now includes anti-reflux data
             modbus_readers.read_charge_data,
             modbus_readers.read_discharge_data,
-            modbus_readers.read_anti_reflux_data,
             modbus_readers.read_meter_a_data,
         ]
 
+        current_time = time.monotonic()
+        
         for method in reader_methods:
             try:
                 part = await method(self._client, self._read_lock)
                 if part:
+                    # Check for locked values that should NOT be overwritten
+                    if self._charge_time_enable_lock_until and current_time < self._charge_time_enable_lock_until:
+                        if "charge_time_enable" in part:
+                            _LOGGER.info(
+                                f"[CACHE LOCK] Ignoring charge_time_enable from read "
+                                f"(locked until {self._charge_time_enable_lock_until - current_time:.1f}s)"
+                            )
+                            part.pop("charge_time_enable")
+                    else:
+                        self._charge_time_enable_lock_until = None
+                    
+                    if self._discharge_time_enable_lock_until and current_time < self._discharge_time_enable_lock_until:
+                        if "discharge_time_enable" in part:
+                            _LOGGER.info(
+                                f"[CACHE LOCK] Ignoring discharge_time_enable from read "
+                                f"(locked until {self._discharge_time_enable_lock_until - current_time:.1f}s)"
+                            )
+                            part.pop("discharge_time_enable")
+                    else:
+                        self._discharge_time_enable_lock_until = None
+                    
+                    if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+                        if "charging_enabled" in part:
+                            _LOGGER.info(
+                                f"[CACHE LOCK] Ignoring charging_enabled from read "
+                                f"(locked until {self._charging_state_lock_until - current_time:.1f}s)"
+                            )
+                            part.pop("charging_enabled")
+                    else:
+                        self._charging_state_lock_until = None
+                    
+                    if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+                        if "discharging_enabled" in part:
+                            _LOGGER.info(
+                                f"[CACHE LOCK] Ignoring discharging_enabled from read "
+                                f"(locked until {self._discharging_state_lock_until - current_time:.1f}s)"
+                            )
+                            part.pop("discharging_enabled")
+                    else:
+                        self._discharging_state_lock_until = None
+                    
                     new_cache.update(part)
             except ReconnectionNeededError as e:
                 _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
@@ -627,6 +697,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.warning(f"Retry failed for {method.__name__}: {e}")
             except Exception as e:
                 _LOGGER.warning("Reader failed: %s", e)
+        
+        # Preserve locked values in cache if they exist
+        if self._charge_time_enable_lock_until and current_time < self._charge_time_enable_lock_until:
+            if "charge_time_enable" in self.inverter_data:
+                new_cache["charge_time_enable"] = self.inverter_data["charge_time_enable"]
+                _LOGGER.info(f"[CACHE LOCK] Preserving charge_time_enable = {new_cache['charge_time_enable']}")
+        
+        if self._discharge_time_enable_lock_until and current_time < self._discharge_time_enable_lock_until:
+            if "discharge_time_enable" in self.inverter_data:
+                new_cache["discharge_time_enable"] = self.inverter_data["discharge_time_enable"]
+                _LOGGER.info(f"[CACHE LOCK] Preserving discharge_time_enable = {new_cache['discharge_time_enable']}")
+        
+        if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+            if "charging_enabled" in self.inverter_data:
+                new_cache["charging_enabled"] = self.inverter_data["charging_enabled"]
+                _LOGGER.info(f"[CACHE LOCK] Preserving charging_enabled = {new_cache['charging_enabled']}")
+        
+        if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+            if "discharging_enabled" in self.inverter_data:
+                new_cache["discharging_enabled"] = self.inverter_data["discharging_enabled"]
+                _LOGGER.info(f"[CACHE LOCK] Preserving discharging_enabled = {new_cache['discharging_enabled']}")
         
         return new_cache
 
@@ -710,6 +801,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_cache = True
                 self._pending_cache_valid = True
                 return True
+        
+        # Check time_enable attributes
+        if self._pending_charge_time_enable is not None or self._pending_discharge_time_enable is not None:
+            self._pending_cache = True
+            self._pending_cache_valid = True
+            return True
         
         # Check power state
         if self._pending_charging_state is not None or self._pending_discharging_state is not None:

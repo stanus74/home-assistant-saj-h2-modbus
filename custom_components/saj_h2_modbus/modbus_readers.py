@@ -411,61 +411,62 @@ async def read_discharge_data(client: ModbusClient, lock: Lock) -> DataDict:
 
 
 
-async def read_anti_reflux_data(client: ModbusClient, lock: Lock) -> DataDict:
-    """Reads the Anti-Reflux registers using the generic read_modbus_data function."""
-    decode = [
-        ("AntiRefluxPowerLimit", "16u", 1),
-        ("AntiRefluxCurrentLimit", "16u", 1),
-        ("AntiRefluxCurrentmode_raw", "16u", 1),
-    ]
-    try:
-        data = await _read_modbus_data(client, lock, 0x365A, 3, decode, "anti_reflux_data", default_factor=1)
-        if not data:
-            return {}
-        mode = data.pop("AntiRefluxCurrentmode_raw", None)
-        if mode is not None:
-            modes = {
-                0: "0: Not open anti-reflux",
-                1: "1: Total power mode",
-                2: "2: Phase current mode",
-                3: "3: Phase power mode",
-            }
-            data["AntiRefluxCurrentmode"] = modes.get(mode, f"Unknown mode ({mode})")
-        return data
-    except Exception as e:
-        _LOGGER.error("Error reading Anti-Reflux data: %s", e)
-        return {}
-
 async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
-    """Reads the Passive Charge/Discharge and Battery configuration registers."""
+    """Reads the Passive Charge/Discharge, Battery configuration, and Anti-Reflux registers."""
     decode_instructions = [
-        
-         # New passive registers in snake_case
+        # Passive registers (0x3636-0x363A)
         ("passive_charge_enable", "16u", 1),
         ("passive_grid_charge_power", "16u"),
         ("passive_grid_discharge_power", "16u"),
         ("passive_bat_charge_power", "16u"),
         ("passive_bat_discharge_power", "16u"),
-
-
-        (None, "skip_bytes", 18),  # Skip registers 363B-3643
+        
+        # Skip registers 363B-3643 (18 bytes = 9 registers)
+        (None, "skip_bytes", 18),
+        
+        # Battery configuration (0x3644-0x3647)
         ("BatOnGridDisDepth", "16u", 1),
         ("BatOffGridDisDepth", "16u", 1),
         ("BatcharDepth", "16u", 1),
         ("AppMode", "16u", 1),
-        (None, "skip_bytes", 10),  # Skip registers between AppMode (3647h) and BatChargePower (364Dh)
-        ("BatChargePower", "16u"),  # Register 364Dh
-        ("BatDischargePower", "16u"),  # Register 364Eh
-        ("GridChargePower", "16u"),  # Register 364Fh
-        ("GridDischargePower", "16u"),  # Register 3650h
+        
+        # Skip registers 3648-364C (10 bytes = 5 registers)
+        (None, "skip_bytes", 10),
+        
+        # Power limits (0x364D-0x3650)
+        ("BatChargePower", "16u"),
+        ("BatDischargePower", "16u"),
+        ("GridChargePower", "16u"),
+        ("GridDischargePower", "16u"),
+        
+        # Skip registers 3651-3659 (18 bytes = 9 registers)
+        (None, "skip_bytes", 18),
+        
+        # Anti-Reflux registers (0x365A-0x365C)
+        ("AntiRefluxPowerLimit", "16u", 1),
+        ("AntiRefluxCurrentLimit", "16u", 1),
+        ("AntiRefluxCurrentmode_raw", "16u", 1),
     ]
 
     try:
-        data = await _read_modbus_data(client, lock, 0x3636, 27, decode_instructions, "passive_battery_data", default_factor=0.1)
-        #_LOGGER.debug(f"Passive Battery Data: {data}")  # Add this line
+        # Read from 0x3636 to 0x365C (39 registers total)
+        data = await _read_modbus_data(client, lock, 0x3636, 39, decode_instructions, "passive_battery_anti_reflux_data", default_factor=0.1)
+        
+        if data:
+            # Process anti-reflux mode
+            mode = data.pop("AntiRefluxCurrentmode_raw", None)
+            if mode is not None:
+                modes = {
+                    0: "0: Not open anti-reflux",
+                    1: "1: Total power mode",
+                    2: "2: Phase current mode",
+                    3: "3: Phase power mode",
+                }
+                data["AntiRefluxCurrentmode"] = modes.get(mode, f"Unknown mode ({mode})")
+        
         return data
     except Exception as e:
-        _LOGGER.error(f"Error reading Passive Battery data: {e}")
+        _LOGGER.error(f"Error reading Passive Battery and Anti-Reflux data: {e}")
         return {}
 
 async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
