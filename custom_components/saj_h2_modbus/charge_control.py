@@ -144,10 +144,10 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 
 
 def _make_simple_handler(pending_attr: str, address: int, label: str):
-    """Factory for simple register handlers with retry logic.
+    """Factory for simple register handlers with exponential backoff retry logic.
     
     Attempts to write the pending value up to MAX_HANDLER_RETRIES times
-    with HANDLER_RETRY_DELAY between attempts.
+    with exponential backoff (1s, 2s, 4s) between attempts.
     """
 
     async def handler(self) -> bool:
@@ -161,30 +161,17 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
             _LOGGER.warning("%s register not configured; skip write", pending_attr)
             return False
 
-        # Retry loop
-        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
+        # Use exponential backoff retry
+        ok = await self._write_register_with_backoff(address, int(value), label)
+        if ok:
             try:
-                ok = await self._hub._write_register(address, int(value))
-                if ok:
-                    _LOGGER.info("Successfully set %s to: %s (attempt %d/%d)",
-                                label, value, attempt, MAX_HANDLER_RETRIES)
-                    try:
-                        setattr(self._hub, f"_pending_{pending_attr}", None)
-                    except Exception:
-                        pass
-                    return True
-                else:
-                    _LOGGER.warning("Failed to write %s (attempt %d/%d)",
-                                   label, attempt, MAX_HANDLER_RETRIES)
-            except Exception as e:
-                _LOGGER.error("Error writing %s (attempt %d/%d): %s",
-                             label, attempt, MAX_HANDLER_RETRIES, e)
-            
-            # Wait before retry (except on last attempt)
-            if attempt < MAX_HANDLER_RETRIES:
-                await asyncio.sleep(HANDLER_RETRY_DELAY)
+                setattr(self._hub, f"_pending_{pending_attr}", None)
+            except Exception:
+                pass
+            return True
         
-        _LOGGER.error("Failed to write %s after %d attempts", label, MAX_HANDLER_RETRIES)
+        _LOGGER.error("Failed to write %s after %d attempts with exponential backoff",
+                     label, MAX_HANDLER_RETRIES)
         return False
 
     return handler
@@ -393,7 +380,9 @@ class ChargeSettingHandler:
                     f"[PENDING DEBUG] Enabling {label} in time_enable register: "
                     f"{current_mask} (binary: {bin(current_mask)}) → {new_mask} (binary: {bin(new_mask)})"
                 )
-                write_ok = await self._hub._write_register(time_enable_entity_id, new_mask)
+                write_ok = await self._write_register_with_backoff(
+                    time_enable_entity_id, new_mask, f"{label} time_enable"
+                )
                 
                 if not write_ok:
                     _LOGGER.error(f"[PENDING DEBUG] Failed to write time_enable for {label}")
@@ -461,6 +450,39 @@ class ChargeSettingHandler:
 
     # ========== HELPER METHODS (Reading/Writing Registers) ==========
     
+    async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
+        """Write register with exponential backoff retry.
+        
+        Args:
+            address: Modbus register address
+            value: Value to write
+            label: Human-readable label for logging
+            
+        Returns:
+            True if write succeeded, False otherwise
+        """
+        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
+            try:
+                ok = await self._hub._write_register(address, int(value))
+                if ok:
+                    _LOGGER.info("Successfully wrote %s=%s to 0x%04x (attempt %d/%d)",
+                                label, value, address, attempt, MAX_HANDLER_RETRIES)
+                    return True
+                else:
+                    _LOGGER.warning("Failed to write %s (attempt %d/%d)",
+                                   label, attempt, MAX_HANDLER_RETRIES)
+            except Exception as e:
+                _LOGGER.error("Error writing %s (attempt %d/%d): %s",
+                             label, attempt, MAX_HANDLER_RETRIES, e)
+            
+            # Exponential backoff: 1s, 2s, 4s
+            if attempt < MAX_HANDLER_RETRIES:
+                delay = 2 ** (attempt - 1)
+                _LOGGER.debug("Waiting %.1fs before retry (exponential backoff)", delay)
+                await asyncio.sleep(delay)
+        
+        return False
+
     async def _update_day_mask_and_power(
         self,
         address: int,
@@ -534,7 +556,9 @@ class ChargeSettingHandler:
             _LOGGER.debug(
                 f"Writing combined value {combined_value} to register {hex(address)} for {label}"
             )
-            success = await self._hub._write_register(address, combined_value)
+            success = await self._write_register_with_backoff(
+                address, combined_value, f"{label} day_mask_power"
+            )
 
             if success:
                 _LOGGER.info(
@@ -549,7 +573,7 @@ class ChargeSettingHandler:
     async def _write_time_register(
         self, address: int, time_str: str, label: str
     ) -> None:
-        """Writes a time register in HH:MM format"""
+        """Writes a time register in HH:MM format with exponential backoff retry"""
         parts = time_str.split(":")
         if len(parts) != 2:
             _LOGGER.error(f"Invalid time format for {label}: {time_str}")
@@ -562,7 +586,7 @@ class ChargeSettingHandler:
             return
 
         value = (hours << 8) | minutes
-        success = await self._hub._write_register(address, value)
+        success = await self._write_register_with_backoff(address, value, label)
         if success:
             _LOGGER.info(f"Successfully set {label}: {time_str}")
         else:
@@ -587,7 +611,9 @@ class ChargeSettingHandler:
             f"Charging turned {'ON' if desired else 'OFF'}, writing {write_value} to register 0x3604"
         )
         
-        ok = await self._hub._write_register(addr, write_value)
+        ok = await self._write_register_with_backoff(
+            addr, write_value, "charging state (0x3604)"
+        )
         if not ok:
             _LOGGER.error(f"Failed to write {write_value} to register 0x3604")
             return False
@@ -636,7 +662,9 @@ class ChargeSettingHandler:
             f"writing {write_value} to register 0x3605"
         )
         
-        ok = await self._hub._write_register(addr, write_value)
+        ok = await self._write_register_with_backoff(
+            addr, write_value, "discharging state (0x3605)"
+        )
         if not ok:
             _LOGGER.error(f"Failed to write {write_value} to register 0x3605")
             return False
@@ -693,7 +721,9 @@ class ChargeSettingHandler:
             f"(charge={charge_enabled}, discharge={discharge_enabled})"
         )
         
-        ok = await self._hub._write_register(REGISTERS["app_mode"], desired_app_mode)
+        ok = await self._write_register_with_backoff(
+            REGISTERS["app_mode"], desired_app_mode, "AppMode"
+        )
         if ok:
             _LOGGER.info(f"Successfully set AppMode to {desired_app_mode}")
             self._hub.inverter_data["AppMode"] = desired_app_mode

@@ -594,7 +594,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._invalidate_pending_cache()
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
-        """Sequential execution of readers; builds the cache."""
+        """Parallel execution of readers in logical groups; builds the cache."""
         if ADVANCED_LOGGING:
             _LOGGER.info(f"[ADVANCED] _run_reader_methods started - Client connected: {self._client.connected if self._client else 'No client'}")
         
@@ -624,70 +624,130 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if self._inverter_static_data:
             new_cache.update(self._inverter_static_data)
         
-        # Reader methods
-        reader_methods = [
-            modbus_readers.read_modbus_realtime_data,
-            modbus_readers.read_additional_modbus_data_1_part_1,
-            modbus_readers.read_additional_modbus_data_1_part_2,
-            modbus_readers.read_additional_modbus_data_2_part_1,
-            modbus_readers.read_additional_modbus_data_2_part_2,
-            modbus_readers.read_additional_modbus_data_3,
-            modbus_readers.read_additional_modbus_data_3_2,
-            modbus_readers.read_additional_modbus_data_4,
-            modbus_readers.read_battery_data,
-            modbus_readers.read_inverter_phase_data,
-            modbus_readers.read_offgrid_output_data,
-            modbus_readers.read_side_net_data,
-            modbus_readers.read_passive_battery_data,  # Now includes anti-reflux data
-            modbus_readers.read_charge_data,
-            modbus_readers.read_discharge_data,
-            modbus_readers.read_meter_a_data,
+        # Group readers by logical dependencies - readers in same group run in parallel
+        # Groups run sequentially to avoid overwhelming the Modbus connection
+        reader_groups = [
+            # Group 1: Critical real-time data
+            [modbus_readers.read_modbus_realtime_data],
+            
+            # Group 2: Additional data part 1 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_1_part_1,
+                modbus_readers.read_additional_modbus_data_1_part_2,
+            ],
+            
+            # Group 3: Additional data part 2 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_2_part_1,
+                modbus_readers.read_additional_modbus_data_2_part_2,
+            ],
+            
+            # Group 4: Additional data part 3 & 4 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_3,
+                modbus_readers.read_additional_modbus_data_3_2,
+                modbus_readers.read_additional_modbus_data_4,
+            ],
+            
+            # Group 5: Device-specific data (can run in parallel)
+            [
+                modbus_readers.read_battery_data,
+                modbus_readers.read_inverter_phase_data,
+                modbus_readers.read_offgrid_output_data,
+            ],
+            
+            # Group 6: Network and passive data (can run in parallel)
+            [
+                modbus_readers.read_side_net_data,
+                modbus_readers.read_passive_battery_data,
+                modbus_readers.read_meter_a_data,
+            ],
+            
+            # Group 7: Charge/Discharge settings (can run in parallel)
+            [
+                modbus_readers.read_charge_data,
+                modbus_readers.read_discharge_data,
+            ],
         ]
 
         current_time = time.monotonic()
+        total_readers = sum(len(group) for group in reader_groups)
+        successful_count = 0
         
-        for method in reader_methods:
-            try:
-                part = await method(self._client, self._read_lock)
-                if part:
+        if ADVANCED_LOGGING:
+            _LOGGER.info(f"[ADVANCED] Executing {total_readers} readers in {len(reader_groups)} groups")
+        
+        # Execute each group in sequence, but readers within group run in parallel
+        for group_idx, group in enumerate(reader_groups, 1):
+            group_start = time.monotonic()
+            
+            # Create tasks for all readers in this group
+            tasks = [method(self._client, self._read_lock) for method in group]
+            
+            # Execute group in parallel with exception handling
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            group_duration = time.monotonic() - group_start
+            
+            # Process results from this group
+            for method, result in zip(group, results):
+                method_name = method.__name__
+                
+                if isinstance(result, ReconnectionNeededError):
+                    _LOGGER.warning(f"{method_name} required reconnection: {result}")
+                    try:
+                        await self.reconnect_client()
+                        # Retry once after reconnection
+                        retry_result = await method(self._client, self._read_lock)
+                        if retry_result:
+                            new_cache.update(retry_result)
+                            successful_count += 1
+                    except Exception as retry_error:
+                        _LOGGER.warning(f"Retry failed for {method_name}: {retry_error}")
+                
+                elif isinstance(result, Exception):
+                    _LOGGER.warning(f"Reader {method_name} failed: {result}")
+                
+                elif isinstance(result, dict) and result:
                     # Check for locked values that should NOT be overwritten
-                    # REMOVED: time_enable locks (treated as normal registers now)
-                    
                     if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
-                        if "charging_enabled" in part:
+                        if "charging_enabled" in result:
                             _LOGGER.info(
-                                f"[CACHE LOCK] Ignoring charging_enabled from read "
+                                f"[CACHE LOCK] Ignoring charging_enabled from {method_name} "
                                 f"(locked until {self._charging_state_lock_until - current_time:.1f}s)"
                             )
-                            part.pop("charging_enabled")
-                    else:
-                        self._charging_state_lock_until = None
+                            result.pop("charging_enabled")
                     
                     if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
-                        if "discharging_enabled" in part:
+                        if "discharging_enabled" in result:
                             _LOGGER.info(
-                                f"[CACHE LOCK] Ignoring discharging_enabled from read "
+                                f"[CACHE LOCK] Ignoring discharging_enabled from {method_name} "
                                 f"(locked until {self._discharging_state_lock_until - current_time:.1f}s)"
                             )
-                            part.pop("discharging_enabled")
-                    else:
-                        self._discharging_state_lock_until = None
+                            result.pop("discharging_enabled")
                     
-                    new_cache.update(part)
-            except ReconnectionNeededError as e:
-                _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                await self.reconnect_client()
-                try:
-                    part = await method(self._client, self._read_lock)
-                    if part:
-                        new_cache.update(part)
-                except Exception as e:
-                    _LOGGER.warning(f"Retry failed for {method.__name__}: {e}")
-            except Exception as e:
-                _LOGGER.warning("Reader failed: %s", e)
+                    new_cache.update(result)
+                    successful_count += 1
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"[ADVANCED] Group {group_idx}/{len(reader_groups)} completed in {group_duration:.2f}s "
+                    f"({len(group)} readers)"
+                )
         
-        # REMOVED: Preserve locked time_enable values (no longer locked)
+        if ADVANCED_LOGGING:
+            _LOGGER.info(
+                f"[ADVANCED] All reader groups completed: {successful_count}/{total_readers} successful"
+            )
         
+        # Clear expired locks
+        if self._charging_state_lock_until and current_time >= self._charging_state_lock_until:
+            self._charging_state_lock_until = None
+        
+        if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
+            self._discharging_state_lock_until = None
+        
+        # Preserve locked values if still active
         if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
             if "charging_enabled" in self.inverter_data:
                 new_cache["charging_enabled"] = self.inverter_data["charging_enabled"]
@@ -770,46 +830,41 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:
-        """Checks if there are pending changes (with caching)."""
+        """Optimized check for pending changes with early exit strategy."""
         if self._pending_cache_valid:
             return self._pending_cache
         
-        # Check simple pending attributes
-        for attr_name in SIMPLE_REGISTER_MAP:
-            if getattr(self, f"_pending_{attr_name}") is not None:
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
+        # Check simple pending attributes (early exit on first match)
+        has_pending = any(
+            getattr(self, f"_pending_{attr_name}", None) is not None
+            for attr_name in SIMPLE_REGISTER_MAP
+        )
         
         # Check time_enable attributes
-        if self._pending_charge_time_enable is not None or self._pending_discharge_time_enable is not None:
-            self._pending_cache = True
-            self._pending_cache_valid = True
-            return True
+        if not has_pending:
+            has_pending = (
+                self._pending_charge_time_enable is not None or
+                self._pending_discharge_time_enable is not None
+            )
         
         # Check power state
-        if self._pending_charging_state is not None or self._pending_discharging_state is not None:
-            self._pending_cache = True
-            self._pending_cache_valid = True
-            return True
+        if not has_pending:
+            has_pending = (
+                self._pending_charging_state is not None or
+                self._pending_discharging_state is not None
+            )
         
-        # Check charge settings
-        for slot in self._pending_charges:
-            if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
+        # Check charge and discharge settings (combined for efficiency)
+        if not has_pending:
+            has_pending = any(
+                any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
+                for slot in (self._pending_charges + self._pending_discharges)
+            )
         
-        # Check discharge settings
-        for slot in self._pending_discharges:
-            if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
-        
-        self._pending_cache = False
+        # Cache the result
+        self._pending_cache = has_pending
         self._pending_cache_valid = True
-        return False
+        return has_pending
     
     def _invalidate_pending_cache(self) -> None:
         """Invalidate the pending cache when pending values change."""
