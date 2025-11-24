@@ -142,7 +142,7 @@ async def read_modbus_realtime_data(client: ModbusClient, lock: Lock) -> DataDic
     data["faultmsg"] = ", ".join(fault_messages).strip()[:254]
     
     if fault_messages:
-        _LOGGER.error(f"Fault detected: {data['faultmsg']}")
+        _LOGGER.error("Fault detected: %s", data["faultmsg"])
         
     return data
 
@@ -462,11 +462,11 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
                     2: "2: Phase current mode",
                     3: "3: Phase power mode",
                 }
-                data["AntiRefluxCurrentmode"] = modes.get(mode, f"Unknown mode ({mode})")
+                data["AntiRefluxCurrentmode"] = modes.get(mode, "Unknown mode (%s)" % mode)
         
         return data
     except Exception as e:
-        _LOGGER.error(f"Error reading Passive Battery and Anti-Reflux data: {e}")
+        _LOGGER.error("Error reading Passive Battery and Anti-Reflux data: %s", e)
         return {}
 
 async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
@@ -500,7 +500,7 @@ async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
             p3 = data.get("Meter_A_PowerW_3", 0)
             data["CT_GridPower_total"] = p1 + p2 + p3
         except Exception as e:
-            _LOGGER.error(f"Error calculating CT_GridPower_total: {e}")
+            _LOGGER.error("Error calculating CT_GridPower_total: %s", e)
     return data
 
 async def read_side_net_data(client: ModbusClient, lock: Lock) -> DataDict:
