@@ -578,8 +578,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
             if simple_pending:
                 _LOGGER.info(f"Processing {len(simple_pending)} simple handlers in parallel")
-                tasks = [handler() for handler in simple_pending.values()]
-                simple_results = await asyncio.gather(*tasks, return_exceptions=True)
+                simple_tasks = [handler() for handler in simple_pending.values()]
+                simple_results = await asyncio.gather(*simple_tasks, return_exceptions=True)
                 
                 for attr_name, result in zip(simple_pending.keys(), simple_results):
                     if isinstance(result, Exception):
@@ -613,7 +613,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Parallel execution of readers in logical groups; builds cache."""
         if ADVANCED_LOGGING:
             _LOGGER.info(f"[ADVANCED] _run_reader_methods started - Client connected: {self._client.connected if self._client else 'No client'}")
-        
+
         new_cache: Dict[str, Any] = {}
       
         
