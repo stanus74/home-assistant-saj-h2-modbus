@@ -26,7 +26,7 @@ async def _read_modbus_data(
         regs = await try_read_registers(client, lock, 1, start_address, count)
 
         if not regs:
-            _LOGGER.log(log_level_on_error, f"Error reading modbus data: No response for {data_key}")
+            _LOGGER.log(log_level_on_error, "Error reading modbus data: No response for %s", data_key)
             return {}
 
         new_data = {}
@@ -60,7 +60,7 @@ async def _read_modbus_data(
 
                 new_data[key] = round(value * factor, 2) if factor != 1 else value
             except Exception as e:
-                _LOGGER.log(log_level_on_error, f"Error decoding {key}: {e}")
+                _LOGGER.log(log_level_on_error, "Error decoding %s: %s", key, e)
                 # Do not discard the entire dataset; continue to the next field
             finally:
                 index += 1
@@ -69,11 +69,11 @@ async def _read_modbus_data(
 
     except ValueError as ve:
         # Known error, e.g. Exception 131/0
-        _LOGGER.info(f"Unsupported Modbus register for {data_key}: {ve}")
+        _LOGGER.info("Unsupported Modbus register for %s: %s", data_key, ve)
         return {}
 
     except Exception as e:
-        _LOGGER.log(log_level_on_error, f"Error reading modbus data: {e}")
+        _LOGGER.log(log_level_on_error, "Error reading modbus data: %s", e)
         return {}
 
 async def read_modbus_inverter_data(client: ModbusClient, lock: Lock) -> DataDict:
@@ -115,7 +115,7 @@ async def read_modbus_inverter_data(client: ModbusClient, lock: Lock) -> DataDic
 
         return data
     except Exception as e:
-        _LOGGER.error(f"Error reading inverter data: {e}")
+        _LOGGER.error("Error reading inverter data: %s", e)
         return {}
 
 async def read_modbus_realtime_data(client: ModbusClient, lock: Lock) -> DataDict:
@@ -371,7 +371,7 @@ async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
             data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
 
         except Exception as e:
-            _LOGGER.error(f"Error processing Charge data: {e}")
+            _LOGGER.error("Error processing Charge data: %s", e)
             return {}
 
     return data

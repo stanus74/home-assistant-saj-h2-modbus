@@ -79,7 +79,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
                 return bool(discharging_enabled > 0)
                 
         except Exception as e:
-            _LOGGER.warning(f"Error getting {self._switch_type} state: {e}")
+            _LOGGER.warning("Error getting %s state: %s", self._switch_type, e)
             return False
         
         # Fallback (should never reach here with current switch types)
@@ -103,14 +103,14 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         Does NOT apply optimistic updates to avoid conflicts with card slot configurations.
         """
         if self.is_on == desired_state:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} already {'on' if desired_state else 'off'}")
+            _LOGGER.debug("%s already %s", self._switch_type.capitalize(), "on" if desired_state else "off")
             return
 
         if not self._allow_switch():
             return
 
         try:
-            _LOGGER.debug(f"{self._switch_type.capitalize()} turned {'ON' if desired_state else 'OFF'}")
+            _LOGGER.debug("%s turned %s", self._switch_type.capitalize(), "ON" if desired_state else "OFF")
             
             # Set the pending state - will be processed in next coordinator update
             await getattr(self._hub, f"set_{self._switch_type}")(desired_state)
@@ -120,15 +120,16 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             # Log pending value
             pending_attr = f"_pending_{self._switch_type}_state"
             pending_value = getattr(self._hub, pending_attr, None)
-            _LOGGER.debug(f"Pending {pending_attr} set to: {pending_value}")
+            _LOGGER.debug("Pending %s set to: %s", pending_attr, pending_value)
             
             # UI will show pending status via extra_state_attributes
             self.async_write_ha_state()
             _LOGGER.debug(
-                f"Pending {self._switch_type} setting will be processed in next update cycle"
+                "Pending %s setting will be processed in next update cycle",
+                self._switch_type
             )
         except Exception as e:
-            _LOGGER.error(f"Failed to set {self._switch_type} state: {e}")
+            _LOGGER.error("Failed to set %s state: %s", self._switch_type, e)
             raise
 
     async def async_turn_on(self, **kwargs) -> None:
@@ -142,6 +143,6 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         elapsed = current_time - self._last_switch_time
         if elapsed < self._switch_timeout:
             remaining = round(self._switch_timeout - elapsed, 1)
-            _LOGGER.warning(f"Time lock active! Wait {remaining}s before switching {self._switch_type} again.")
+            _LOGGER.warning("Time lock active! Wait %ss before switching %s again.", remaining, self._switch_type)
             return False
         return True

@@ -12,6 +12,13 @@ from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
 
+SENSOR_DEFINITIONS = [
+    {"key": "pvPower", "name": "PV Power", "unit": "W"},
+    {"key": "batteryPower", "name": "Battery Power", "unit": "W"},
+    {"key": "gridPower", "name": "Grid Power", "unit": "W"},
+    {"key": "inverterPower", "name": "Inverter Power", "unit": "W"},
+]
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ sensors from a config entry."""
     hub: SAJModbusHub = hass.data[DOMAIN][entry.entry_id]["hub"]
@@ -23,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities.append(entity)
 
     async_add_entities(entities)
-    _LOGGER.info(f"Added {len(entities)} SAJ sensors")
+    _LOGGER.info("Added SAJ sensors")
 
 class SajSensor(CoordinatorEntity, SensorEntity):
     """Representation of an SAJ Modbus sensor."""
@@ -61,7 +68,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         value = self._hub.inverter_data.get(self.entity_description.key)
         if value is None and ADVANCED_LOGGING:
             _LOGGER.debug(
-                f"No data for sensor {self._attr_name} (key: {self.entity_description.key})"
+                "No data available for sensor type: %s", self.entity_description.key
             )
         return value
 
