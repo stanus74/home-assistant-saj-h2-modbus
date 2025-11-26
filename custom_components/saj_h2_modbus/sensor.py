@@ -81,15 +81,8 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """When entity is added to hass."""
         await super().async_added_to_hass()
         
-        # Register for fast updates if this is a fast-poll sensor and fast polling is enabled
-        if self._is_fast_sensor and self._hub.fast_enabled:
-            self._remove_fast_listener = self._hub.async_add_fast_listener(
-                self._handle_fast_update
-            )
-            _LOGGER.debug(
-                f"Sensor {self._attr_name} (key: {self.entity_description.key}) "
-                f"registered for fast updates (10s)"
-            )
+        # Initial registration check
+        self._update_fast_listener_registration()
 
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from hass."""
@@ -103,11 +96,40 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the main coordinator."""
+        # Check if fast listener registration needs to change (e.g. config changed)
+        self._update_fast_listener_registration()
+
         # Update cached value and write state
         # For fast sensors, this runs at normal interval (e.g., 60s)
         # For regular sensors, this is their only update mechanism
         self._last_value = self.native_value
         self.async_write_ha_state()
+
+    @callback
+    def _update_fast_listener_registration(self) -> None:
+        """Register or unregister fast listener based on current hub config."""
+        if not self._is_fast_sensor:
+            return
+
+        should_listen = self._hub.fast_enabled
+        is_listening = self._remove_fast_listener is not None
+
+        if should_listen and not is_listening:
+            self._remove_fast_listener = self._hub.async_add_fast_listener(
+                self._handle_fast_update
+            )
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"Sensor {self._attr_name} registered for fast updates (10s)"
+                )
+        elif not should_listen and is_listening:
+            if self._remove_fast_listener:
+                self._remove_fast_listener()
+                self._remove_fast_listener = None
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"Sensor {self._attr_name} unregistered from fast updates"
+                )
 
     @callback
     def _handle_fast_update(self) -> None:

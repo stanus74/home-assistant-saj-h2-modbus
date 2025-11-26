@@ -97,7 +97,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._client: Optional[AsyncModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-        self.fast_enabled = False  # Initialize fast_enabled attribute
+        self.fast_enabled = FAST_POLL_DEFAULT  # Initialize fast_enabled attribute
         self._fast_coordinator = None
         self._fast_unsub = None
         self._cancel_fast_update = None
@@ -272,7 +272,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         return remove_listener
 
-    async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool) -> None:
         """Update connection settings from config entry options."""
         if self.updating_settings:
             if ADVANCED_LOGGING:
@@ -288,6 +288,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 set_modbus_config(self._host, self._port)
                 self._scan_interval = scan_interval
                 self.update_interval = timedelta(seconds=scan_interval)
+                
+                # Update fast_enabled
+                self.fast_enabled = fast_enabled
 
                 if connection_changed:
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
@@ -303,10 +306,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
                 if ADVANCED_LOGGING:
                     _LOGGER.debug(
-                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
+                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d, Fast Enabled: %s",
                         self._host,
                         self._port,
-                        scan_interval
+                        scan_interval,
+                        fast_enabled
                     )
             except Exception as e:
                 _LOGGER.error("Failed to update connection settings: %s", e)
@@ -314,9 +318,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             finally:
                 self.updating_settings = False
         
-        # Restart fast updates if enabled
+        # Restart fast updates if enabled, or stop if disabled
         if self.fast_enabled:
             await self.restart_fast_updates()
+        elif self._cancel_fast_update is not None:
+            self._cancel_fast_update()
+            self._cancel_fast_update = None
+            _LOGGER.info("Fast updates stopped")
 
     async def restart_fast_updates(self) -> None:
         """Restart the fast update interval with current config."""

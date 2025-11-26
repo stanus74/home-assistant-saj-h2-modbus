@@ -83,6 +83,7 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
             host=_get_config_value(entry, CONF_HOST),
             port=_get_config_value(entry, CONF_PORT, DEFAULT_PORT),
             scan_interval=_get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            fast_enabled=_get_config_value(entry, CONF_FAST_ENABLED, False),
         )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
@@ -111,6 +112,8 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
             hass,
             entry,  # <-- Das gesamte ConfigEntry-Objekt übergeben
         )
+        hub.fast_enabled = fast_enabled
+        
         await hub.async_config_entry_first_refresh()
         _LOGGER.info(f"Hub first refresh completed, coordinator should run every {scan_interval} seconds")
         
