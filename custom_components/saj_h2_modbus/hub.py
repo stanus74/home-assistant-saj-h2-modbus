@@ -770,13 +770,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         # Sicherstellen, dass der Client immer geschlossen wird
         client_to_close = self._client
-        self._client = None  # Verweis sofort entfernen
         if client_to_close:
+            self._client = None  # Verweis sofort entfernen
             try:
                 await client_to_close.close()
                 _LOGGER.debug("Modbus client connection closed")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
+        else:
+            _LOGGER.debug("Modbus client was already None, no need to close.")
         
         _LOGGER.debug("Modbus client cleaned up")
 
