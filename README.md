@@ -62,18 +62,16 @@ select "SAJ H2 Modbus."
 * **High-frequency polling for key metrics (e.g., PV power, battery):**
 
   * Introduced a 10s fast coordinator 
-  * Can be disabled via simple adjustment in hub.py, 
-    
     Energy sensors are polled every 10 seconds: 
 
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
     "inverterPower", "gridPower",
 
-This is the default setting. Can be disabled in hub.py line 27:
+You can be enabled/disable in Configuration Settings every time
 
-`FAST_POLL_DEFAULT = True # True or False`
 
-### 🚀 Working Mode Control 
+
+### 🚀 Charging/Discharging Control
 
 > **⚠️ Warning: Write Registers**
 >
@@ -88,9 +86,7 @@ This is the default setting. Can be disabled in hub.py line 27:
 > Use write functions carefully.  
 > The developer is not liable for any issues arising from user-applied register writes.
 
-
-This version adds support for controlling the working mode of the inverter. This feature is intended for advanced users.
-see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/CHANGELOG.md)
+All Input Entities here >
 
 
 ### 🚀 Export Limit Control
@@ -112,20 +108,13 @@ A custom Lovelace card is available to provide a user-friendly interface for con
 Features:
 - Easy time selection for charge start and end
 - Slider for charge power percentage
-- Checkbox selection for charging days (automatically calculates the day mask)
+- Checkbox selection for charging days 
 - Button to enable/disable charging
 
 For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
 
 
-## Additional Information
 
-The data from the SAJ H2 inverter is transmitted to the SAJ server via a WiFi interface, AIO3.
 
-The AIO3 may have port 502 open, allowing us to access the Modbus data. The IP address can be determined in the router. 
-
-There are also reports of **AIO3 devices with port 502 closed**. Then you need to have an RS232-wifi or -ethernet converter.
-
-OR reset the AIO3 and reconfigure it, **important**: it must be given **a new IP address**. Then check with a port scanner if port 502 is open
 
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/stanus74)
