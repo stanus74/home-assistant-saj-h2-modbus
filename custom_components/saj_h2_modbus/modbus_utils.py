@@ -3,9 +3,10 @@ import logging
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
-from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.client import ModbusTcpClient
 
-from .const import ModbusClient, Lock
+# We use ModbusTcpClient explicitly, so we don't import the generic ModbusClient alias
+from .const import Lock
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,18 +21,24 @@ class ReconnectionNeededError(Exception):
 class ModbusGlobalConfig:
     host: Optional[str] = None
     port: Optional[int] = None
+    hass: Optional[Any] = None
 
-def set_modbus_config(host: str, port: int) -> None:
+def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
     ModbusGlobalConfig.host = host
     ModbusGlobalConfig.port = port
-    _LOGGER.debug("Global Modbus config set: %s:%s", host, port)
+    ModbusGlobalConfig.hass = hass
+    _LOGGER.debug("Global Modbus config set: %s:%s (hass configured: %s)", host, port, hass is not None)
 
-async def ensure_client_connected(client: ModbusClient, host: str, port: int, logger: logging.Logger) -> None:
+async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger) -> None:
     """Ensures the Modbus client is connected, attempting to connect if not."""
     if not client.connected:
         logger.debug("Client not connected, attempting to connect to %s:%s", host, port)
         try:
-            await client.connect()
+            if ModbusGlobalConfig.hass:
+                await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
+            else:
+                client.connect()
+                
             if not client.connected:
                 raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
             logger.info("Client successfully reconnected to %s:%s", host, port)
@@ -40,17 +47,21 @@ async def ensure_client_connected(client: ModbusClient, host: str, port: int, lo
             raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
     logger.debug("Client connected: %s:%s", host, port)
 
-async def connect_if_needed(client: Optional[AsyncModbusTcpClient], host: str, port: int) -> AsyncModbusTcpClient:
+async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
     if client is None:
-        _LOGGER.debug("Creating new AsyncModbusTcpClient for %s:%s", host, port)
-        client = AsyncModbusTcpClient(host=host, port=port, timeout=10)
+        _LOGGER.debug("Creating new ModbusTcpClient for %s:%s", host, port)
+        client = ModbusTcpClient(host=host, port=port, timeout=10)
     if not client.connected:
-        _LOGGER.debug("Attempting to connect AsyncModbusTcpClient to %s:%s", host, port)
-        await client.connect()
+        _LOGGER.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
+        if ModbusGlobalConfig.hass:
+            await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
+        else:
+            client.connect()
+            
         # Verify that the client is actually connected after the connection attempt
         if not client.connected:
             raise ConnectionError("Failed to connect to %s:%s" % (host, port))
-        _LOGGER.debug("AsyncModbusTcpClient successfully connected to %s:%s", host, port)
+        _LOGGER.debug("ModbusTcpClient successfully connected to %s:%s", host, port)
     return client
 
 async def _exponential_backoff(attempt: int, base: float, cap: float) -> None:
@@ -93,7 +104,7 @@ DEFAULT_WRITE_RETRIES = 2
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
-def _create_retry_handlers(client: ModbusClient, host: str, port: int, logger: logging.Logger, operation_name: str):
+def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str):
     """Create standard retry handlers for Modbus operations."""
     
     def should_retry(e: Exception) -> bool:
@@ -108,24 +119,27 @@ def _create_retry_handlers(client: ModbusClient, host: str, port: int, logger: l
     return should_retry, on_retry
 
 async def _perform_modbus_operation(
-    client: ModbusClient,
+    client: ModbusTcpClient,
     lock: Lock,
     unit: int,
-    operation: Callable[..., Awaitable[Any]],
+    operation: Callable[..., Any],
     *args: Any,
     **kwargs: Any
 ) -> Any:
     """
     Performs a Modbus operation, setting the unit_id on the client.
-    This is a workaround for Home Assistant's ModbusClientMixin,
-    as 'slave'/'device_id' keyword arguments are not accepted in method calls.
+    Executes blocking Modbus calls in the executor to avoid blocking the event loop.
     """
     async with lock:
         client.unit_id = unit
-        return await operation(*args, **kwargs)
+        if ModbusGlobalConfig.hass:
+            return await ModbusGlobalConfig.hass.async_add_executor_job(operation, *args, **kwargs)
+        else:
+            # Fallback for testing or if hass is not configured
+            return operation(*args, **kwargs)
 
 async def try_read_registers(
-    client: ModbusClient,
+    client: ModbusTcpClient,
     lock: Lock,
     unit: int,
     address: int,
@@ -174,7 +188,7 @@ async def try_read_registers(
 
 
 async def try_write_registers(
-    client: ModbusClient,
+    client: ModbusTcpClient,
     lock: Lock,
     unit: int,
     address: int,
