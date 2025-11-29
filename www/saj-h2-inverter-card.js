@@ -7,7 +7,7 @@
  * - Protects specific input interactions (time, range) from disruptive re-renders.
  *
  * @author stanu74 
- * @version 1.2.3
+ * @version 1.2.1
  */
 
 class SajH2InverterCard extends HTMLElement {
@@ -47,7 +47,7 @@ class SajH2InverterCard extends HTMLElement {
   constructor() {
     super();
 
-    console.log(`[SAJ H2 Inverter Card] Version: 1.2.3`);
+    console.log(`[SAJ H2 Inverter Card] Version: 1.2.1`);
     
     this.attachShadow({ mode: 'open' });
     
@@ -368,7 +368,7 @@ class SajH2InverterCard extends HTMLElement {
 
     const html = `
       <div class="section charging-section">
-        <div class="section-header">Charging Settings (Version 1.2.3)</div>
+        <div class="section-header">Charging Settings (Version 1.2.1)</div>
         ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. <b>Start time, end time and power are essential.</b></div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
