@@ -1,4 +1,13 @@
-## [v2.6.7]
+## [v2.7.0]
+
+### New Inverter Card Version 1.2.1
+
+- **Enhanced UI Visualization**: Active slots are now clearly highlighted with green indicators and background styling for better visibility.
+- **Instant Write Operations**: Settings changes are now written immediately to Modbus, improving responsiveness.
+
+### Configuration
+
+- **Fast Polling Toggle**: Added a new configuration option to enable/disable high-frequency data updates (Fast Poll). Default is set to `False` to reduce bus load.
 
 ### Improved
 - **Modernized Hub Initialization**: The integration now fully utilizes Home Assistant's `ConfigEntry` for configuration management. This aligns the code with HA best practices, improves maintainability, and simplifies the internal setup process.
@@ -8,12 +17,13 @@
 - **Optimized Logging**: Standardized all logging calls to use `%s` placeholders instead of f-strings. This improves performance by avoiding unnecessary string operations when logging at a less verbose level.
 - **Reduced Redundant Operations**: Eliminated a redundant connection check within the main data update cycle, leading to a minor performance gain.
 
+- Reduced Modbus operations per cycle: 17 → 16
+- Static data no longer polled every scan interval
+- Optimized skip_bytes usage for register gaps
+
 ### Robustness
 - **Enhanced Error Handling**: Implemented `try...except...finally` blocks in critical connection management functions. This ensures that system states (like the `_reconnecting` flag) are always reset correctly, preventing potential deadlocks and significantly improving the overall stability of the integration.
 
----
-
-## [v2.6.6]
 
 ### Added
 - **Full Charge/Discharge Schedule Support**: All 7 time slots for charging and discharging
@@ -26,18 +36,6 @@
   - Static inverter data cached (read once at startup)
   - Consolidated register reads: Charge (23), Discharge (21), Passive/Battery/Anti-Reflux (39)
   - Removed duplicate `read_anti_reflux_data` function
-
-### Performance Improvements
-- Reduced Modbus operations per cycle: 17 → 16
-- Static data no longer polled every scan interval
-- Optimized skip_bytes usage for register gaps
-
-### Technical Details
-- **Cached Registers**: 0x8F00-0x8F1C (device info, versions)
-- **Consolidated Reads**: 
-  - Charge: 0x3604-0x361A (23 regs)
-  - Discharge: 0x361B-0x362F (21 regs)
-  - Passive/Config: 0x3636-0x365C (39 regs)
 
 ---
 
