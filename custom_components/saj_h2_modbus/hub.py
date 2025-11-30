@@ -25,15 +25,12 @@ from .modbus_utils import (
 from .charge_control import (
     ChargeSettingHandler,
     PENDING_FIELDS,
-    make_pending_setter,
-    SIMPLE_REGISTER_MAP
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 FAST_POLL_DEFAULT = False
 ADVANCED_LOGGING = False
-CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
 # Define which sensor keys should be updated in fast polling (10s interval)
 FAST_POLL_SENSORS = {
@@ -43,26 +40,6 @@ FAST_POLL_SENSORS = {
     "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA", "totalgridPowerVA",
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
 }
-
-_simple_pending_attrs_list = []
-for _, attr_path in PENDING_FIELDS:
-    if "[" in attr_path or attr_path.startswith("charge_"):
-        continue
-    _simple_pending_attrs_list.append(f"_pending_{attr_path}")
-
-SIMPLE_PENDING_ATTRS = tuple(_simple_pending_attrs_list)
-
-_PENDING_HANDLER_MAP_GENERATED = []
-for attr in SIMPLE_PENDING_ATTRS:
-    if attr == "_pending_charging_state":
-        handler_name = "handle_charging_state"
-    elif attr == "_pending_discharging_state":
-        handler_name = "handle_discharging_state"
-    else:
-        handler_name = f"handle_{attr[9:]}"
-    _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
-
-PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -110,57 +87,33 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._operation_timeout = 30
         self._warned_missing_states: bool = False
         self._inverter_static_data: Optional[Dict[str, Any]] = None
-        self._pending_cache: Optional[bool] = None
-        self._pending_cache_valid: bool = False
-
-        # Pending base values
-        self._pending_charge_start = None
-        self._pending_charge_end = None
-        self._pending_charge_day_mask = None
-        self._pending_charge_power_percent = None
-
-        self._pending_charges = [
-            {key: None for key in CHARGE_PENDING_SUFFIXES}
-            for _ in range(7)
-        ]
-        self._pending_discharges = [
-            {key: None for key in CHARGE_PENDING_SUFFIXES}
-            for _ in range(7)
-        ]
-
-        for attr_name in SIMPLE_REGISTER_MAP:
-            setattr(self, f"_pending_{attr_name}", None)
-
-        self._pending_charge_time_enable: Optional[int] = None
-        self._pending_discharge_time_enable: Optional[int] = None
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
-        self._charging_state_lock_until: Optional[float] = None
-        self._discharging_state_lock_until: Optional[float] = None
 
         self._setting_handler = ChargeSettingHandler(self)
         
-
+        # Generate setters that delegate to the handler
         for name, attr_path in PENDING_FIELDS:
-            setter = make_pending_setter(attr_path)
-            setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
+            # Create a closure to capture attr_path
+            def make_setter(path):
+                # Must be async because entities await this method
+                async def setter(value):
+                    self._setting_handler.set_pending(path, value)
+                return setter
+            
+            setattr(self, f"set_{name}", make_setter(attr_path))
 
-        async def _set_charging_state(self, value: bool) -> None:
-            self._pending_charging_state = value
+        # Define explicit setters for power states
+        async def _set_charging_state(value: bool) -> None:
+            self._setting_handler.set_charging_state(value)
             _LOGGER.info("Set pending charging state to: %s", value)
-            if hasattr(self, '_invalidate_pending_cache'):
-                self._invalidate_pending_cache()
             self.hass.async_create_task(self.process_pending_now())
 
-        async def _set_discharging_state(self, value: bool) -> None:
-            self._pending_discharging_state = value
+        async def _set_discharging_state(value: bool) -> None:
+            self._setting_handler.set_discharging_state(value)
             _LOGGER.info("Set pending discharging state to: %s", value)
-            if hasattr(self, '_invalidate_pending_cache'):
-                self._invalidate_pending_cache()
             self.hass.async_create_task(self.process_pending_now())
 
-        self.set_charging = _set_charging_state.__get__(self, self.__class__)
-        self.set_discharging = _set_discharging_state.__get__(self, self.__class__)
+        self.set_charging = _set_charging_state
+        self.set_discharging = _set_discharging_state
 
     async def start_main_coordinator(self) -> None:
         """Start the main coordinator scheduling."""
@@ -169,17 +122,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # This method is kept for compatibility but does nothing.
         pass
 
-    # ------------------------------------------------------------
-    # (rest of your file remains unchanged; omitted for brevity)
-    # ------------------------------------------------------------
-
-
     async def process_pending_now(self) -> None:
         """Immediately process pending settings without waiting for next update cycle."""
         _LOGGER.debug("Immediately processing pending settings...")
         try:
             await self._ensure_connected_client()
-            await self._process_pending_settings()
+            # Delegated to handler
+            await self._setting_handler.process_pending()
             _LOGGER.debug("Immediate pending processing completed")
         except Exception as e:
             _LOGGER.error("Immediate pending processing failed: %s", e)
@@ -400,7 +349,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             if ADVANCED_LOGGING:
                 _LOGGER.info("[ADVANCED] Processing pending settings...")
             
-            await self._process_pending_settings()
+            # Delegated to handler
+            await self._setting_handler.process_pending()
 
             if ADVANCED_LOGGING:
                 _LOGGER.info("[ADVANCED] Running reader methods...")
@@ -421,136 +371,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             elapsed = round(time.monotonic() - start, 3)
             if ADVANCED_LOGGING:
                 _LOGGER.info("[ADVANCED] Total update cycle time: %ss", elapsed)
-
-    def _get_pending_handlers(self) -> Dict[str, Callable]:
-        """Collect all pending handlers with values."""
-        handlers = self._setting_handler.get_handlers()
-        pending = {}
-        
-        for attr_name in handlers.keys():
-            if attr_name.startswith("_pending_"):
-                if getattr(self, attr_name, None) is not None:
-                    pending[attr_name] = handlers[attr_name]
-        
-        return pending
-
-    async def _process_pending_settings(self) -> None:
-        """Process all pending settings with optimized batch processing and priority system."""
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] _process_pending_settings started")
-        
-        _LOGGER.debug("Processing pending settings...")
-        
-        try:
-            # Collect all pending attributes with their handlers
-            pending = self._get_pending_handlers()
-            
-            # Check for charge pending settings
-            charge_pending = [
-                idx for idx, slot in enumerate(self._pending_charges, start=1)
-                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
-            ]
-            
-            # Check for discharge pending settings
-            discharge_pending = [
-                idx for idx, slot in enumerate(self._pending_discharges, start=1)
-                if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
-            ]
-            
-            if not pending and not charge_pending and not discharge_pending:
-                _LOGGER.debug("No pending settings found to process")
-                return
-            
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Found %d pending handler(s): %s", len(pending), list(pending.keys()))
-            
-            # Log pending settings for debugging
-            if charge_pending:
-                _LOGGER.info("[PENDING DEBUG] Found charge pending for indices: %s", charge_pending)
-            
-            if discharge_pending:
-                _LOGGER.info(f"[PENDING DEBUG] Found discharge pending for indices: {discharge_pending}")
-            
-            results = []
-            
-            # 1. Process power state handlers first (highest priority)
-            power_state_pending = {
-                k: v for k, v in pending.items()
-                if k in ("_pending_charging_state", "_pending_discharging_state")
-            }
-            
-            if power_state_pending:
-                _LOGGER.info(f"Processing {len(power_state_pending)} power state handlers")
-                for attr_name, handler in power_state_pending.items():
-                    try:
-                        result = await handler()
-                        results.append((attr_name, result))
-                        if ADVANCED_LOGGING:
-                            _LOGGER.debug(f"[ADVANCED] Power state handler '{attr_name}' completed")
-                    except Exception as e:
-                        _LOGGER.error(
-                            "Error executing power state handler '%s': %s",
-                            attr_name, e, exc_info=e
-                        )
-            
-            # 2. Process charge and discharge slot handlers in parallel (medium priority)
-            slot_tasks = []
-            
-            for charge_idx in charge_pending:
-                slot_tasks.append(self._setting_handler.handle_charge_settings_by_index(charge_idx))
-            
-            for discharge_idx in discharge_pending:
-                slot_tasks.append(self._setting_handler.handle_discharge_settings_by_index(discharge_idx))
-            
-            if slot_tasks:
-                _LOGGER.info(f"Processing {len(slot_tasks)} slot handlers in parallel")
-                slot_results = await asyncio.gather(*slot_tasks, return_exceptions=True)
-                
-                for i, result in enumerate(slot_results):
-                    slot_type = "charge" if i < len(charge_pending) else "discharge"
-                    idx = charge_pending[i] if i < len(charge_pending) else discharge_pending[i - len(charge_pending)]
-                    results.append((f"{slot_type}{idx}", True if not isinstance(result, Exception) else False))
-                    
-                    if isinstance(result, Exception):
-                        _LOGGER.error(
-                            "Error processing slot handler '%s%d': %s",
-                            slot_type, idx, result, exc_info=result
-                        )
-            
-            # 3. Process simple handlers in parallel (lowest priority)
-            simple_pending = {
-                k: v for k, v in pending.items()
-                if k not in power_state_pending
-            }
-            
-            if simple_pending:
-                _LOGGER.info(f"Processing {len(simple_pending)} simple handlers in parallel")
-                simple_tasks = [handler() for handler in simple_pending.values()]
-                simple_results = await asyncio.gather(*simple_tasks, return_exceptions=True)
-                
-                for attr_name, result in zip(simple_pending.keys(), simple_results):
-                    if isinstance(result, Exception):
-                        _LOGGER.error(
-                            "Error executing handler for '%s': %s",
-                            attr_name, result, exc_info=result
-                        )
-                    else:
-                        results.append((attr_name, result))
-                        if ADVANCED_LOGGING and result:
-                            _LOGGER.debug(f"[ADVANCED] Handler '{attr_name}' succeeded")
-            
-            # 4. Summary
-            successful = sum(1 for _, r in results if r is True)
-            if ADVANCED_LOGGING and results:
-                _LOGGER.info(
-                    f"[ADVANCED] Pending processing complete: "
-                    f"{successful}/{len(charge_pending) + len(discharge_pending) + len(pending)} successful"
-                )
-    
-        except Exception as e:
-            _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e, exc_info=True)
-        finally:
-            self._invalidate_pending_cache()
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
         """Parallel execution of readers in logical groups; builds cache."""
@@ -668,24 +488,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 
                 elif isinstance(result, dict) and result:
                     # Check for locked values that should NOT be overwritten
-                    if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+                    # Delegated check to handler
+                    if self._setting_handler.is_charging_locked(current_time):
                         if "charging_enabled" in result:
-                            _LOGGER.info(
-                                "[CACHE LOCK] Ignoring charging_enabled from %s "
-                                "(locked until %.1fs)",
-                                method_name,
-                                self._charging_state_lock_until - current_time
-                            )
+                            _LOGGER.info("[CACHE LOCK] Ignoring charging_enabled (locked)")
                             result.pop("charging_enabled")
                     
-                    if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+                    if self._setting_handler.is_discharging_locked(current_time):
                         if "discharging_enabled" in result:
-                            _LOGGER.info(
-                                "[CACHE LOCK] Ignoring discharging_enabled from %s "
-                                "(locked until %.1fs)",
-                                method_name,
-                                self._discharging_state_lock_until - current_time
-                            )
+                            _LOGGER.info("[CACHE LOCK] Ignoring discharging_enabled (locked)")
                             result.pop("discharging_enabled")
                     
                     new_cache.update(result)
@@ -703,19 +514,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             )
         
         # Clear expired locks
-        if self._charging_state_lock_until and current_time >= self._charging_state_lock_until:
-            self._charging_state_lock_until = None
+        self._setting_handler.cleanup_locks(current_time)
         
-        if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
-            self._discharging_state_lock_until = None
-        
-        # Preserve locked values if still active
-        if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+        # Preserve locked values if still active - Delegated logic
+        if self._setting_handler.is_charging_locked(current_time):
             if "charging_enabled" in self.inverter_data:
                 new_cache["charging_enabled"] = self.inverter_data["charging_enabled"]
                 _LOGGER.info("[CACHE LOCK] Preserving charging_enabled = %s", new_cache['charging_enabled'])
         
-        if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+        if self._setting_handler.is_discharging_locked(current_time):
             if "discharging_enabled" in self.inverter_data:
                 new_cache["discharging_enabled"] = self.inverter_data["discharging_enabled"]
                 _LOGGER.info("[CACHE LOCK] Preserving discharging_enabled = %s", new_cache['discharging_enabled'])
@@ -795,67 +602,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:
-        """Optimized check for pending changes with early exit strategy."""
-        if self._pending_cache_valid:
-            return self._pending_cache
-        
-        # Check simple pending attributes (early exit on first match)
-        has_pending = any(
-            getattr(self, f"_pending_{attr_name}", None) is not None
-            for attr_name in SIMPLE_REGISTER_MAP
-        )
-        
-        # Check time_enable attributes
-        if not has_pending:
-            has_pending = (
-                self._pending_charge_time_enable is not None or
-                self._pending_discharge_time_enable is not None
-            )
-        
-        # Check power state
-        if not has_pending:
-            has_pending = (
-                self._pending_charging_state is not None or
-                self._pending_discharging_state is not None
-            )
-        
-        # Check charge and discharge settings (combined for efficiency)
-        if not has_pending:
-            has_pending = any(
-                any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
-                for slot in (self._pending_charges + self._pending_discharges)
-            )
-        
-        # Cache the result
-        self._pending_cache = has_pending
-        self._pending_cache_valid = True
-        return has_pending
+        """Delegated to handler."""
+        return self._setting_handler.has_pending()
     
     def _invalidate_pending_cache(self) -> None:
-        """Invalidate the pending cache when pending values change."""
-        self._pending_cache_valid = False
+        """Delegated to handler."""
+        self._setting_handler.invalidate_cache()
 
     def _apply_optimistic_overlay(self) -> None:
-        """Marks the expected target state in the local cache."""
+        """Delegated to handler."""
         try:
-            base = dict(self.inverter_data or {})
-            chg = base.get("charging_enabled")
-            dchg = base.get("discharging_enabled")
-            
-            if self._pending_charging_state is not None:
-                chg = 1 if self._pending_charging_state else 0
-            if self._pending_discharging_state is not None:
-                dchg = 1 if self._pending_discharging_state else 0
-            
-            app_mode = 1 if bool(chg) or bool(dchg) else 0
-
-            overlay = dict(base)  # Erstelle eine Kopie der Basisdaten
-            if chg is not None:
-                overlay["charging_enabled"] = 1 if chg else 0
-            if dchg is not None:
-                overlay["discharging_enabled"] = 1 if dchg else 0
-            overlay["AppMode"] = app_mode
-
-            self._optimistic_overlay = overlay
+            overlay = self._setting_handler.get_optimistic_overlay(self.inverter_data)
+            if overlay:
+                self._optimistic_overlay = overlay
         except Exception as e:
             _LOGGER.debug("Optimistic overlay skipped: %s", e)
