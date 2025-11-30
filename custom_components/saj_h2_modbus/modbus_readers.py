@@ -2,8 +2,9 @@ import asyncio
 import logging
 import struct
 from typing import Dict, Any, List, Optional, TypeAlias
+from pymodbus.client import ModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
-from .const import DEVICE_STATUSSES, FAULT_MESSAGES, ModbusClient, Lock
+from .const import DEVICE_STATUSSES, FAULT_MESSAGES, Lock
 from .modbus_utils import try_read_registers
 
 DataDict: TypeAlias = Dict[str, Any]
@@ -213,7 +214,7 @@ SIDE_NET_DATA_MAP = [
 # --- End Static Decoding Maps ---
 
 async def _read_modbus_data(
-    client: ModbusClient,
+    client: ModbusTcpClient,
     lock: Lock,
     start_address: int,
     count: int,
@@ -278,7 +279,7 @@ async def _read_modbus_data(
         _LOGGER.log(log_level_on_error, "Error reading modbus data: %s", e)
         return {}
 
-async def read_modbus_inverter_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_modbus_inverter_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads basic inverter data using the pymodbus 3.9 API, without BinaryPayloadDecoder."""
     try:
         regs = await try_read_registers(client, lock, 1, 0x8F00, 29)
@@ -320,7 +321,7 @@ async def read_modbus_inverter_data(client: ModbusClient, lock: Lock) -> DataDic
         _LOGGER.error("Error reading inverter data: %s", e)
         return {}
 
-async def read_modbus_realtime_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_modbus_realtime_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads real-time operating data."""
     data = await _read_modbus_data(client, lock, 16388, 19, REALTIME_DATA_MAP, 'realtime_data', default_factor=1)
 
@@ -341,24 +342,24 @@ async def read_modbus_realtime_data(client: ModbusClient, lock: Lock) -> DataDic
         
     return data
 
-async def read_additional_modbus_data_1_part_1(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_1_part_1(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 1), up to sensor pv4Power."""
     return await _read_modbus_data(client, lock, 16494, 15, ADDITIONAL_DATA_1_PART_1_MAP, 'additional_data_1_part_1', default_factor=0.01)
 
-async def read_additional_modbus_data_1_part_2(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_1_part_2(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 1)."""
     return await _read_modbus_data(client, lock, 16533, 25, ADDITIONAL_DATA_1_PART_2_MAP, 'additional_data_1_part_2', default_factor=1)
 
 
-async def read_additional_modbus_data_2_part_1(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_2_part_1(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the first part of additional operating data (Set 2)."""
     return await _read_modbus_data(client, lock, 16575, 32, ADDITIONAL_DATA_2_PART_1_MAP, 'additional_data_2_part_1')
 
-async def read_additional_modbus_data_2_part_2(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_2_part_2(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the second part of additional operating data (Set 2)."""
     return await _read_modbus_data(client, lock, 16607, 32, ADDITIONAL_DATA_2_PART_2_MAP, 'additional_data_2_part_2')
 
-async def read_additional_modbus_data_3(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_3(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads additional operating data (Set 3) - first part."""
     return await _read_modbus_data(
         client, lock, 16695, 30, ADDITIONAL_DATA_3_MAP, 
@@ -366,7 +367,7 @@ async def read_additional_modbus_data_3(client: ModbusClient, lock: Lock) -> Dat
         log_level_on_error=logging.WARNING
     )
 
-async def read_additional_modbus_data_3_2(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_3_2(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads additional operating data (Set 3) - second part."""
     return await _read_modbus_data(
         client, lock, 16725, 34, ADDITIONAL_DATA_3_2_MAP, 
@@ -376,7 +377,7 @@ async def read_additional_modbus_data_3_2(client: ModbusClient, lock: Lock) -> D
 
 
 async def _read_phase_block(
-    client: ModbusClient,
+    client: ModbusTcpClient,
     lock: Lock,
     start: int,
     count: int,
@@ -397,19 +398,19 @@ async def _read_phase_block(
             decode.append((f"{phase}{key_prefix}{name}", method, factor))
     return await _read_modbus_data(client, lock, start, count, decode, f"{key_prefix.lower()}phase_data", default_factor=default_factor)
 
-async def read_additional_modbus_data_4(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_additional_modbus_data_4(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads data for grid parameters (R, S, and T phase)."""
     return await _read_phase_block(client, lock, 16433, 21, ADDITIONAL_DATA_4_FIELDS, key_prefix="", default_factor=0.001)
 
-async def read_inverter_phase_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_inverter_phase_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads data for inverter phase parameters (R, S, and T phase)."""
     return await _read_phase_block(client, lock, 16454, 15, INVERTER_PHASE_FIELDS, key_prefix="", default_factor=1)
 
-async def read_offgrid_output_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_offgrid_output_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads data for offgrid output parameters (R, S, and T phase)."""
     return await _read_phase_block(client, lock, 16469, 18, OFFGRID_OUTPUT_FIELDS, key_prefix="", default_factor=1)
 
-async def read_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_battery_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads battery data from registers 40960 to 41015."""
     return await _read_modbus_data(client, lock, 40960, 56, BATTERY_DATA_MAP, 'battery_data', default_factor=0.01)
 
@@ -424,7 +425,7 @@ def decode_time(value: int) -> str:
     """
     return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
 
-async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the Charge registers including all 7 charge slots."""
     # Read from 0x3604 to 0x361A (23 registers total: 2 + 7*3)
     data = await _read_modbus_data(client, lock, 0x3604, 23, CHARGE_DATA_MAP, "charge_data_extended", default_factor=1)
@@ -457,7 +458,7 @@ async def read_charge_data(client: ModbusClient, lock: Lock) -> DataDict:
 
     return data
 
-async def read_discharge_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_discharge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads all Discharge registers at once (discharge 1-7), compactly."""
     data = await _read_modbus_data(client, lock, 0x361B, 21, DISCHARGE_DATA_MAP, "discharge_data", default_factor=1)
     if not data:
@@ -482,7 +483,7 @@ async def read_discharge_data(client: ModbusClient, lock: Lock) -> DataDict:
 
 
 
-async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_passive_battery_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the Passive Charge/Discharge, Battery configuration, and Anti-Reflux registers."""
     try:
         # Read from 0x3636 to 0x365C (39 registers total)
@@ -505,7 +506,7 @@ async def read_passive_battery_data(client: ModbusClient, lock: Lock) -> DataDic
         _LOGGER.error("Error reading Passive Battery and Anti-Reflux data: %s", e)
         return {}
 
-async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_meter_a_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads Meter A data."""
     data = await _read_modbus_data(client, lock, 0xA03D, 18, METER_A_DATA_MAP, "meter_a_data")
     if data:
@@ -518,6 +519,6 @@ async def read_meter_a_data(client: ModbusClient, lock: Lock) -> DataDict:
             _LOGGER.error("Error calculating CT_GridPower_total: %s", e)
     return data
 
-async def read_side_net_data(client: ModbusClient, lock: Lock) -> DataDict:
+async def read_side_net_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads data for side-net parameters."""
     return await _read_modbus_data(client, lock, 16525, 8, SIDE_NET_DATA_MAP, "side_net_data")

@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from .const import DOMAIN
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
-from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.client import ModbusTcpClient
 from homeassistant.config_entries import ConfigEntry
 
 from . import modbus_readers
@@ -91,10 +91,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._port = port
         self._config_entry = config_entry
  
-        set_modbus_config(self._host, self._port)
+        set_modbus_config(self._host, self._port, hass)
         self._read_lock = asyncio.Lock()
         self.inverter_data: Dict[str, Any] = {}
-        self._client: Optional[AsyncModbusTcpClient] = None
+        self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
         self.fast_enabled = FAST_POLL_DEFAULT  # Initialize fast_enabled attribute
@@ -184,7 +184,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as e:
             _LOGGER.error("Immediate pending processing failed: %s", e)
 
-    async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
+    async def _ensure_connected_client(self) -> ModbusTcpClient:
         """Ensure client is connected under connection lock."""
         if ADVANCED_LOGGING:
             _LOGGER.debug("[ADVANCED] _ensure_connected_client called - Current client state: %s", self._client)
@@ -285,7 +285,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 connection_changed = (host != self._host) or (port != self._port)
                 self._host = host
                 self._port = port
-                set_modbus_config(self._host, self._port)
+                set_modbus_config(self._host, self._port, self.hass)
                 self._scan_interval = scan_interval
                 self.update_interval = timedelta(seconds=scan_interval)
                 
@@ -296,11 +296,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
                     if self._client:
                         try:
+                            # Use the awaitable close wrapper from SAJModbusClient
                             await self._client.close()
                         except Exception as e:
                             _LOGGER.warning(f"Error while closing old Modbus client: {e}")
-                    # Ersetze _create_client() durch die Erstellung eines neuen AsyncModbusTcpClient
-                    self._client = AsyncModbusTcpClient(self._host, self._port)
+                    # Reset client to None so it gets recreated by connect_if_needed with new settings
+                    self._client = None
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
 
@@ -363,8 +364,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         await self._client.close()
                     except Exception as e:
                         _LOGGER.warning("Error while closing old Modbus client: %s", e)
-                self._client = AsyncModbusTcpClient(self._host, self._port)
-                await ensure_client_connected(self._client, self._host, self._port, _LOGGER)
+                
+                # Set to None to force recreation in connect_if_needed
+                self._client = None
+                self._client = await connect_if_needed(self._client, self._host, self._port)
 
                 if ADVANCED_LOGGING:
                     _LOGGER.info("[ADVANCED] Reconnection successful.")

@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
@@ -16,6 +17,17 @@ ENABLE_DETAILED_MODBUS_READ_LOGGING = False
 class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
     pass
+
+class SAJModbusClient(ModbusTcpClient):
+    """Custom Modbus client that provides an awaitable close method for compatibility."""
+    def close(self):
+        """Close the connection synchronously but return an awaitable for async compatibility."""
+        super().close()
+        
+        async def _dummy_awaitable():
+            pass
+            
+        return _dummy_awaitable()
 
 # Global Modbus config storage
 class ModbusGlobalConfig:
@@ -49,8 +61,8 @@ async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int,
 
 async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
     if client is None:
-        _LOGGER.debug("Creating new ModbusTcpClient for %s:%s", host, port)
-        client = ModbusTcpClient(host=host, port=port, timeout=10)
+        _LOGGER.debug("Creating new SAJModbusClient for %s:%s", host, port)
+        client = SAJModbusClient(host=host, port=port, timeout=10)
     if not client.connected:
         _LOGGER.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
         if ModbusGlobalConfig.hass:
@@ -133,7 +145,9 @@ async def _perform_modbus_operation(
     async with lock:
         client.unit_id = unit
         if ModbusGlobalConfig.hass:
-            return await ModbusGlobalConfig.hass.async_add_executor_job(operation, *args, **kwargs)
+            return await ModbusGlobalConfig.hass.async_add_executor_job(
+                functools.partial(operation, *args, **kwargs)
+            )
         else:
             # Fallback for testing or if hass is not configured
             return operation(*args, **kwargs)
