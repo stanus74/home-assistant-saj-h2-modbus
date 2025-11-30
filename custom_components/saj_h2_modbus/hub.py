@@ -1,11 +1,15 @@
+from __future__ import annotations
+"""SAJ Modbus Hub with optimized processing and fixed interval system."""
 import asyncio
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
 from datetime import timedelta
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from .const import DOMAIN
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from pymodbus.client import AsyncModbusTcpClient
+from homeassistant.helpers.event import async_track_time_interval
+from pymodbus.client import ModbusTcpClient
 from homeassistant.config_entries import ConfigEntry
 
 from . import modbus_readers
@@ -28,17 +32,18 @@ from .charge_control import (
 _LOGGER = logging.getLogger(__name__)
 
 FAST_POLL_DEFAULT = False
-
 ADVANCED_LOGGING = False
-
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
 
-# Global switch: Advanced logging for detailed debugging
-ADVANCED_LOGGING = False # Set to True for detailed debugging information
+# Define which sensor keys should be updated in fast polling (10s interval)
+FAST_POLL_SENSORS = {
+    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
+    "inverterPower", "gridPower", "directionPV", "directionBattery",
+    "directionGrid", "directionOutput", "CT_GridPowerWatt",
+    "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA", "totalgridPowerVA",
+    "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
+}
 
-CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
-
-# Dynamically generate SIMPLE_PENDING_ATTRS from PENDING_FIELDS
 _simple_pending_attrs_list = []
 for _, attr_path in PENDING_FIELDS:
     if "[" in attr_path or attr_path.startswith("charge_"):
@@ -47,171 +52,127 @@ for _, attr_path in PENDING_FIELDS:
 
 SIMPLE_PENDING_ATTRS = tuple(_simple_pending_attrs_list)
 
-# Generate PENDING_HANDLER_MAP programmatically
 _PENDING_HANDLER_MAP_GENERATED = []
-
-# Process SIMPLE_PENDING_ATTRS to derive handler names
-# Consistent: all handler names without 'pending_'
 for attr in SIMPLE_PENDING_ATTRS:
-    # Special handling for charging/discharging state to match charge_control.py naming
     if attr == "_pending_charging_state":
         handler_name = "handle_charging_state"
     elif attr == "_pending_discharging_state":
         handler_name = "handle_discharging_state"
     else:
-        handler_name = f"handle_{attr[9:]}"  # z. B. _pending_app_mode → handle_app_mode
-    
+        handler_name = f"handle_{attr[9:]}"
     _PENDING_HANDLER_MAP_GENERATED.append((attr, handler_name))
 
 PENDING_HANDLER_MAP = _PENDING_HANDLER_MAP_GENERATED
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, scan_interval: int, fast_enabled: Optional[bool] = None) -> None:
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
-        
+ 
+        host = config_entry.data.get("host")
+        port = config_entry.data.get("port", 502)
+        scan_interval = config_entry.data.get("scan_interval", 60)
+ 
         if ADVANCED_LOGGING:
-            _LOGGER.info(f"[ADVANCED] SAJModbusHub initialization started - Name: {name}, Host: {host}, Port: {port}, Scan Interval: {scan_interval}s")
-        
-        _LOGGER.info(f"Initializing SAJModbusHub with scan_interval: {scan_interval} seconds")
+            _LOGGER.info("[ADVANCED] SAJModbusHub initialization started - Host: %s, Port: %s, Scan Interval: %ss", host, port, scan_interval)
+        _LOGGER.info("Initializing SAJModbusHub with scan_interval: %s seconds", scan_interval)
+ 
         super().__init__(
             hass,
             _LOGGER,
-            name=name,
+            name=config_entry.title,
             update_interval=timedelta(seconds=scan_interval),
             update_method=self._async_update_data,
         )
+ 
         _LOGGER.info(f"SAJModbusHub initialized with update_interval: {self.update_interval}")
         self._host = host
         self._port = port
-        set_modbus_config(self._host, self._port)
+        self._config_entry = config_entry
+ 
+        set_modbus_config(self._host, self._port, hass)
         self._read_lock = asyncio.Lock()
         self.inverter_data: Dict[str, Any] = {}
-        self._client: Optional[AsyncModbusTcpClient] = None
+        self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-        self.fast_enabled: bool = FAST_POLL_DEFAULT if fast_enabled is None else fast_enabled
+        self.fast_enabled = FAST_POLL_DEFAULT  # Initialize fast_enabled attribute
         self._fast_coordinator = None
         self._fast_unsub = None
-
+        self._cancel_fast_update = None
+        self._fast_listeners: List[Callable] = []
+ 
+        self._scan_interval = scan_interval
         self._reconnecting = False
         self._max_retries = 2
         self._retry_delay = 1
         self._operation_timeout = 30
-
         self._warned_missing_states: bool = False
-        
+        self._inverter_static_data: Optional[Dict[str, Any]] = None
         self._pending_cache: Optional[bool] = None
         self._pending_cache_valid: bool = False
-        
-        # Pending settings
-        self._pending_charge_start: Optional[str] = None
-        self._pending_charge_end: Optional[str] = None
-        self._pending_charge_day_mask: Optional[int] = None
-        self._pending_charge_power_percent: Optional[int] = None
-        
-        # Pending settings for charge times (7 slots)
-        self._pending_charges: List[Dict[str, Optional[Any]]] = [
+
+        # Pending base values
+        self._pending_charge_start = None
+        self._pending_charge_end = None
+        self._pending_charge_day_mask = None
+        self._pending_charge_power_percent = None
+
+        self._pending_charges = [
             {key: None for key in CHARGE_PENDING_SUFFIXES}
             for _ in range(7)
         ]
-        
-        # Pending settings for discharge times (7 slots)
-        self._pending_discharges: List[Dict[str, Optional[Any]]] = [
+        self._pending_discharges = [
             {key: None for key in CHARGE_PENDING_SUFFIXES}
             for _ in range(7)
         ]
 
-        # Initialize simple pending attributes
         for attr_name in SIMPLE_REGISTER_MAP:
             setattr(self, f"_pending_{attr_name}", None)
-        
-        # Power state pending attributes
+
+        self._pending_charge_time_enable: Optional[int] = None
+        self._pending_discharge_time_enable: Optional[int] = None
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
-        
-        # Initialize handler and verify registered handlers
-        self._setting_handler = ChargeSettingHandler(self)
-        self._verify_and_log_handlers()
+        self._charging_state_lock_until: Optional[float] = None
+        self._discharging_state_lock_until: Optional[float] = None
 
-        # Dynamically generate all setter methods from PENDING_FIELDS
+        self._setting_handler = ChargeSettingHandler(self)
+        
+
         for name, attr_path in PENDING_FIELDS:
             setter = make_pending_setter(attr_path)
             setattr(self, f"set_{name}", setter.__get__(self, self.__class__))
-        
-        # Special: set_charging and set_discharging only set power state, not settings
-        # They are NOT in PENDING_FIELDS, so they need explicit definition
+
         async def _set_charging_state(self, value: bool) -> None:
-            """Set charging state (enable/disable) - triggers pending processing."""
             self._pending_charging_state = value
-            _LOGGER.info(f"Set pending charging state to: {value}")
+            _LOGGER.info("Set pending charging state to: %s", value)
             if hasattr(self, '_invalidate_pending_cache'):
                 self._invalidate_pending_cache()
-        
+            self.hass.async_create_task(self.process_pending_now())
+
         async def _set_discharging_state(self, value: bool) -> None:
-            """Set discharging state (enable/disable) - triggers pending processing."""
             self._pending_discharging_state = value
-            _LOGGER.info(f"Set pending discharging state to: {value}")
+            _LOGGER.info("Set pending discharging state to: %s", value)
             if hasattr(self, '_invalidate_pending_cache'):
                 self._invalidate_pending_cache()
-        
-        # Bind them
+            self.hass.async_create_task(self.process_pending_now())
+
         self.set_charging = _set_charging_state.__get__(self, self.__class__)
         self.set_discharging = _set_discharging_state.__get__(self, self.__class__)
 
-    def _verify_and_log_handlers(self) -> None:
-        """Verify all handlers are registered and log them."""
-        handlers = self._setting_handler.get_handlers()
-        
-        if ADVANCED_LOGGING:
-            _LOGGER.info(f"[ADVANCED] Found {len(handlers)} registered handlers:")
-            for attr_name, handler_func in handlers.items():
-                handler_name = getattr(handler_func, '__name__', 'unknown')
-                _LOGGER.debug(f"[ADVANCED]   - {attr_name} → {handler_name}")
-        
-        # Build set of expected pending attributes
-        expected_attrs = set()
-        
-        # Simple register attributes
-        for attr_name in SIMPLE_REGISTER_MAP:
-            expected_attrs.add(f"_pending_{attr_name}")
-        
-        # Power state attributes (both needed for AppMode management)
-        expected_attrs.add("_pending_charging_state")
-        expected_attrs.add("_pending_discharging_state")
-        
-        # Removed: Charge group (replaced by individual charge slot handlers)
-        # Charge and discharge slots are handled separately in _process_pending_settings
-        
-        # Check for missing handlers
-        registered_attrs = set(handlers.keys())
-        missing_attrs = expected_attrs - registered_attrs
-        
-        if missing_attrs:
-            _LOGGER.error(
-                "The following pending attributes have NO registered handler: %s. "
-                "This WILL cause RuntimeError during processing. "
-                "Please ensure all handlers are registered in ChargeSettingHandler._register_handlers().",
-                missing_attrs
-            )
-            raise RuntimeError(f"Missing handlers for: {missing_attrs}")
-        
-        # Log extra handlers (shouldn't happen, but useful for debugging)
-        extra_attrs = registered_attrs - expected_attrs
-        if extra_attrs and ADVANCED_LOGGING:
-            _LOGGER.debug(f"[ADVANCED] Extra handlers registered (may be intentional): {extra_attrs}")
-        
-        _LOGGER.info(f"Handler verification complete: {len(handlers)} handlers ready")
-
     async def start_main_coordinator(self) -> None:
-        """Ensure the main coordinator is running and scheduled."""
+        """Start the main coordinator scheduling."""
         _LOGGER.info("Starting main coordinator scheduling...")
-        try:
-            await self.async_request_refresh()
-            _LOGGER.info("Main coordinator refresh requested")
-        except Exception as e:
-            _LOGGER.error(f"Failed to request main coordinator refresh: {e}")
+        # The DataUpdateCoordinator handles the scheduling, so we just log here.
+        # This method is kept for compatibility but does nothing.
+        pass
+
+    # ------------------------------------------------------------
+    # (rest of your file remains unchanged; omitted for brevity)
+    # ------------------------------------------------------------
+
 
     async def process_pending_now(self) -> None:
         """Immediately process pending settings without waiting for next update cycle."""
@@ -221,71 +182,97 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             await self._process_pending_settings()
             _LOGGER.debug("Immediate pending processing completed")
         except Exception as e:
-            _LOGGER.error(f"Immediate pending processing failed: {e}")
+            _LOGGER.error("Immediate pending processing failed: %s", e)
 
-    async def _ensure_connected_client(self) -> AsyncModbusTcpClient:
-        """Ensure the client is connected under connection lock."""
+    async def _ensure_connected_client(self) -> ModbusTcpClient:
+        """Ensure client is connected under connection lock."""
         if ADVANCED_LOGGING:
-            _LOGGER.debug(f"[ADVANCED] _ensure_connected_client called - Current client state: {self._client}")
+            _LOGGER.debug("[ADVANCED] _ensure_connected_client called - Current client state: %s", self._client)
         
         async with self._connection_lock:
             if ADVANCED_LOGGING:
                 _LOGGER.debug("Connection lock acquired for %s:%s", self._host, self._port)
-            
+
             self._client = await connect_if_needed(self._client, self._host, self._port)
-            
+
             if ADVANCED_LOGGING:
-                _LOGGER.debug(f"[ADVANCED] connect_if_needed returned client: {self._client}, connected: {self._client.connected if self._client else 'N/A'}")
-            
+                _LOGGER.debug("[ADVANCED] connect_if_needed returned client: %s, connected: %s", self._client, self._client.connected if self._client else 'N/A')
+
             return self._client
-   
+
     async def start_fast_updates(self) -> None:
-        """Create and start the 10s-DataUpdateCoordinator."""
+        """Start fast updates using async_track_time_interval."""
         if not self.fast_enabled:
-            _LOGGER.info("Fast coordinator disabled via hub setting; skipping start.")
+            _LOGGER.info("Fast updates disabled via hub setting; skipping start.")
             return
-        if self._fast_coordinator is not None:
+        if self._cancel_fast_update is not None:
+            _LOGGER.debug("Fast updates already running")
             return
 
-        async def _async_update_fast() -> Dict[str, Any]:
-            if self._client is None or not self._client.connected:
-                await self._ensure_connected_client()
-            try:
-                result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
-                self.inverter_data.update(result)
-                _LOGGER.debug("Finished fetching %s data in fast cycle (success: True)", self.name)
-                return result
-            except ReconnectionNeededError as e:
-                _LOGGER.warning("Fast coordinator requires reconnection: %s", e)
-                await self.reconnect_client()
-                return {}
-
-        self._fast_coordinator = DataUpdateCoordinator[Dict[str, Any]](
+        _LOGGER.info("Starting fast updates with 10s interval using async_track_time_interval")
+        
+        self._cancel_fast_update = async_track_time_interval(
             self.hass,
-            _LOGGER,
-            name=f"{self.name} (fast/10s)",
-            update_interval=timedelta(seconds=10),
-            update_method=_async_update_fast,
+            self._async_update_fast,
+            timedelta(seconds=10)
         )
         
-        def _fast_coordinator_callback(data=None):
-            if data:
-                self.inverter_data.update(data)
-                _LOGGER.debug("Fast coordinator updated inverter_data cache")
-        
-        self._fast_unsub = self._fast_coordinator.async_add_listener(_fast_coordinator_callback)
+        # Trigger first update immediately
+        await self._async_update_fast()
+
+    async def _async_update_fast(self, now=None) -> None:
+        """Fast update function called by async_track_time_interval."""
+        if not self.fast_enabled:
+            return
+            
+        if self._client is None or not self._client.connected:
+            try:
+                await self._ensure_connected_client()
+            except Exception as e:
+                _LOGGER.warning("Fast update: Failed to ensure connection: %s", e)
+                return
         
         try:
-            await self._fast_coordinator.async_refresh()
-            _LOGGER.debug("Fast coordinator created and initial refresh completed")
+            result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
+            if result:
+                # Filter result to only include fast poll sensors
+                fast_data = {k: v for k, v in result.items() if k in FAST_POLL_SENSORS}
+                
+                if fast_data:
+                    # Update internal cache with all data
+                    self.inverter_data.update(result)
+                    
+                    # Only notify fast listeners about fast sensor changes
+                    for listener in self._fast_listeners:
+                        listener()
+                    
+                    if ADVANCED_LOGGING:
+                        _LOGGER.debug(
+                            f"Fast update completed: {len(fast_data)}/{len(result)} sensors updated "
+                            f"(filtered to fast sensors only)"
+                        )
+                else:
+                    _LOGGER.debug("Fast update: No fast-poll sensors in result")
+        except ReconnectionNeededError as e:
+            _LOGGER.warning("Fast update requires reconnection: %s", e)
+            await self.reconnect_client()
         except Exception as e:
-            _LOGGER.warning("Initial refresh of fast coordinator failed: %s", e)
+            _LOGGER.warning("Fast update failed: %s", e)
 
-    def _create_client(self) -> AsyncModbusTcpClient:
-        _LOGGER.debug("Creating new AsyncModbusTcpClient instance for %s:%s", self._host, self._port)
-        return AsyncModbusTcpClient(host=self._host, port=self._port, timeout=10)
+    @callback
+    def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
+        """Add a listener specifically for fast updates."""
+        self._fast_listeners.append(update_callback)
+        
+        @callback
+        def remove_listener() -> None:
+            """Remove listener."""
+            if update_callback in self._fast_listeners:
+                self._fast_listeners.remove(update_callback)
+        
+        return remove_listener
 
-    async def update_connection_settings(self, host: str, port: int, scan_interval: int) -> None:
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool) -> None:
         """Update connection settings from config entry options."""
         if self.updating_settings:
             if ADVANCED_LOGGING:
@@ -298,28 +285,33 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 connection_changed = (host != self._host) or (port != self._port)
                 self._host = host
                 self._port = port
-                set_modbus_config(self._host, self._port)
+                set_modbus_config(self._host, self._port, self.hass)
+                self._scan_interval = scan_interval
                 self.update_interval = timedelta(seconds=scan_interval)
+                
+                # Update fast_enabled
+                self.fast_enabled = fast_enabled
 
                 if connection_changed:
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
                     if self._client:
                         try:
+                            # Use the awaitable close wrapper from SAJModbusClient
                             await self._client.close()
                         except Exception as e:
                             _LOGGER.warning(f"Error while closing old Modbus client: {e}")
-                    self._client = self._create_client()
+                    # Reset client to None so it gets recreated by connect_if_needed with new settings
+                    self._client = None
                 else:
                     _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
 
-                restart_fast = self.fast_enabled
-
                 if ADVANCED_LOGGING:
                     _LOGGER.debug(
-                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d",
+                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d, Fast Enabled: %s",
                         self._host,
                         self._port,
-                        scan_interval
+                        scan_interval,
+                        fast_enabled
                     )
             except Exception as e:
                 _LOGGER.error("Failed to update connection settings: %s", e)
@@ -327,53 +319,59 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             finally:
                 self.updating_settings = False
         
-        if restart_fast:
+        # Restart fast updates if enabled, or stop if disabled
+        if self.fast_enabled:
             await self.restart_fast_updates()
+        elif self._cancel_fast_update is not None:
+            self._cancel_fast_update()
+            self._cancel_fast_update = None
+            _LOGGER.info("Fast updates stopped")
 
     async def restart_fast_updates(self) -> None:
-        """Restart the fast update coordinator with current config."""
+        """Restart the fast update interval with current config."""
         if not self.fast_enabled:
             return
-        if self._fast_coordinator is not None:
-            try:
-                if self._fast_unsub is not None:
-                    self._fast_unsub()
-                    self._fast_unsub = None
-                self._fast_coordinator = None
-                _LOGGER.debug("Old fast coordinator removed")
-            except Exception as e:
-                _LOGGER.warning("Failed to remove old fast coordinator: %s", e)
+        
+        # Stop existing fast updates
+        if self._cancel_fast_update is not None:
+            self._cancel_fast_update()
+            self._cancel_fast_update = None
+            _LOGGER.debug("Stopped old fast updates")
+        
+        # Start new fast updates
         await self.start_fast_updates()
 
     async def reconnect_client(self) -> bool:
         if ADVANCED_LOGGING:
-            _LOGGER.info(f"[ADVANCED] reconnect_client called - Current reconnecting state: {self._reconnecting}")
-        
+            _LOGGER.info("[ADVANCED] reconnect_client called - Current reconnecting state: %s", self._reconnecting)
+
         if self._reconnecting:
             _LOGGER.debug("Reconnection already in progress, waiting...")
             return False
-            
+
         async with self._connection_lock:
             if self._reconnecting:
                 _LOGGER.debug("Reconnection already in progress (double-check), waiting...")
                 return False
-                
+
             if ADVANCED_LOGGING:
                 _LOGGER.info("[ADVANCED] Reconnecting Modbus client...")
-            
+
             try:
                 self._reconnecting = True
                 if self._client:
                     try:
                         await self._client.close()
                     except Exception as e:
-                        _LOGGER.warning(f"Error while closing old Modbus client: {e}")
-                self._client = self._create_client()
-                await ensure_client_connected(self._client, self._host, self._port, _LOGGER)
+                        _LOGGER.warning("Error while closing old Modbus client: %s", e)
                 
+                # Set to None to force recreation in connect_if_needed
+                self._client = None
+                self._client = await connect_if_needed(self._client, self._host, self._port)
+
                 if ADVANCED_LOGGING:
                     _LOGGER.info("[ADVANCED] Reconnection successful.")
-                
+
                 return True
             except Exception as e:
                 _LOGGER.error("Reconnection failed: %s", e)
@@ -382,16 +380,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = False
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Regular poll cycle: process pending first, then read fresh values."""
+        """Regular poll cycle with fixed interval."""
         start = time.monotonic()
         
         if ADVANCED_LOGGING:
-            _LOGGER.info(f"[ADVANCED] Main coordinator update cycle started - Fast enabled: {self.fast_enabled}")
+            _LOGGER.info("[ADVANCED] Main coordinator update cycle started - Fixed interval: %ss", self._scan_interval)
         
         _LOGGER.info("Starting main coordinator update cycle")
         try:
+            # Ensure client is connected before processing
             await self._ensure_connected_client()
-            
+
             if self._optimistic_push_enabled and self._has_pending():
                 _LOGGER.debug("Found pending settings, applying optimistic overlay")
                 self._apply_optimistic_overlay()
@@ -409,9 +408,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             cache = await self._run_reader_methods()
             self._optimistic_overlay = None
             self.inverter_data = cache
-            
+
             if ADVANCED_LOGGING:
-                _LOGGER.info(f"[ADVANCED] Update cycle completed - Cache size: {len(cache)} items")
+                _LOGGER.info("[ADVANCED] Update cycle completed - Cache size: %d items", len(cache))
             
             return self.inverter_data
         except Exception as err:
@@ -421,15 +420,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         finally:
             elapsed = round(time.monotonic() - start, 3)
             if ADVANCED_LOGGING:
-                _LOGGER.info(f"[ADVANCED] Total update cycle time: {elapsed}s")
+                _LOGGER.info("[ADVANCED] Total update cycle time: %ss", elapsed)
 
     def _get_pending_handlers(self) -> Dict[str, Callable]:
-        """Sammelt alle Pending-Handler mit Werten ein."""
+        """Collect all pending handlers with values."""
         handlers = self._setting_handler.get_handlers()
         pending = {}
         
         for attr_name in handlers.keys():
-            # Removed: Special handling for _charge_group (no longer exists)
             if attr_name.startswith("_pending_"):
                 if getattr(self, attr_name, None) is not None:
                     pending[attr_name] = handlers[attr_name]
@@ -437,23 +435,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return pending
 
     async def _process_pending_settings(self) -> None:
-        """Verarbeite alle ausstehenden Settings mit optimierter Reihenfolge."""
+        """Process all pending settings with optimized batch processing and priority system."""
         if ADVANCED_LOGGING:
             _LOGGER.info("[ADVANCED] _process_pending_settings started")
         
         _LOGGER.debug("Processing pending settings...")
         
         try:
-            # 1. Sammle alle Pending-Attribute mit ihren Handlern
+            # Collect all pending attributes with their handlers
             pending = self._get_pending_handlers()
             
-            # 1b. Check for charge pending settings
+            # Check for charge pending settings
             charge_pending = [
                 idx for idx, slot in enumerate(self._pending_charges, start=1)
                 if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
             ]
             
-            # 1c. Check for discharge pending settings
+            # Check for discharge pending settings
             discharge_pending = [
                 idx for idx, slot in enumerate(self._pending_discharges, start=1)
                 if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
@@ -464,76 +462,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 return
             
             if ADVANCED_LOGGING:
-                _LOGGER.info(f"[ADVANCED] Found {len(pending)} pending handler(s): {list(pending.keys())}")
+                _LOGGER.info("[ADVANCED] Found %d pending handler(s): %s", len(pending), list(pending.keys()))
             
-            # 2. Sortiere Handler
+            # Log pending settings for debugging
+            if charge_pending:
+                _LOGGER.info("[PENDING DEBUG] Found charge pending for indices: %s", charge_pending)
+            
+            if discharge_pending:
+                _LOGGER.info(f"[PENDING DEBUG] Found discharge pending for indices: {discharge_pending}")
+            
+            results = []
+            
+            # 1. Process power state handlers first (highest priority)
             power_state_pending = {
                 k: v for k, v in pending.items()
                 if k in ("_pending_charging_state", "_pending_discharging_state")
             }
             
-            simple_pending = {
-                k: v for k, v in pending.items()
-                if k not in power_state_pending
-            }
-            
-            # Log charge pending settings
-            if charge_pending:
-                _LOGGER.info(f"[PENDING DEBUG] Found charge pending for indices: {charge_pending}")
-                for idx in charge_pending:
-                    slot = self._pending_charges[idx - 1]
-                    _LOGGER.info(
-                        f"[PENDING DEBUG] Charge{idx} pending values: "
-                        f"start={slot.get('start')}, end={slot.get('end')}, "
-                        f"day_mask={slot.get('day_mask')}, power_percent={slot.get('power_percent')}"
-                    )
-            
-            # Log discharge pending settings
-            if discharge_pending:
-                _LOGGER.info(f"[PENDING DEBUG] Found discharge pending for indices: {discharge_pending}")
-                for idx in discharge_pending:
-                    slot = self._pending_discharges[idx - 1]
-                    _LOGGER.info(
-                        f"[PENDING DEBUG] Discharge{idx} pending values: "
-                        f"start={slot.get('start')}, end={slot.get('end')}, "
-                        f"day_mask={slot.get('day_mask')}, power_percent={slot.get('power_percent')}"
-                    )
-            
-            results = []
-            
-            # 3a. ZUERST: Charge Settings (sequenziell pro Index)
-            for charge_idx in charge_pending:
-                try:
-                    if ADVANCED_LOGGING:
-                        _LOGGER.debug(f"[ADVANCED] Processing charge settings for index {charge_idx}")
-                    
-                    await self._setting_handler.handle_charge_settings_by_index(charge_idx)
-                    results.append((f"charge{charge_idx}", True))
-                except Exception as e:
-                    _LOGGER.error(
-                        "Error processing charge settings for index %s: %s",
-                        charge_idx, e, exc_info=e
-                    )
-            
-            # 3b. DANN: Discharge Settings (sequenziell pro Index)
-            for discharge_idx in discharge_pending:
-                try:
-                    if ADVANCED_LOGGING:
-                        _LOGGER.debug(f"[ADVANCED] Processing discharge settings for index {discharge_idx}")
-                    
-                    await self._setting_handler.handle_discharge_settings_by_index(discharge_idx)
-                    results.append((f"discharge{discharge_idx}", True))
-                except Exception as e:
-                    _LOGGER.error(
-                        "Error processing discharge settings for index %s: %s",
-                        discharge_idx, e, exc_info=e
-                    )
-            
-            # 3c. DANACH: Power State Handler
             if power_state_pending:
-                if ADVANCED_LOGGING:
-                    _LOGGER.info(f"[ADVANCED] Executing {len(power_state_pending)} power state handler(s) sequentially")
-                
+                _LOGGER.info(f"Processing {len(power_state_pending)} power state handlers")
                 for attr_name, handler in power_state_pending.items():
                     try:
                         result = await handler()
@@ -546,13 +493,40 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                             attr_name, e, exc_info=e
                         )
             
-            # 3d. Parallele Ausführung von einfachen Handlern
-            if simple_pending:
-                if ADVANCED_LOGGING:
-                    _LOGGER.info(f"[ADVANCED] Executing {len(simple_pending)} simple handler(s) in parallel")
+            # 2. Process charge and discharge slot handlers in parallel (medium priority)
+            slot_tasks = []
+            
+            for charge_idx in charge_pending:
+                slot_tasks.append(self._setting_handler.handle_charge_settings_by_index(charge_idx))
+            
+            for discharge_idx in discharge_pending:
+                slot_tasks.append(self._setting_handler.handle_discharge_settings_by_index(discharge_idx))
+            
+            if slot_tasks:
+                _LOGGER.info(f"Processing {len(slot_tasks)} slot handlers in parallel")
+                slot_results = await asyncio.gather(*slot_tasks, return_exceptions=True)
                 
-                tasks = [handler() for handler in simple_pending.values()]
-                simple_results = await asyncio.gather(*tasks, return_exceptions=True)
+                for i, result in enumerate(slot_results):
+                    slot_type = "charge" if i < len(charge_pending) else "discharge"
+                    idx = charge_pending[i] if i < len(charge_pending) else discharge_pending[i - len(charge_pending)]
+                    results.append((f"{slot_type}{idx}", True if not isinstance(result, Exception) else False))
+                    
+                    if isinstance(result, Exception):
+                        _LOGGER.error(
+                            "Error processing slot handler '%s%d': %s",
+                            slot_type, idx, result, exc_info=result
+                        )
+            
+            # 3. Process simple handlers in parallel (lowest priority)
+            simple_pending = {
+                k: v for k, v in pending.items()
+                if k not in power_state_pending
+            }
+            
+            if simple_pending:
+                _LOGGER.info(f"Processing {len(simple_pending)} simple handlers in parallel")
+                simple_tasks = [handler() for handler in simple_pending.values()]
+                simple_results = await asyncio.gather(*simple_tasks, return_exceptions=True)
                 
                 for attr_name, result in zip(simple_pending.keys(), simple_results):
                     if isinstance(result, Exception):
@@ -572,61 +546,179 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     f"[ADVANCED] Pending processing complete: "
                     f"{successful}/{len(charge_pending) + len(discharge_pending) + len(pending)} successful"
                 )
-        
+    
         except Exception as e:
-            _LOGGER.warning(
-                "Pending processing failed, continuing to read phase: %s",
-                e, exc_info=True
-            )
-        
+            _LOGGER.warning("Pending processing failed, continuing to read phase: %s", e, exc_info=True)
         finally:
             self._invalidate_pending_cache()
 
     async def _run_reader_methods(self) -> Dict[str, Any]:
-        """Sequential execution of readers; builds the cache."""
+        """Parallel execution of readers in logical groups; builds cache."""
         if ADVANCED_LOGGING:
-            _LOGGER.info(f"[ADVANCED] _run_reader_methods started - Client connected: {self._client.connected if self._client else 'No client'}")
+            _LOGGER.info("[ADVANCED] _run_reader_methods started - Client connected: %s", self._client.connected if self._client else 'No client')
         
         new_cache: Dict[str, Any] = {}
-        await self._ensure_connected_client()
+      
         
-        reader_methods = [
-            modbus_readers.read_modbus_inverter_data,
-            modbus_readers.read_modbus_realtime_data,
-            modbus_readers.read_additional_modbus_data_1_part_1,
-            modbus_readers.read_additional_modbus_data_1_part_2,
-            modbus_readers.read_additional_modbus_data_2_part_1,
-            modbus_readers.read_additional_modbus_data_2_part_2,
-            modbus_readers.read_additional_modbus_data_3,
-            modbus_readers.read_additional_modbus_data_3_2,
-            modbus_readers.read_additional_modbus_data_4,
-            modbus_readers.read_battery_data,
-            modbus_readers.read_inverter_phase_data,
-            modbus_readers.read_offgrid_output_data,
-            modbus_readers.read_side_net_data,
-            modbus_readers.read_passive_battery_data,
-            modbus_readers.read_charge_data,
-            modbus_readers.read_discharge_data,
-            modbus_readers.read_anti_reflux_data,
-            modbus_readers.read_meter_a_data,
+        # Load static inverter data only once (on first call)
+        if self._inverter_static_data is None:
+            try:
+                _LOGGER.info("Loading static inverter data (first time only)...")
+                self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
+                    self._client, self._read_lock
+                )
+                if self._inverter_static_data:
+                    _LOGGER.info(
+                        "Static inverter data loaded successfully: SN=%s, Type=%s",
+                        self._inverter_static_data.get("sn", "Unknown"),
+                        self._inverter_static_data.get("devtype", "Unknown")
+                    )
+                else:
+                    _LOGGER.warning("Static inverter data returned empty")
+            except Exception as e:
+                _LOGGER.error("Failed to load static inverter data: %s", e)
+                self._inverter_static_data = {}
+        
+        # Always include static data in cache
+        if self._inverter_static_data:
+            new_cache.update(self._inverter_static_data)
+        
+        # Group readers by logical dependencies - readers in same group run in parallel
+        reader_groups = [
+            # Group 1: Critical real-time data
+            [modbus_readers.read_modbus_realtime_data],
+            
+            # Group 2: Additional data part 1 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_1_part_1,
+                modbus_readers.read_additional_modbus_data_1_part_2,
+            ],
+            
+            # Group 3: Additional data part 2 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_2_part_1,
+                modbus_readers.read_additional_modbus_data_2_part_2,
+            ],
+            
+            # Group 4: Additional data part 3 & 4 (can run in parallel)
+            [
+                modbus_readers.read_additional_modbus_data_3,
+                modbus_readers.read_additional_modbus_data_3_2,
+                modbus_readers.read_additional_modbus_data_4,
+            ],
+            
+            # Group 5: Device-specific data (can run in parallel)
+            [
+                modbus_readers.read_battery_data,
+                modbus_readers.read_inverter_phase_data,
+                modbus_readers.read_offgrid_output_data,
+            ],
+            
+            # Group 6: Network and passive data (can run in parallel)
+            [
+                modbus_readers.read_side_net_data,
+                modbus_readers.read_passive_battery_data,
+                modbus_readers.read_meter_a_data,
+            ],
+            
+            # Group 7: Charge/Discharge settings (can run in parallel)
+            [
+                modbus_readers.read_charge_data,
+                modbus_readers.read_discharge_data,
+            ],
         ]
 
-        for method in reader_methods:
-            try:
-                part = await method(self._client, self._read_lock)
-                if part:
-                    new_cache.update(part)
-            except ReconnectionNeededError as e:
-                _LOGGER.warning(f"{method.__name__} required reconnection: {e}")
-                await self.reconnect_client()
-                try:
-                    part = await method(self._client, self._read_lock)
-                    if part:
-                        new_cache.update(part)
-                except Exception as e:
-                    _LOGGER.warning(f"Retry failed for {method.__name__}: {e}")
-            except Exception as e:
-                _LOGGER.warning("Reader failed: %s", e)
+        current_time = time.monotonic()
+        total_readers = sum(len(group) for group in reader_groups)
+        successful_count = 0
+        
+        if ADVANCED_LOGGING:
+            _LOGGER.info("[ADVANCED] Executing %d readers in %d groups", total_readers, len(reader_groups))
+        
+        # Execute each group in sequence, but readers within group run in parallel
+        for group_idx, group in enumerate(reader_groups, 1):
+            group_start = time.monotonic()
+            
+            # Create tasks for all readers in this group
+            tasks = [method(self._client, self._read_lock) for method in group]
+            
+            # Execute group in parallel with exception handling
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            group_duration = time.monotonic() - group_start
+            
+            # Process results from this group
+            for method, result in zip(group, results):
+                method_name = method.__name__
+                
+                if isinstance(result, ReconnectionNeededError):
+                    _LOGGER.warning("%s required reconnection: %s", method_name, result)
+                    try:
+                        await self.reconnect_client()
+                        # Retry once after reconnection
+                        retry_result = await method(self._client, self._read_lock)
+                        if retry_result:
+                            new_cache.update(retry_result)
+                            successful_count += 1
+                    except Exception as retry_error:
+                        _LOGGER.warning("Retry failed for %s: %s", method_name, retry_error)
+                
+                elif isinstance(result, Exception):
+                    _LOGGER.warning("Reader %s failed: %s", method_name, result)
+                
+                elif isinstance(result, dict) and result:
+                    # Check for locked values that should NOT be overwritten
+                    if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+                        if "charging_enabled" in result:
+                            _LOGGER.info(
+                                "[CACHE LOCK] Ignoring charging_enabled from %s "
+                                "(locked until %.1fs)",
+                                method_name,
+                                self._charging_state_lock_until - current_time
+                            )
+                            result.pop("charging_enabled")
+                    
+                    if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+                        if "discharging_enabled" in result:
+                            _LOGGER.info(
+                                "[CACHE LOCK] Ignoring discharging_enabled from %s "
+                                "(locked until %.1fs)",
+                                method_name,
+                                self._discharging_state_lock_until - current_time
+                            )
+                            result.pop("discharging_enabled")
+                    
+                    new_cache.update(result)
+                    successful_count += 1
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"[ADVANCED] Group {group_idx}/{len(reader_groups)} completed in {group_duration:.2f}s "
+                    f"({len(group)} readers)"
+                )
+        
+        if ADVANCED_LOGGING:
+            _LOGGER.info(
+                f"[ADVANCED] All reader groups completed: {successful_count}/{total_readers} successful"
+            )
+        
+        # Clear expired locks
+        if self._charging_state_lock_until and current_time >= self._charging_state_lock_until:
+            self._charging_state_lock_until = None
+        
+        if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
+            self._discharging_state_lock_until = None
+        
+        # Preserve locked values if still active
+        if self._charging_state_lock_until and current_time < self._charging_state_lock_until:
+            if "charging_enabled" in self.inverter_data:
+                new_cache["charging_enabled"] = self.inverter_data["charging_enabled"]
+                _LOGGER.info("[CACHE LOCK] Preserving charging_enabled = %s", new_cache['charging_enabled'])
+        
+        if self._discharging_state_lock_until and current_time < self._discharging_state_lock_until:
+            if "discharging_enabled" in self.inverter_data:
+                new_cache["discharging_enabled"] = self.inverter_data["discharging_enabled"]
+                _LOGGER.info("[CACHE LOCK] Preserving discharging_enabled = %s", new_cache['discharging_enabled'])
         
         return new_cache
 
@@ -678,62 +770,66 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def async_unload_entry(self) -> None:
         """Cleanup tasks when the config entry is removed."""
-        if self._fast_coordinator:
-            try:
-                if self._fast_unsub is not None:
-                    self._fast_unsub()
-                    self._fast_unsub = None
-                self._fast_coordinator = None
-                _LOGGER.debug("Fast coordinator listener removed")
-            except Exception as e:
-                _LOGGER.warning("Failed to remove fast coordinator listener: %s", e)
+        # Cancel fast updates
+        if self._cancel_fast_update is not None:
+            self._cancel_fast_update()
+            self._cancel_fast_update = None
+            _LOGGER.debug("Fast update interval cancelled")
+        
+        # Clear fast listeners
+        self._fast_listeners.clear()
 
-        if self._client:
+        # Sicherstellen, dass der Client immer geschlossen wird
+        client_to_close = self._client
+        if client_to_close:
+            self._client = None  # Verweis sofort entfernen
             try:
-                await self._client.close()
+                await client_to_close.close()
                 _LOGGER.debug("Modbus client connection closed")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
-            finally:
-                self._client = None
-                _LOGGER.debug("Modbus client cleaned up")
+        else:
+            _LOGGER.debug("Modbus client was already None, no need to close.")
+        
+        _LOGGER.debug("Modbus client cleaned up")
 
     # --- Helper functions ---
     def _has_pending(self) -> bool:
-        """Checks if there are pending changes (with caching)."""
+        """Optimized check for pending changes with early exit strategy."""
         if self._pending_cache_valid:
             return self._pending_cache
         
-        # Check simple pending attributes
-        for attr_name in SIMPLE_REGISTER_MAP:
-            if getattr(self, f"_pending_{attr_name}") is not None:
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
+        # Check simple pending attributes (early exit on first match)
+        has_pending = any(
+            getattr(self, f"_pending_{attr_name}", None) is not None
+            for attr_name in SIMPLE_REGISTER_MAP
+        )
+        
+        # Check time_enable attributes
+        if not has_pending:
+            has_pending = (
+                self._pending_charge_time_enable is not None or
+                self._pending_discharge_time_enable is not None
+            )
         
         # Check power state
-        if self._pending_charging_state is not None or self._pending_discharging_state is not None:
-            self._pending_cache = True
-            self._pending_cache_valid = True
-            return True
+        if not has_pending:
+            has_pending = (
+                self._pending_charging_state is not None or
+                self._pending_discharging_state is not None
+            )
         
-        # Check charge settings
-        for slot in self._pending_charges:
-            if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
+        # Check charge and discharge settings (combined for efficiency)
+        if not has_pending:
+            has_pending = any(
+                any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
+                for slot in (self._pending_charges + self._pending_discharges)
+            )
         
-        # Check discharge settings
-        for slot in self._pending_discharges:
-            if any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES):
-                self._pending_cache = True
-                self._pending_cache_valid = True
-                return True
-        
-        self._pending_cache = False
+        # Cache the result
+        self._pending_cache = has_pending
         self._pending_cache_valid = True
-        return False
+        return has_pending
     
     def _invalidate_pending_cache(self) -> None:
         """Invalidate the pending cache when pending values change."""
@@ -753,7 +849,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
             app_mode = 1 if bool(chg) or bool(dchg) else 0
 
-            overlay = base
+            overlay = dict(base)  # Erstelle eine Kopie der Basisdaten
             if chg is not None:
                 overlay["charging_enabled"] = 1 if chg else 0
             if dchg is not None:

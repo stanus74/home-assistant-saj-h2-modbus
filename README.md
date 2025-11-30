@@ -4,7 +4,18 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-## <span style="color:red;">New Feature added: "Charge battery with mains power", see the Features section below</span>
+> **Disclaimer / Important Notice**
+>
+> This Home Assistant integration is an **unofficial community project** and is **not affiliated with or endorsed by SAJ**.
+>
+> The Modbus register addresses and sensor mappings used in this integration were  
+> **independently determined through empirical testing and publicly available information**.  
+> No confidential documents, proprietary materials, or NDA-protected data have been included or published.
+>
+> The register mappings in the source code are provided **solely for interoperability purposes**  
+> and are **not based on any official SAJ documentation**.  
+> Users install and use this integration **at their own risk**.
+
 
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
@@ -12,12 +23,12 @@ Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.c
 
 It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inverter.
 
-## Features
+## Features 
 
 - Installation through Config Flow UI
 - Over 330 registers (power, energy, temperature sensors, battery...)
 - Configurable polling interval - changeable at any time
-- Smart Modbus connection management - especially for AIO3
+- Smart Modbus connection management - especially for AIO3 
 
 - **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-Use Mode** (to charge the battery with grid power) 
 
@@ -33,7 +44,7 @@ This integration is available in the HACS default repository.
 
 ## Configuration
 
-1. Navigate to the "Integrations" page in your configuration, then click "Add Integration" and 
+1. Navigate to the "Integrations" page in your configuration, then click "Add Integration and 
 select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval 
 
@@ -51,21 +62,31 @@ select "SAJ H2 Modbus."
 * **High-frequency polling for key metrics (e.g., PV power, battery):**
 
   * Introduced a 10s fast coordinator 
-  * Can be disabled via simple adjustment in hub.py, 
-    
     Energy sensors are polled every 10 seconds: 
 
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
     "inverterPower", "gridPower",
 
-This is the default setting. Can be disabled in hub.py line 27:
+You can be enabled/disable in Configuration Settings every time
 
-`FAST_POLL_DEFAULT = True # True or False`
 
-### 🚀 Working Mode Control (Advanced Users, new since Version 2.1)
 
-This version adds support for controlling the working mode of the inverter. This feature is intended for advanced users.
-see in [CHANGELOG](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/CHANGELOG.md)
+### 🚀 Charging/Discharging Control
+
+> **⚠️ Warning: Write Registers**
+>
+> This integration exposes input entities that write directly to Modbus registers.  
+> These commands change inverter behaviour in real time.
+>
+> Incorrect values can cause:
+> - wrong battery charging/discharging
+> - wrong export limit / grid behaviour
+> - inverter protection mode activation
+>
+> Use write functions carefully.  
+> The developer is not liable for any issues arising from user-applied register writes.
+
+All Input Entities here >
 
 
 ### 🚀 Export Limit Control
@@ -87,20 +108,13 @@ A custom Lovelace card is available to provide a user-friendly interface for con
 Features:
 - Easy time selection for charge start and end
 - Slider for charge power percentage
-- Checkbox selection for charging days (automatically calculates the day mask)
+- Checkbox selection for charging days 
 - Button to enable/disable charging
 
 For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
 
 
-## Additional Information
 
-The data from the SAJ H2 inverter is transmitted to the SAJ server via a WiFi interface, AIO3.
 
-The AIO3 may have port 502 open, allowing us to access the Modbus data. The IP address can be determined in the router. 
-
-There are also reports of **AIO3 devices with port 502 closed**. Then you need to have an RS232-wifi or -ethernet converter.
-
-OR reset the AIO3 and reconfigure it, **important**: it must be given **a new IP address**. Then check with a port scanner if port 502 is open
 
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/stanus74)

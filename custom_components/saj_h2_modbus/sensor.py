@@ -1,24 +1,22 @@
 """SAJ Modbus Hub."""
+from typing import Optional
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import dt as dt_util
 import logging
 
 from .const import DOMAIN, SENSOR_TYPES, SajModbusSensorEntityDescription
-from .hub import SAJModbusHub
+from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
 
-FAST_UPDATE_SENSOR_KEYS = [
-    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
-    "inverterPower", "gridPower",
-    "directionPV", "directionBattery", "directionGrid", "directionOutput",
-    "CT_GridPowerWatt", "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA",
-    "totalgridPowerVA", "TotalInvPowerVA", "BackupTotalLoadPowerWatt",
-    "BackupTotalLoadPowerVA",
+SENSOR_DEFINITIONS = [
+    {"key": "pvPower", "name": "PV Power", "unit": "W"},
+    {"key": "batteryPower", "name": "Battery Power", "unit": "W"},
+    {"key": "gridPower", "name": "Grid Power", "unit": "W"},
+    {"key": "inverterPower", "name": "Inverter Power", "unit": "W"},
 ]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -28,17 +26,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        # If the Fast-Coordinator is disabled/not present,  
-        # Fast-sensors automatically bind to the Main-Coordinator.
-        if description.key in FAST_UPDATE_SENSOR_KEYS and getattr(hub, "_fast_coordinator", None) is not None:
-            coordinator = hub._fast_coordinator
-        else:
-            coordinator = hub
-        entity = SajSensor(coordinator, device_info, description)
+        entity = SajSensor(hub, device_info, description)
         entities.append(entity)
 
     async_add_entities(entities)
-    _LOGGER.info(f"Added {len(entities)} SAJ sensors")
+    _LOGGER.info("Added SAJ sensors")
 
 class SajSensor(CoordinatorEntity, SensorEntity):
     """Representation of an SAJ Modbus sensor."""
@@ -46,35 +38,38 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, hub: SAJModbusHub, device_info: dict, description: SajModbusSensorEntityDescription):
         """Initialize the sensor."""
         super().__init__(coordinator=hub)
+        
         self.entity_description = description
         self._attr_device_info = device_info
+        self._hub = hub
+        
         # Stable unique_id: independent of coordinator name
         device_name = device_info.get("name", "SAJ")
         self._attr_unique_id = f"{device_name}_{description.key}"
-        # IMPORTANT: With has_entity_name=True NO device prefix in the name!
-        # HA automatically shows "<Device Name> <Entity Name>".
+        
         self._attr_name = description.name
-        # Recommended Core Standard: Entities have their own names
         self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
+        
+        # Determine if this is a fast-poll sensor using FAST_POLL_SENSORS from hub
+        self._is_fast_sensor = description.key in FAST_POLL_SENSORS
+        self._remove_fast_listener = None
+        self._last_value = None  # Cache last value for change detection
+        
+        if ADVANCED_LOGGING and self._is_fast_sensor:
+            _LOGGER.debug(
+                f"Sensor {self._attr_name} (key: {description.key}) marked as fast-poll sensor"
+            )
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # Use coordinator.data which will fall back to inverter_data if None
-        coordinator_data = self.coordinator.data
-        if coordinator_data is None:
-            # For sensors, we need to check if this is the main hub or fast coordinator
-            if hasattr(self.coordinator, 'inverter_data'):
-                coordinator_data = self.coordinator.inverter_data
-            else:
-                _LOGGER.debug(f"Coordinator data not yet available for sensor {self._attr_name}")
-                return None
-        
-        value = coordinator_data.get(self.entity_description.key)
-        if value is None:
-            _LOGGER.debug(f"No data for sensor {self._attr_name}")
+        value = self._hub.inverter_data.get(self.entity_description.key)
+        if value is None and ADVANCED_LOGGING:
+            _LOGGER.debug(
+                "No data available for sensor type: %s", self.entity_description.key
+            )
         return value
 
     @property
@@ -82,13 +77,71 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        
+        # Initial registration check
+        self._update_fast_listener_registration()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """When entity will be removed from hass."""
+        if self._remove_fast_listener is not None:
+            self._remove_fast_listener()
+            self._remove_fast_listener = None
+            _LOGGER.debug(f"Sensor {self._attr_name} unregistered from fast updates")
+        
+        await super().async_will_remove_from_hass()
+
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+        """Handle updated data from the main coordinator."""
+        # Check if fast listener registration needs to change (e.g. config changed)
+        self._update_fast_listener_registration()
+
+        # Update cached value and write state
+        # For fast sensors, this runs at normal interval (e.g., 60s)
+        # For regular sensors, this is their only update mechanism
+        self._last_value = self.native_value
         self.async_write_ha_state()
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
+    @callback
+    def _update_fast_listener_registration(self) -> None:
+        """Register or unregister fast listener based on current hub config."""
+        if not self._is_fast_sensor:
+            return
 
-        # _LOGGER.debug(f"Sensor {self._attr_name} added to Home Assistant")
+        should_listen = self._hub.fast_enabled
+        is_listening = self._remove_fast_listener is not None
+
+        if should_listen and not is_listening:
+            self._remove_fast_listener = self._hub.async_add_fast_listener(
+                self._handle_fast_update
+            )
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"Sensor {self._attr_name} registered for fast updates (10s)"
+                )
+        elif not should_listen and is_listening:
+            if self._remove_fast_listener:
+                self._remove_fast_listener()
+                self._remove_fast_listener = None
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"Sensor {self._attr_name} unregistered from fast updates"
+                )
+
+    @callback
+    def _handle_fast_update(self) -> None:
+        """Handle fast update notification (10s interval)."""
+        # This is ONLY called for sensors registered in FAST_POLL_SENSORS
+        # Only update if the value actually changed to reduce write operations
+        new_value = self._hub.inverter_data.get(self.entity_description.key)
+        if new_value != self._last_value:
+            self._last_value = new_value
+            self.async_write_ha_state()
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    f"Fast update for {self._attr_name}: {self._last_value} -> {new_value}"
+                )
