@@ -6,6 +6,9 @@ from typing import Optional, Any, List, Dict, Tuple, Callable
 
 _LOGGER = logging.getLogger(__name__)
 
+CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
+ADVANCED_LOGGING = False
+
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
 HANDLER_RETRY_DELAY = 1.0  # seconds
@@ -145,10 +148,11 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 
 def _make_simple_handler(pending_attr: str, address: int, label: str):
     """Factory for simple register handlers with exponential backoff retry logic."""
-    
+
     async def handler(self) -> bool:
-        # Get pending value from hub
-        value = getattr(self._hub, f"_pending_{pending_attr}", None)
+        # Get pending value from handler's storage
+        value = self._pending_simple.get(pending_attr)
+        
         if value is None:
             _LOGGER.debug("Skip %s: no pending value", pending_attr)
             return False
@@ -161,11 +165,13 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
         ok = await self._write_register_with_backoff(address, int(value), label)
         if ok:
             try:
-                setattr(self._hub, f"_pending_{pending_attr}", None)
+                # Clear pending value
+                if pending_attr in self._pending_simple:
+                    del self._pending_simple[pending_attr]
             except Exception:
                 pass
             return True
-        
+
         _LOGGER.error(
             "Failed to write %s after %d attempts with exponential backoff",
             label, MAX_HANDLER_RETRIES
@@ -175,43 +181,45 @@ def _make_simple_handler(pending_attr: str, address: int, label: str):
     return handler
 
 
-def make_pending_setter(attr_path: str):
-    """Factory: returns an async method that sets a nested attribute on the hub."""
-    
-    async def setter(self, value: Any) -> None:
-        """Sets a pending value on the hub."""
-        try:
-            if "[" in attr_path:
-                parts = attr_path.replace("]", "").split("[")
-                obj = getattr(self, f"_pending_{parts[0]}")
-                for i, key in enumerate(parts[1:]):
-                    if i == len(parts) - 2:
-                        obj[int(key) if key.isdigit() else key] = value
-                        break
-                    obj = obj[int(key) if key.isdigit() else key]
-            else:
-                setattr(self, f"_pending_{attr_path}", value)
-            
-            # Invalidate pending cache when a value is set (for both nested and simple)
-            if hasattr(self, '_invalidate_pending_cache'):
-                self._invalidate_pending_cache()
-        except Exception as e:
-            _LOGGER.error(
-                "Error setting pending attribute '%s': %s", attr_path, e, exc_info=True
-            )
-
-    return setter
-
-
 class ChargeSettingHandler:
     """Handler for all Charge/Discharge-Settings with Decorator-Pattern."""
-    
-    def __init__(self, hub):
-        self._hub = hub
+
+    def __init__(self, hub) -> None:
+        self.hub = hub
+
+        # --- Pending State Management (Moved from Hub) ---
+        self._pending_cache: Optional[bool] = None
+        self._pending_cache_valid: bool = False
+
+        # Simple attributes storage
+        self._pending_simple: Dict[str, Any] = {}
+
+        # Charge/Discharge slots
+        self._pending_charges = [
+            {key: None for key in CHARGE_PENDING_SUFFIXES}
+            for _ in range(7)
+        ]
+        self._pending_discharges = [
+            {key: None for key in CHARGE_PENDING_SUFFIXES}
+            for _ in range(7)
+        ]
+
+        # Time enable masks
+        self._pending_charge_time_enable: Optional[int] = None
+        self._pending_discharge_time_enable: Optional[int] = None
+
+        # Power states
+        self._pending_charging_state: Optional[bool] = None
+        self._pending_discharging_state: Optional[bool] = None
+
+        # Locks
+        self._charging_state_lock_until: Optional[float] = None
+        self._discharging_state_lock_until: Optional[float] = None
+
         self._handlers: Dict[str, Callable] = {}
         self._time_enable_cache: Dict[str, int] = {}  # Cache to avoid duplicate writes
         self._register_handlers()
-    
+
     def _register_handler(self, pending_attr: str) -> Callable:
         """Decorator for registering handler functions."""
         def decorator(func: Callable) -> Callable:
@@ -219,11 +227,11 @@ class ChargeSettingHandler:
             _LOGGER.debug("Registered handler for '%s': %s", pending_attr, func.__name__)
             return func
         return decorator
-    
+
     def get_handlers(self) -> Dict[str, Callable]:
         """Return all registered handlers."""
         return self._handlers.copy()
-    
+
     def _register_handlers(self) -> None:
         """Register all handlers: dynamically from SIMPLE_REGISTER_MAP + special cases."""
         # 1. Dynamic handlers from SIMPLE_REGISTER_MAP
@@ -234,27 +242,27 @@ class ChargeSettingHandler:
             bound_handler = unbound_handler.__get__(self, self.__class__)
             self._handlers[pending_attr] = bound_handler
             _LOGGER.debug("Registered dynamic handler for '%s'", pending_attr)
-        
+
         # 2. Power State Handler
         self._handlers["_pending_charging_state"] = self.handle_charging_state
         _LOGGER.debug("Registered special handler for '_pending_charging_state'")
-        
+
         self._handlers["_pending_discharging_state"] = self.handle_discharging_state
         _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
-        
+
         _LOGGER.debug("time_enable handlers NOW ACTIVE via SIMPLE_REGISTER_MAP")
 
     # ========== HELPER METHODS ==========
-    
+
     def _is_valid_time_format(self, time_str: str) -> bool:
         """Validates time format HH:MM."""
         if not isinstance(time_str, str):
             return False
-        
+
         parts = time_str.split(":")
         if len(parts) != 2:
             return False
-        
+
         try:
             hours, minutes = map(int, parts)
             return 0 <= hours < 24 and 0 <= minutes < 60
@@ -263,26 +271,26 @@ class ChargeSettingHandler:
 
     async def handle_settings(self, mode: str, label: str) -> None:
         """Handles settings dynamically based on mode (charge1-7 or discharge1-7) with optimized batch processing."""
-        _LOGGER.info(
+        _LOGGER.debug(
             "[PENDING DEBUG] handle_settings called for mode=%s, label=%s",
             mode, label
         )
-        
+
         try:
             registers = REGISTERS[mode]
-            _LOGGER.info(
+            _LOGGER.debug(
                 "[PENDING DEBUG] Registers for %s: %s", mode, registers
             )
 
             # Determine if this is a charge or discharge slot
             if mode.startswith("charge"):
                 index = int(mode.replace("charge", "")) - 1
-                slot_pending = self._hub._pending_charges[index]
+                slot_pending = self._pending_charges[index]
                 is_charge = True
                 time_enable_entity_id = REGISTERS["charge_time_enable"]
             else:  # discharge
                 index = int(mode.replace("discharge", "")) - 1
-                slot_pending = self._hub._pending_discharges[index]
+                slot_pending = self._pending_discharges[index]
                 is_charge = False
                 time_enable_entity_id = REGISTERS["discharge_time_enable"]
 
@@ -314,7 +322,7 @@ class ChargeSettingHandler:
 
             # Batch write operations for better performance
             write_operations = []
-            
+
             # Add start and end times if available
             if start_value is not None:
                 if not self._is_valid_time_format(start_value):
@@ -323,11 +331,11 @@ class ChargeSettingHandler:
                         start_value, label
                     )
                 else:
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Adding start time: %s", start_value
                     )
                     write_operations.append((registers["start_time"], self._time_to_register_value(start_value), f"{label} start"))
-    
+
             if end_value is not None:
                 if not self._is_valid_time_format(end_value):
                     _LOGGER.error(
@@ -335,7 +343,7 @@ class ChargeSettingHandler:
                         end_value, label
                     )
                 else:
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Adding end time: %s", end_value
                     )
                     write_operations.append((registers["end_time"], self._time_to_register_value(end_value), f"{label} end"))
@@ -346,9 +354,9 @@ class ChargeSettingHandler:
                 if day_mask_value is None:
                     # Try to get current day_mask from inverter data cache
                     cache_key = f"{mode}_day_mask"
-                    if cache_key in self._hub.inverter_data:
+                    if cache_key in self.hub.inverter_data:
                         # Extract day_mask from cached day_mask_power value
-                        cached_day_mask_power = self._hub.inverter_data.get(f"{mode}_day_mask_power", 0)
+                        cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
                         effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
                         _LOGGER.debug(
                             "[PENDING DEBUG] Using cached day_mask for %s: %s",
@@ -363,7 +371,7 @@ class ChargeSettingHandler:
                         )
                 else:
                     effective_day_mask = day_mask_value
-                
+
                 if power_percent_value is not None and not (0 <= power_percent_value <= 100):
                     _LOGGER.error(
                         "Invalid power range for %s: %s%%. Expected 0-100.",
@@ -373,7 +381,7 @@ class ChargeSettingHandler:
 
                 day_mask_power_value = self._calculate_day_mask_power_value(effective_day_mask, power_percent_value)
                 if day_mask_power_value is not None:
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Adding day_mask_power update for %s", label
                     )
                     write_operations.append((
@@ -393,45 +401,45 @@ class ChargeSettingHandler:
 
             # Execute all write operations in parallel where possible
             if write_operations:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "[PENDING DEBUG] Executing %d write operations for %s",
                     len(write_operations), label
                 )
-                
+
                 # Write all operations except time_enable
                 for address, value, label in write_operations[:-1]:  # Exclude time_enable
                     await self._write_register_with_backoff(address, value, label)
-                
+
                 # Reset pending values for this specific slot
-                _LOGGER.info(
+                _LOGGER.debug(
                     "[PENDING DEBUG] Resetting pending values for %s", mode
                 )
                 self._reset_pending_values(mode)
-                
+
                 # Handle time_enable separately for slots 2-7
                 if index > 0:  # index 0 = Slot 1, skip it
                     cache_key = f"{'charge' if is_charge else 'discharge'}_time_enable"
-                    
-                    _LOGGER.info(
+
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Starting time_enable update for %s (index %d)",
                         label, index
                     )
-                    
+
                     # Add delay to allow inverter to process previous writes
                     await asyncio.sleep(1.0)
-                    
+
                     # Read current time_enable value
-                    current_regs = await self._hub._read_registers(time_enable_entity_id, 1)
+                    current_regs = await self.hub._read_registers(time_enable_entity_id, 1)
                     if not current_regs:
                         _LOGGER.error(
                             "[PENDING DEBUG] Failed to read current time_enable for %s", label
                         )
                         return
-                    
+
                     current_mask = current_regs[0]
                     # IMPORTANT: Bit ADD (OR), not replace!
                     new_mask = current_mask | (1 << index)
-                    
+
                     # Check cache to avoid duplicate writes
                     if cache_key in self._time_enable_cache and self._time_enable_cache[cache_key] == new_mask:
                         _LOGGER.debug(
@@ -439,7 +447,7 @@ class ChargeSettingHandler:
                             label, new_mask
                         )
                         return
-                    
+
                     if new_mask == current_mask:
                         _LOGGER.debug(
                             "[PENDING DEBUG] %s already enabled in time_enable (%s)",
@@ -448,7 +456,7 @@ class ChargeSettingHandler:
                         # Update cache even if no write needed
                         self._time_enable_cache[cache_key] = new_mask
                         return
-                    
+
                     _LOGGER.info(
                         "[PENDING DEBUG] Enabling %s in time_enable register: %s (binary: %s) → %s (binary: %s)",
                         label, current_mask, bin(current_mask), new_mask, bin(new_mask)
@@ -456,51 +464,51 @@ class ChargeSettingHandler:
                     write_ok = await self._write_register_with_backoff(
                         time_enable_entity_id, new_mask, f"{label} time_enable"
                     )
-                    
+
                     if not write_ok:
                         _LOGGER.error(
                             "[PENDING DEBUG] Failed to write time_enable for %s", label
                         )
                         return
-                    
+
                     # Update cache immediately after successful write
                     self._time_enable_cache[cache_key] = new_mask
-                    
+
                     # Wait for write to complete
                     await asyncio.sleep(0.3)
-                    
+
                     # IMPORTANT: Read back to confirm
-                    verify_regs = await self._hub._read_registers(time_enable_entity_id, 1)
+                    verify_regs = await self.hub._read_registers(time_enable_entity_id, 1)
                     if not verify_regs:
                         _LOGGER.error(
                             "[PENDING DEBUG] Failed to verify time_enable write for %s", label
                         )
                         return
-                    
+
                     actual_value = verify_regs[0]
                     _LOGGER.info(
                         "[PENDING DEBUG] Verified time_enable after write: %s (binary: %s) (expected: %s)",
                         actual_value, bin(actual_value), new_mask
                     )
-                    
+
                     # Update cache with ACTUAL value from inverter
                     if is_charge:
-                        self._hub.inverter_data["charge_time_enable"] = actual_value
+                        self.hub.inverter_data["charge_time_enable"] = actual_value
                         _LOGGER.info(
                             "[PENDING DEBUG] Updated cache: charge_time_enable = %s", actual_value
                         )
                     else:
-                        self._hub.inverter_data["discharge_time_enable"] = actual_value
+                        self.hub.inverter_data["discharge_time_enable"] = actual_value
                         _LOGGER.info(
                             "[PENDING DEBUG] Updated cache: discharge_time_enable = %s", actual_value
                         )
-                    
+
                     # Force immediate data update to UI
-                    self._hub.async_set_updated_data(self._hub.inverter_data)
-                    _LOGGER.info(
+                    self.hub.async_set_updated_data(self.hub.inverter_data)
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Forced UI update for %s", label
                     )
-                    
+
                     if actual_value != new_mask:
                         _LOGGER.warning(
                             "[PENDING DEBUG] Inverter returned different value! Wrote %s, got %s",
@@ -509,7 +517,7 @@ class ChargeSettingHandler:
                         # Update cache with actual value from inverter
                         self._time_enable_cache[cache_key] = actual_value
                 else:
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         "[PENDING DEBUG] Skipping time_enable write for Slot 1 (controlled by master switch)"
                     )
 
@@ -534,11 +542,11 @@ class ChargeSettingHandler:
         if mode.startswith("charge"):
             index = int(mode.replace("charge", "")) - 1
             for attr in attributes:
-                self._hub._pending_charges[index][attr] = None
+                self._pending_charges[index][attr] = None
         elif mode.startswith("discharge"):
             index = int(mode.replace("discharge", "")) - 1
             for attr in attributes:
-                self._hub._pending_discharges[index][attr] = None
+                self._pending_discharges[index][attr] = None
 
     # ========== HELPER METHODS (Reading/Writing Registers) ==========
     
@@ -546,7 +554,7 @@ class ChargeSettingHandler:
         """Write register with exponential backoff retry."""
         for attempt in range(1, MAX_HANDLER_RETRIES + 1):
             try:
-                ok = await self._hub._write_register(address, int(value))
+                ok = await self.hub._write_register(address, int(value))
                 if ok:
                     _LOGGER.info(
                         "Successfully wrote %s=%s to 0x%04x (attempt %d/%d)",
@@ -563,7 +571,7 @@ class ChargeSettingHandler:
                     "Error writing %s (attempt %d/%d): %s",
                     label, attempt, MAX_HANDLER_RETRIES, e
                 )
-            
+
             # Exponential backoff: 1s, 2s, 4s
             if attempt < MAX_HANDLER_RETRIES:
                 delay = 2 ** (attempt - 1)
@@ -571,7 +579,7 @@ class ChargeSettingHandler:
                     "Waiting %.1fs before retry (exponential backoff)", delay
                 )
                 await asyncio.sleep(delay)
-        
+
         return False
 
     async def _update_day_mask_and_power(
@@ -582,7 +590,7 @@ class ChargeSettingHandler:
         label: str,
     ) -> None:
         """Updates the day mask and power percentage, reading current values if not provided."""
-        _LOGGER.info(
+        _LOGGER.debug(
             "[PENDING DEBUG] _update_day_mask_and_power called for %s. Provided day_mask: %s, power_percent: %s",
             label, day_mask, power_percent
         )
@@ -591,7 +599,7 @@ class ChargeSettingHandler:
                 "Reading current day_mask_power from address %s for %s",
                 hex(address), label
             )
-            regs = await self._hub._read_registers(address)
+            regs = await self.hub._read_registers(address)
             if not regs:
                 _LOGGER.error(
                     "Failed to read current day_mask_power for %s at address %s. No registers returned.",
@@ -609,7 +617,7 @@ class ChargeSettingHandler:
 
             # Use current day_mask if not provided
             new_day_mask = current_day_mask if day_mask is None else day_mask
-            
+
             # Handle power_percent:
             # 1. If explicitly provided, use it
             # 2. If register is uninitialized (0/0), use default 10%
@@ -630,7 +638,7 @@ class ChargeSettingHandler:
                     "Using current power_percent: %s%% for %s",
                     current_power_percent, label
                 )
-            
+
             _LOGGER.debug(
                 "Calculated new day_mask: %s, new_power_percent: %s for %s",
                 new_day_mask, new_power_percent, label
@@ -672,19 +680,19 @@ class ChargeSettingHandler:
         parts = time_str.split(":")
         if len(parts) != 2:
             return 0
-        
+
         try:
             hours, minutes = map(int, parts)
             return (hours << 8) | minutes
         except (ValueError, TypeError):
             return 0
-    
+
     def _calculate_day_mask_power_value(self, day_mask: int, power_percent: Optional[int]) -> Optional[int]:
         """Calculate day_mask_power register value."""
         if power_percent is None:
             # Read current value to preserve power_percent
             return None  # Signal to read current value first
-        
+
         return (day_mask << 8) | power_percent
 
     async def _write_time_register(
@@ -722,117 +730,117 @@ class ChargeSettingHandler:
     async def handle_charging_state(self) -> bool:
         """Handles the pending charging state with optimized time_enable handling."""
         _LOGGER.debug("handle_charging_state called")
-        desired = self._hub._pending_charging_state
+        desired = self._pending_charging_state
         if desired is None:
             _LOGGER.debug("No pending charging state to handle")
             return False
 
         _LOGGER.debug(f"Processing pending charging state: {desired}")
-        
+
         addr = REGISTERS["charging_state"]
         write_value = 1 if desired else 0
-        
+
         _LOGGER.info(
             "Charging turned %s, writing %s to register 0x3604",
             "ON" if desired else "OFF", write_value
         )
-        
+
         ok = await self._write_register_with_backoff(
             addr, write_value, "charging state (0x3604)"
         )
         if not ok:
             _LOGGER.error(f"Failed to write {write_value} to register 0x3604")
             return False
-        
+
         _LOGGER.info("Successfully wrote %s to register 0x3604", write_value)
-        self._hub.inverter_data["charging_enabled"] = write_value
-        
+        self.hub.inverter_data["charging_enabled"] = write_value
+
         # Update charge_time_enable in cache to reflect new state (same register)
-        self._hub.inverter_data["charge_time_enable"] = write_value
-        
+        self.hub.inverter_data["charge_time_enable"] = write_value
+
         # Update time_enable cache to avoid duplicate writes
         self._time_enable_cache["charge_time_enable"] = write_value
-        
+
         # Set locks to prevent overwrites for next 10 seconds
         import time as time_module
-        self._hub._charging_state_lock_until = time_module.monotonic() + 10.0
-        self._hub._charge_time_enable_lock_until = time_module.monotonic() + 10.0
-        _LOGGER.info(
+        self._charging_state_lock_until = time_module.monotonic() + 10.0
+        self._charge_time_enable_lock_until = time_module.monotonic() + 10.0
+        _LOGGER.debug(
             "[PENDING DEBUG] Updated cache after charging state: charge_time_enable = %s (LOCKED for 10s)",
             write_value
         )
-        
+
         # Clear pending state
-        self._hub._pending_charging_state = None
+        self._pending_charging_state = None
         _LOGGER.debug("Cleared _pending_charging_state after successful write")
-        
+
         # Get current discharging state from cache (not async call)
-        dchg_value = self._hub.inverter_data.get("discharging_enabled", 0)
+        dchg_value = self.hub.inverter_data.get("discharging_enabled", 0)
         dchg = bool(dchg_value > 0)
-        
+
         # Update AppMode: 1 if ANY is enabled, 0 if BOTH are disabled
         await self._update_app_mode_from_states(charge_enabled=desired, discharge_enabled=dchg)
-        
+
         # Force immediate data update to UI
-        self._hub.async_set_updated_data(self._hub.inverter_data)
-        
+        self.hub.async_set_updated_data(self.hub.inverter_data)
+
         return True
 
     async def handle_discharging_state(self) -> bool:
         """Handles the pending discharging state with optimized time_enable handling."""
-        desired = self._hub._pending_discharging_state
+        desired = self._pending_discharging_state
         if desired is None:
             return False
 
         _LOGGER.debug(f"Processing discharging state change: {desired}")
-        
+
         addr = REGISTERS["discharging_state"]
         write_value = 0 if not desired else 1
-        
+
         _LOGGER.info(
             "Discharging turned %s, writing %s to register 0x3605",
             "OFF" if not desired else "ON", write_value
         )
-        
+
         ok = await self._write_register_with_backoff(
             addr, write_value, "discharging state (0x3605)"
         )
         if not ok:
             _LOGGER.error(f"Failed to write {write_value} to register 0x3605")
             return False
-        
+
         _LOGGER.info("Successfully wrote %s to register 0x3605", write_value)
-        self._hub.inverter_data["discharging_enabled"] = write_value
-        
+        self.hub.inverter_data["discharging_enabled"] = write_value
+
         # Update discharge_time_enable in cache to reflect new state (same register)
-        self._hub.inverter_data["discharge_time_enable"] = write_value
-        
+        self.hub.inverter_data["discharge_time_enable"] = write_value
+
         # Update time_enable cache to avoid duplicate writes
         self._time_enable_cache["discharge_time_enable"] = write_value
-        
+
         # Set locks to prevent overwrites for next 10 seconds
         import time as time_module
-        self._hub._discharging_state_lock_until = time_module.monotonic() + 10.0
-        self._hub._discharge_time_enable_lock_until = time_module.monotonic() + 10.0
-        _LOGGER.info(
+        self._discharging_state_lock_until = time_module.monotonic() + 10.0
+        self._discharge_time_enable_lock_until = time_module.monotonic() + 10.0
+        _LOGGER.debug(
             "[PENDING DEBUG] Updated cache after discharging state: discharge_time_enable = %s (LOCKED for 10s)",
             write_value
         )
-        
+
         # Clear pending state
-        self._hub._pending_discharging_state = None
+        self._pending_discharging_state = None
         _LOGGER.debug("Cleared _pending_discharging_state after successful write")
-        
+
         # Get current charging state from cache (not async call)
-        chg_value = self._hub.inverter_data.get("charging_enabled", 0)
+        chg_value = self.hub.inverter_data.get("charging_enabled", 0)
         chg = bool(chg_value > 0)
-        
+
         # Update AppMode: 1 if ANY is enabled, 0 if BOTH are disabled
         await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=desired)
-        
+
         # Force immediate data update to UI
-        self._hub.async_set_updated_data(self._hub.inverter_data)
-        
+        self.hub.async_set_updated_data(self.hub.inverter_data)
+
         return True
 
     async def _update_app_mode_from_states(
@@ -842,25 +850,211 @@ class ChargeSettingHandler:
     ) -> None:
         """Update AppMode (0x3647) based on charging/discharging states."""
         desired_app_mode = 1 if (charge_enabled or discharge_enabled) else 0
-        
-        current_app_mode = self._hub.inverter_data.get("AppMode")
-        
+
+        current_app_mode = self.hub.inverter_data.get("AppMode")
+
         if current_app_mode == desired_app_mode:
             _LOGGER.info(f"AppMode already at {desired_app_mode}, skipping write")
             return
-        
+
         _LOGGER.info(
             "Updating AppMode from %s to %s (charge=%s, discharge=%s)",
             current_app_mode, desired_app_mode, charge_enabled, discharge_enabled
         )
-        
+
         ok = await self._write_register_with_backoff(
             REGISTERS["app_mode"], desired_app_mode, "AppMode"
         )
         if ok:
             _LOGGER.info("Successfully set AppMode to %s", desired_app_mode)
-            self._hub.inverter_data["AppMode"] = desired_app_mode
+            self.hub.inverter_data["AppMode"] = desired_app_mode
         else:
             _LOGGER.error(
                 "Failed to write AppMode %s", desired_app_mode
             )
+
+    # --- State Setters ---
+
+    def set_pending(self, key: str, value: Any) -> None:
+        """Generic setter for pending values."""
+        # Handle array-based keys (e.g. charges[0][start])
+        if "[" in key:
+            # Parse charges[0][start] -> ['charges', '0', 'start']
+            parts = key.replace("]", "").split("[")
+            
+            if len(parts) == 3:
+                base = parts[0]
+                try:
+                    idx = int(parts[1])
+                    field = parts[2]
+                except ValueError:
+                    _LOGGER.warning("Invalid index in pending key: %s", key)
+                    return
+
+                if base == "charges":
+                    if 0 <= idx < 7 and field in CHARGE_PENDING_SUFFIXES:
+                        self._pending_charges[idx][field] = value
+                        self.invalidate_cache()
+                        return
+                elif base == "discharges":
+                    if 0 <= idx < 7 and field in CHARGE_PENDING_SUFFIXES:
+                        self._pending_discharges[idx][field] = value
+                        self.invalidate_cache()
+                        return
+            else:
+                _LOGGER.warning("Unexpected array key format: %s", key)
+
+        # Handle simple attributes
+        self._pending_simple[key] = value
+        self.invalidate_cache()
+
+    def set_charging_state(self, value: bool) -> None:
+        self._pending_charging_state = value
+        self.invalidate_cache()
+
+    def set_discharging_state(self, value: bool) -> None:
+        self._pending_discharging_state = value
+        self.invalidate_cache()
+
+    def invalidate_cache(self) -> None:
+        self._pending_cache_valid = False
+
+    def has_pending(self) -> bool:
+        """Check if there are any pending settings."""
+        if self._pending_cache_valid:
+            return self._pending_cache
+
+        has_pending = False
+
+        # Check simple attributes
+        if self._pending_simple:
+            has_pending = True
+
+        # Check power states
+        if not has_pending:
+            has_pending = (
+                self._pending_charging_state is not None or
+                self._pending_discharging_state is not None
+            )
+
+        # Check time enables
+        if not has_pending:
+            has_pending = (
+                self._pending_charge_time_enable is not None or
+                self._pending_discharge_time_enable is not None
+            )
+
+        # Check slots
+        if not has_pending:
+            has_pending = any(
+                any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
+                for slot in (self._pending_charges + self._pending_discharges)
+            )
+
+        self._pending_cache = has_pending
+        self._pending_cache_valid = True
+        return has_pending
+
+    # --- Locking Logic ---
+
+    def is_charging_locked(self, current_time: float) -> bool:
+        return self._charging_state_lock_until is not None and current_time < self._charging_state_lock_until
+
+    def is_discharging_locked(self, current_time: float) -> bool:
+        return self._discharging_state_lock_until is not None and current_time < self._discharging_state_lock_until
+
+    def cleanup_locks(self, current_time: float) -> None:
+        if self._charging_state_lock_until and current_time >= self._charging_state_lock_until:
+            self._charging_state_lock_until = None
+        if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
+            self._discharging_state_lock_until = None
+
+    # --- Optimistic UI ---
+
+    def get_optimistic_overlay(self, current_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Returns a data overlay with pending values applied."""
+        if not current_data:
+            return None
+
+        base = dict(current_data)
+        chg = base.get("charging_enabled")
+        dchg = base.get("discharging_enabled")
+
+        if self._pending_charging_state is not None:
+            chg = 1 if self._pending_charging_state else 0
+        if self._pending_discharging_state is not None:
+            dchg = 1 if self._pending_discharging_state else 0
+
+        app_mode = 1 if bool(chg) or bool(dchg) else 0
+
+        overlay = dict(base)
+        if chg is not None:
+            overlay["charging_enabled"] = 1 if chg else 0
+        if dchg is not None:
+            overlay["discharging_enabled"] = 1 if dchg else 0
+        overlay["AppMode"] = app_mode
+
+        return overlay
+
+    # --- Processing Logic (Moved from Hub) ---
+
+    async def process_pending(self) -> None:
+        """Process all pending settings."""
+        if ADVANCED_LOGGING:
+            _LOGGER.info("[ADVANCED] process_pending started")
+
+        if not self.has_pending():
+            return
+
+        results = []
+
+        # 1. Power States
+        if self._pending_charging_state is not None:
+            try:
+                await self.handle_charging_state()
+                results.append(("charging_state", True))
+            except Exception as e:
+                _LOGGER.error("Error setting charging state: %s", e)
+
+        if self._pending_discharging_state is not None:
+            try:
+                await self.handle_discharging_state()
+                results.append(("discharging_state", True))
+            except Exception as e:
+                _LOGGER.error("Error setting discharging state: %s", e)
+
+        # 2. Slots
+        charge_indices = [i for i, s in enumerate(self._pending_charges) if any(s.values())]
+        discharge_indices = [i for i, s in enumerate(self._pending_discharges) if any(s.values())]
+
+        slot_tasks = []
+        for idx in charge_indices:
+            slot_tasks.append(self.handle_charge_settings_by_index(idx + 1)) # 1-based
+        for idx in discharge_indices:
+            slot_tasks.append(self.handle_discharge_settings_by_index(idx + 1)) # 1-based
+
+        if slot_tasks:
+            await asyncio.gather(*slot_tasks, return_exceptions=True)
+
+        # 3. Simple Attributes
+        simple_tasks = []
+        # Create a copy of keys to iterate safely
+        simple_keys = list(self._pending_simple.keys())
+        
+        for key in simple_keys:
+            handler_key = f"_pending_{key}"
+            handler = self._handlers.get(handler_key)
+            
+            if handler:
+                simple_tasks.append(handler())
+            else:
+                _LOGGER.warning("No handler found for pending key: %s", key)
+                # Remove unhandled key to prevent stuck pending state
+                if key in self._pending_simple:
+                    del self._pending_simple[key]
+        
+        if simple_tasks:
+            await asyncio.gather(*simple_tasks, return_exceptions=True)
+
+        # Clear cache after processing
+        self.invalidate_cache()

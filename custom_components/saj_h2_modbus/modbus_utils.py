@@ -18,17 +18,6 @@ class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
     pass
 
-class SAJModbusClient(ModbusTcpClient):
-    """Custom Modbus client that provides an awaitable close method for compatibility."""
-    def close(self):
-        """Close the connection synchronously but return an awaitable for async compatibility."""
-        super().close()
-        
-        async def _dummy_awaitable():
-            pass
-            
-        return _dummy_awaitable()
-
 # Global Modbus config storage
 class ModbusGlobalConfig:
     host: Optional[str] = None
@@ -61,8 +50,8 @@ async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int,
 
 async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
     if client is None:
-        _LOGGER.debug("Creating new SAJModbusClient for %s:%s", host, port)
-        client = SAJModbusClient(host=host, port=port, timeout=10)
+        _LOGGER.debug("Creating new ModbusTcpClient for %s:%s", host, port)
+        client = ModbusTcpClient(host=host, port=port, timeout=10)
     if not client.connected:
         _LOGGER.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
         if ModbusGlobalConfig.hass:
@@ -116,17 +105,32 @@ DEFAULT_WRITE_RETRIES = 2
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
-def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str):
+def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str, lock: Lock):
     """Create standard retry handlers for Modbus operations."""
     
     def should_retry(e: Exception) -> bool:
-        return isinstance(e, (ConnectionException, ModbusIOException))
+        # Add ConnectionError to catch standard OS connection errors (like ConnectionResetError)
+        return isinstance(e, (ConnectionException, ModbusIOException, ConnectionError))
 
     async def on_retry(attempt: int, e: Exception) -> None:
-        if isinstance(e, ConnectionException):
+        # Trigger reconnection for both pymodbus ConnectionException and standard ConnectionError
+        if isinstance(e, (ConnectionException, ConnectionError)):
             logger.info("Connection lost during %s, attempting reconnect", operation_name)
-            await ensure_client_connected(client, host, port, logger)
-            logger.info("Reconnect during %s successful", operation_name)
+            
+            # Acquire lock to ensure we don't interfere with other tasks using the client
+            async with lock:
+                # Force close to ensure connected state is reset and ensure_client_connected tries to connect
+                try:
+                    client.close()
+                except Exception:
+                    pass # Ignore errors during close
+
+                try:
+                    await ensure_client_connected(client, host, port, logger)
+                    logger.info("Reconnect during %s successful", operation_name)
+                except Exception as reconnect_error:
+                    logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
+                    # Do NOT raise here, let the backoff loop continue
     
     return should_retry, on_retry
 
@@ -167,7 +171,7 @@ async def try_read_registers(
     if host is None or port is None:
         raise ReconnectionNeededError("Modbus client not configured with host and port.")
 
-    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "read")
+    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "read", lock)
     
     async def read_once():
         response = await _perform_modbus_operation(
@@ -216,7 +220,7 @@ async def try_write_registers(
     if host is None or port is None:
         raise ReconnectionNeededError("Modbus client not configured with host and port.")
 
-    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "write")
+    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "write", lock)
 
     is_single = isinstance(values, int)
 
