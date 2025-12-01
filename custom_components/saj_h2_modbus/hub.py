@@ -245,8 +245,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
                     if self._client:
                         try:
-                            # Use the awaitable close wrapper from SAJModbusClient
-                            await self._client.close()
+                            # Use standard synchronous close
+                            self._client.close()
                         except Exception as e:
                             _LOGGER.warning(f"Error while closing old Modbus client: {e}")
                     # Reset client to None so it gets recreated by connect_if_needed with new settings
@@ -310,7 +310,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = True
                 if self._client:
                     try:
-                        await self._client.close()
+                        # Use standard synchronous close
+                        self._client.close()
                     except Exception as e:
                         _LOGGER.warning("Error while closing old Modbus client: %s", e)
                 
@@ -389,7 +390,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 )
                 if self._inverter_static_data:
                     _LOGGER.info(
-                        "Static inverter data loaded successfully: SN=%s, Type=%s",
+                        "Static inverter data loaded successfully",
                         self._inverter_static_data.get("sn", "Unknown"),
                         self._inverter_static_data.get("devtype", "Unknown")
                     )
@@ -471,7 +472,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             for method, result in zip(group, results):
                 method_name = method.__name__
                 
-                if isinstance(result, ReconnectionNeededError):
+                if isinstance(result, (ReconnectionNeededError, ConnectionError)):
                     _LOGGER.warning("%s required reconnection: %s", method_name, result)
                     try:
                         await self.reconnect_client()
@@ -591,7 +592,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if client_to_close:
             self._client = None  # Verweis sofort entfernen
             try:
-                await client_to_close.close()
+                # Use standard synchronous close
+                client_to_close.close()
                 _LOGGER.debug("Modbus client connection closed")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)

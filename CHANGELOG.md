@@ -1,7 +1,3 @@
-## [v2.7.1]
-
-Die Verwaltung der "ausstehenden Werte" (Pending State) komplett in den `ChargeSettingHandler` verschieben. Der Hub sollte lediglich die `set_`-Aufrufe an den Handler durchreichen. Das entschlackt `hub.py` massiv
-
 ## [v2.7.0]
 
 ### New Inverter Card Version 1.2.1
