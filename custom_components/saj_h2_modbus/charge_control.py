@@ -146,43 +146,8 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 }
 
 
-def _make_simple_handler(pending_attr: str, address: int, label: str):
-    """Factory for simple register handlers with exponential backoff retry logic."""
-
-    async def handler(self) -> bool:
-        # Get pending value from handler's storage
-        value = self._pending_simple.get(pending_attr)
-        
-        if value is None:
-            _LOGGER.debug("Skip %s: no pending value", pending_attr)
-            return False
-
-        if address is None:
-            _LOGGER.warning("%s register not configured; skip write", pending_attr)
-            return False
-
-        # Use exponential backoff retry
-        ok = await self._write_register_with_backoff(address, int(value), label)
-        if ok:
-            try:
-                # Clear pending value
-                if pending_attr in self._pending_simple:
-                    del self._pending_simple[pending_attr]
-            except Exception:
-                pass
-            return True
-
-        _LOGGER.error(
-            "Failed to write %s after %d attempts with exponential backoff",
-            label, MAX_HANDLER_RETRIES
-        )
-        return False
-
-    return handler
-
-
 class ChargeSettingHandler:
-    """Handler for all Charge/Discharge-Settings with Decorator-Pattern."""
+    """Handler for all Charge/Discharge-Settings."""
 
     def __init__(self, hub) -> None:
         self.hub = hub
@@ -216,41 +181,7 @@ class ChargeSettingHandler:
         self._charging_state_lock_until: Optional[float] = None
         self._discharging_state_lock_until: Optional[float] = None
 
-        self._handlers: Dict[str, Callable] = {}
         self._time_enable_cache: Dict[str, int] = {}  # Cache to avoid duplicate writes
-        self._register_handlers()
-
-    def _register_handler(self, pending_attr: str) -> Callable:
-        """Decorator for registering handler functions."""
-        def decorator(func: Callable) -> Callable:
-            self._handlers[pending_attr] = func
-            _LOGGER.debug("Registered handler for '%s': %s", pending_attr, func.__name__)
-            return func
-        return decorator
-
-    def get_handlers(self) -> Dict[str, Callable]:
-        """Return all registered handlers."""
-        return self._handlers.copy()
-
-    def _register_handlers(self) -> None:
-        """Register all handlers: dynamically from SIMPLE_REGISTER_MAP + special cases."""
-        # 1. Dynamic handlers from SIMPLE_REGISTER_MAP
-        for attr_name in SIMPLE_REGISTER_MAP:
-            addr, label = SIMPLE_REGISTER_MAP[attr_name]
-            pending_attr = f"_pending_{attr_name}"
-            unbound_handler = _make_simple_handler(attr_name, addr, label)
-            bound_handler = unbound_handler.__get__(self, self.__class__)
-            self._handlers[pending_attr] = bound_handler
-            _LOGGER.debug("Registered dynamic handler for '%s'", pending_attr)
-
-        # 2. Power State Handler
-        self._handlers["_pending_charging_state"] = self.handle_charging_state
-        _LOGGER.debug("Registered special handler for '_pending_charging_state'")
-
-        self._handlers["_pending_discharging_state"] = self.handle_discharging_state
-        _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
-
-        _LOGGER.debug("time_enable handlers NOW ACTIVE via SIMPLE_REGISTER_MAP")
 
     # ========== HELPER METHODS ==========
 
@@ -271,16 +202,8 @@ class ChargeSettingHandler:
 
     async def handle_settings(self, mode: str, label: str) -> None:
         """Handles settings dynamically based on mode (charge1-7 or discharge1-7) with optimized batch processing."""
-        _LOGGER.debug(
-            "[PENDING DEBUG] handle_settings called for mode=%s, label=%s",
-            mode, label
-        )
-
         try:
             registers = REGISTERS[mode]
-            _LOGGER.debug(
-                "[PENDING DEBUG] Registers for %s: %s", mode, registers
-            )
 
             # Determine if this is a charge or discharge slot
             if mode.startswith("charge"):
@@ -301,23 +224,6 @@ class ChargeSettingHandler:
 
             # Only write if there are pending values for this slot
             if not any(v is not None for v in [start_value, end_value, day_mask_value, power_percent_value]):
-                _LOGGER.debug(f"No pending values for {mode}, skipping write.")
-                return
-
-            # IMPORTANT: Check if slot has complete data (start, end, power are REQUIRED)
-            has_complete_data = (
-                start_value is not None and
-                end_value is not None and
-                power_percent_value is not None
-            )
-
-            if not has_complete_data:
-                _LOGGER.warning(
-                    "[PENDING DEBUG] %s incomplete: start=%s, end=%s, power=%s. "
-                    "Skipping time_enable write. Please provide start time, end time AND power.",
-                    label, start_value, end_value, power_percent_value
-                )
-                self._reset_pending_values(mode)
                 return
 
             # Batch write operations for better performance
@@ -331,9 +237,7 @@ class ChargeSettingHandler:
                         start_value, label
                     )
                 else:
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Adding start time: %s", start_value
-                    )
+                    _LOGGER.debug("Adding start time: %s", start_value)
                     write_operations.append((registers["start_time"], self._time_to_register_value(start_value), f"{label} start"))
 
             if end_value is not None:
@@ -343,87 +247,78 @@ class ChargeSettingHandler:
                         end_value, label
                     )
                 else:
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Adding end time: %s", end_value
-                    )
+                    _LOGGER.debug("Adding end time: %s", end_value)
                     write_operations.append((registers["end_time"], self._time_to_register_value(end_value), f"{label} end"))
 
             # Handle day mask and power percent
             if "day_mask_power" in registers:
-                # Read current day_mask from inverter cache if not provided
+                # Read current value from device to ensure we have the latest state
+                # This is crucial for read-modify-write operations on packed registers
+                current_regs = await self.hub._read_registers(registers["day_mask_power"], 1)
+                if current_regs:
+                    cached_day_mask_power = current_regs[0]
+                    # Update cache to keep it in sync
+                    self.hub.inverter_data[f"{mode}_day_mask_power"] = cached_day_mask_power
+                else:
+                    # Fallback to cache if read fails
+                    cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
+                
+                # Determine effective day mask
                 if day_mask_value is None:
-                    # Try to get current day_mask from inverter data cache
-                    cache_key = f"{mode}_day_mask"
-                    if cache_key in self.hub.inverter_data:
-                        # Extract day_mask from cached day_mask_power value
-                        cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
-                        effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
-                        _LOGGER.debug(
-                            "[PENDING DEBUG] Using cached day_mask for %s: %s",
-                            label, effective_day_mask
-                        )
-                    else:
-                        # Fallback to default if not in cache
+                    if cached_day_mask_power == 0:
+                        # If register is uninitialized (0), default to 127 (all days)
                         effective_day_mask = 127
-                        _LOGGER.debug(
-                            "[PENDING DEBUG] Using default day_mask for %s: %s",
-                            label, effective_day_mask
-                        )
+                    else:
+                        effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
                 else:
                     effective_day_mask = day_mask_value
 
-                if power_percent_value is not None and not (0 <= power_percent_value <= 100):
+                # Determine effective power percent
+                if power_percent_value is None:
+                    if cached_day_mask_power == 0:
+                         # If register is uninitialized (0), default to 10%
+                         effective_power_percent = 10
+                         _LOGGER.info("Defaulting power to 10%% for uninitialized slot %s", label)
+                    else:
+                        effective_power_percent = cached_day_mask_power & 0xFF
+                elif not (0 <= power_percent_value <= 100):
                     _LOGGER.error(
                         "Invalid power range for %s: %s%%. Expected 0-100.",
                         label, power_percent_value
                     )
-                    power_percent_value = None
+                    effective_power_percent = cached_day_mask_power & 0xFF
+                else:
+                    effective_power_percent = power_percent_value
 
-                day_mask_power_value = self._calculate_day_mask_power_value(effective_day_mask, power_percent_value)
-                if day_mask_power_value is not None:
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Adding day_mask_power update for %s", label
-                    )
+                day_mask_power_value = (effective_day_mask << 8) | effective_power_percent
+                
+                if day_mask_power_value != cached_day_mask_power:
+                    _LOGGER.debug("Adding day_mask_power update for %s", label)
                     write_operations.append((
                         registers["day_mask_power"],
                         day_mask_power_value,
                         f"{label} day_mask_power"
                     ))
-                else:
-                    _LOGGER.warning(
-                        "[PENDING DEBUG] Skipping day_mask_power update for %s - power_percent is None",
-                        label
-                    )
             else:
-                _LOGGER.warning(
-                    "[PENDING DEBUG] No day_mask_power register found for %s", mode
-                )
+                _LOGGER.warning("No day_mask_power register found for %s", mode)
 
             # Execute all write operations in parallel where possible
             if write_operations:
                 _LOGGER.debug(
-                    "[PENDING DEBUG] Executing %d write operations for %s",
+                    "Executing %d write operations for %s",
                     len(write_operations), label
                 )
 
-                # Write all operations except time_enable
-                for address, value, label in write_operations[:-1]:  # Exclude time_enable
+                # Write all operations
+                for address, value, label in write_operations:
                     await self._write_register_with_backoff(address, value, label)
 
                 # Reset pending values for this specific slot
-                _LOGGER.debug(
-                    "[PENDING DEBUG] Resetting pending values for %s", mode
-                )
                 self._reset_pending_values(mode)
 
                 # Handle time_enable separately for slots 2-7
                 if index > 0:  # index 0 = Slot 1, skip it
                     cache_key = f"{'charge' if is_charge else 'discharge'}_time_enable"
-
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Starting time_enable update for %s (index %d)",
-                        label, index
-                    )
 
                     # Add delay to allow inverter to process previous writes
                     await asyncio.sleep(1.0)
@@ -432,7 +327,7 @@ class ChargeSettingHandler:
                     current_regs = await self.hub._read_registers(time_enable_entity_id, 1)
                     if not current_regs:
                         _LOGGER.error(
-                            "[PENDING DEBUG] Failed to read current time_enable for %s", label
+                            "Failed to read current time_enable for %s", label
                         )
                         return
 
@@ -442,23 +337,15 @@ class ChargeSettingHandler:
 
                     # Check cache to avoid duplicate writes
                     if cache_key in self._time_enable_cache and self._time_enable_cache[cache_key] == new_mask:
-                        _LOGGER.debug(
-                            "[PENDING DEBUG] %s time_enable already cached with value %s, skipping write",
-                            label, new_mask
-                        )
                         return
 
                     if new_mask == current_mask:
-                        _LOGGER.debug(
-                            "[PENDING DEBUG] %s already enabled in time_enable (%s)",
-                            label, current_mask
-                        )
                         # Update cache even if no write needed
                         self._time_enable_cache[cache_key] = new_mask
                         return
 
                     _LOGGER.info(
-                        "[PENDING DEBUG] Enabling %s in time_enable register: %s (binary: %s) → %s (binary: %s)",
+                        "Enabling %s in time_enable register: %s (binary: %s) → %s (binary: %s)",
                         label, current_mask, bin(current_mask), new_mask, bin(new_mask)
                     )
                     write_ok = await self._write_register_with_backoff(
@@ -467,7 +354,7 @@ class ChargeSettingHandler:
 
                     if not write_ok:
                         _LOGGER.error(
-                            "[PENDING DEBUG] Failed to write time_enable for %s", label
+                            "Failed to write time_enable for %s", label
                         )
                         return
 
@@ -481,45 +368,32 @@ class ChargeSettingHandler:
                     verify_regs = await self.hub._read_registers(time_enable_entity_id, 1)
                     if not verify_regs:
                         _LOGGER.error(
-                            "[PENDING DEBUG] Failed to verify time_enable write for %s", label
+                            "Failed to verify time_enable write for %s", label
                         )
                         return
 
                     actual_value = verify_regs[0]
                     _LOGGER.info(
-                        "[PENDING DEBUG] Verified time_enable after write: %s (binary: %s) (expected: %s)",
+                        "Verified time_enable after write: %s (binary: %s) (expected: %s)",
                         actual_value, bin(actual_value), new_mask
                     )
 
                     # Update cache with ACTUAL value from inverter
                     if is_charge:
                         self.hub.inverter_data["charge_time_enable"] = actual_value
-                        _LOGGER.info(
-                            "[PENDING DEBUG] Updated cache: charge_time_enable = %s", actual_value
-                        )
                     else:
                         self.hub.inverter_data["discharge_time_enable"] = actual_value
-                        _LOGGER.info(
-                            "[PENDING DEBUG] Updated cache: discharge_time_enable = %s", actual_value
-                        )
 
                     # Force immediate data update to UI
                     self.hub.async_set_updated_data(self.hub.inverter_data)
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Forced UI update for %s", label
-                    )
 
                     if actual_value != new_mask:
                         _LOGGER.warning(
-                            "[PENDING DEBUG] Inverter returned different value! Wrote %s, got %s",
+                            "Inverter returned different value! Wrote %s, got %s",
                             new_mask, actual_value
                         )
                         # Update cache with actual value from inverter
                         self._time_enable_cache[cache_key] = actual_value
-                else:
-                    _LOGGER.debug(
-                        "[PENDING DEBUG] Skipping time_enable write for Slot 1 (controlled by master switch)"
-                    )
 
         except Exception as e:
             _LOGGER.error(
@@ -535,6 +409,42 @@ class ChargeSettingHandler:
         """Handle discharge settings for a specific slot index (1-7)."""
         mode = f"discharge{index}"
         await self.handle_settings(mode, mode)
+
+    async def _process_simple_setting(self, key: str) -> None:
+        """Process a simple setting by looking up its register map."""
+        value = self._pending_simple.get(key)
+        
+        if value is None:
+            _LOGGER.debug("Skip %s: no pending value", key)
+            return
+
+        if key not in SIMPLE_REGISTER_MAP:
+            _LOGGER.warning("No register map found for pending key: %s", key)
+            # Remove unhandled key to prevent stuck pending state
+            if key in self._pending_simple:
+                del self._pending_simple[key]
+            return
+
+        address, label = SIMPLE_REGISTER_MAP[key]
+
+        if address is None:
+            _LOGGER.warning("%s register not configured; skip write", key)
+            return
+
+        # Use exponential backoff retry
+        ok = await self._write_register_with_backoff(address, int(value), label)
+        if ok:
+            try:
+                # Clear pending value
+                if key in self._pending_simple:
+                    del self._pending_simple[key]
+            except Exception:
+                pass
+        else:
+            _LOGGER.error(
+                "Failed to write %s after %d attempts with exponential backoff",
+                label, MAX_HANDLER_RETRIES
+            )
 
     def _reset_pending_values(self, mode: str) -> None:
         """Reset pending values for a charge or discharge slot."""
@@ -590,15 +500,7 @@ class ChargeSettingHandler:
         label: str,
     ) -> None:
         """Updates the day mask and power percentage, reading current values if not provided."""
-        _LOGGER.debug(
-            "[PENDING DEBUG] _update_day_mask_and_power called for %s. Provided day_mask: %s, power_percent: %s",
-            label, day_mask, power_percent
-        )
         try:
-            _LOGGER.debug(
-                "Reading current day_mask_power from address %s for %s",
-                hex(address), label
-            )
             regs = await self.hub._read_registers(address)
             if not regs:
                 _LOGGER.error(
@@ -610,10 +512,6 @@ class ChargeSettingHandler:
             current_value = regs[0]
             current_day_mask = (current_value >> 8) & 0xFF
             current_power_percent = current_value & 0xFF
-            _LOGGER.debug(
-                "Current day_mask_power for %s: %s (day_mask: %s, power_percent: %s)",
-                label, current_value, current_day_mask, current_power_percent
-            )
 
             # Use current day_mask if not provided
             new_day_mask = current_day_mask if day_mask is None else day_mask
@@ -634,15 +532,6 @@ class ChargeSettingHandler:
             else:
                 # Preserve existing power_percent
                 new_power_percent = current_power_percent
-                _LOGGER.debug(
-                    "Using current power_percent: %s%% for %s",
-                    current_power_percent, label
-                )
-
-            _LOGGER.debug(
-                "Calculated new day_mask: %s, new_power_percent: %s for %s",
-                new_day_mask, new_power_percent, label
-            )
 
             combined_value = (new_day_mask << 8) | new_power_percent
 
@@ -653,10 +542,6 @@ class ChargeSettingHandler:
                 )
                 return
 
-            _LOGGER.debug(
-                "Writing combined value %s to register %s for %s",
-                combined_value, hex(address), label
-            )
             success = await self._write_register_with_backoff(
                 address, combined_value, f"{label} day_mask_power"
             )
@@ -686,14 +571,6 @@ class ChargeSettingHandler:
             return (hours << 8) | minutes
         except (ValueError, TypeError):
             return 0
-
-    def _calculate_day_mask_power_value(self, day_mask: int, power_percent: Optional[int]) -> Optional[int]:
-        """Calculate day_mask_power register value."""
-        if power_percent is None:
-            # Read current value to preserve power_percent
-            return None  # Signal to read current value first
-
-        return (day_mask << 8) | power_percent
 
     async def _write_time_register(
         self, address: int, time_str: str, label: str
@@ -1042,16 +919,7 @@ class ChargeSettingHandler:
         simple_keys = list(self._pending_simple.keys())
         
         for key in simple_keys:
-            handler_key = f"_pending_{key}"
-            handler = self._handlers.get(handler_key)
-            
-            if handler:
-                simple_tasks.append(handler())
-            else:
-                _LOGGER.warning("No handler found for pending key: %s", key)
-                # Remove unhandled key to prevent stuck pending state
-                if key in self._pending_simple:
-                    del self._pending_simple[key]
+            simple_tasks.append(self._process_simple_setting(key))
         
         if simple_tasks:
             await asyncio.gather(*simple_tasks, return_exceptions=True)

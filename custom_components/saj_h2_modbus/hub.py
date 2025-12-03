@@ -6,7 +6,8 @@ import time
 from typing import Optional, Any, Dict, List, Callable
 from datetime import timedelta
 from homeassistant.core import HomeAssistant, callback
-from .const import DOMAIN
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+from .const import DOMAIN, CONF_FAST_ENABLED
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
 from pymodbus.client import ModbusTcpClient
@@ -47,9 +48,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
  
-        host = config_entry.data.get("host")
-        port = config_entry.data.get("port", 502)
-        scan_interval = config_entry.data.get("scan_interval", 60)
+        # Prioritize options, fallback to data
+        host = config_entry.options.get(CONF_HOST, config_entry.data.get(CONF_HOST))
+        port = config_entry.options.get(CONF_PORT, config_entry.data.get(CONF_PORT, 502))
+        scan_interval = config_entry.options.get(CONF_SCAN_INTERVAL, config_entry.data.get(CONF_SCAN_INTERVAL, 60))
  
         if ADVANCED_LOGGING:
             _LOGGER.info("[ADVANCED] SAJModbusHub initialization started - Host: %s, Port: %s, Scan Interval: %ss", host, port, scan_interval)
@@ -74,7 +76,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-        self.fast_enabled = FAST_POLL_DEFAULT  # Initialize fast_enabled attribute
+        self.fast_enabled = config_entry.options.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)  # Initialize fast_enabled attribute
         self._fast_coordinator = None
         self._fast_unsub = None
         self._cancel_fast_update = None

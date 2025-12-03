@@ -1,3 +1,17 @@
+## [v2.7.1]
+
+### Changed
+- **Flexible Schedule Updates**: Removed the strict validation requiring Start, End, and Power to be set simultaneously. Users can now update individual schedule parameters (e.g., only Start Time) independently.
+- **Refactored Charge Control**: Replaced dynamic method generation ("magic") in `charge_control.py` with explicit dictionary-based lookups. This improves code readability, debuggability, and static analysis support.
+
+- **Single Value Updates**: Resolved where updating a single parameter (like Power %) without changing others was ignored. This should prevent incorrect time frames.
+It is important to always check the start and end times.
+
+### Fixed
+- **Configuration Persistence**: Fixed a bug where connection settings (Host, Port) changed via the Options Flow were ignored upon restart, reverting to the initial configuration.
+- **Options Flow Defaults**: The configuration options form now correctly displays the currently active settings instead of defaults.
+
+
 ## [v2.7.0]
 
 ### New Inverter Card Version 1.2.1
