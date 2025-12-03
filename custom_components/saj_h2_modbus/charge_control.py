@@ -146,43 +146,8 @@ SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
 }
 
 
-def _make_simple_handler(pending_attr: str, address: int, label: str):
-    """Factory for simple register handlers with exponential backoff retry logic."""
-
-    async def handler(self) -> bool:
-        # Get pending value from handler's storage
-        value = self._pending_simple.get(pending_attr)
-        
-        if value is None:
-            _LOGGER.debug("Skip %s: no pending value", pending_attr)
-            return False
-
-        if address is None:
-            _LOGGER.warning("%s register not configured; skip write", pending_attr)
-            return False
-
-        # Use exponential backoff retry
-        ok = await self._write_register_with_backoff(address, int(value), label)
-        if ok:
-            try:
-                # Clear pending value
-                if pending_attr in self._pending_simple:
-                    del self._pending_simple[pending_attr]
-            except Exception:
-                pass
-            return True
-
-        _LOGGER.error(
-            "Failed to write %s after %d attempts with exponential backoff",
-            label, MAX_HANDLER_RETRIES
-        )
-        return False
-
-    return handler
-
-
 class ChargeSettingHandler:
-    """Handler for all Charge/Discharge-Settings with Decorator-Pattern."""
+    """Handler for all Charge/Discharge-Settings."""
 
     def __init__(self, hub) -> None:
         self.hub = hub
@@ -216,41 +181,7 @@ class ChargeSettingHandler:
         self._charging_state_lock_until: Optional[float] = None
         self._discharging_state_lock_until: Optional[float] = None
 
-        self._handlers: Dict[str, Callable] = {}
         self._time_enable_cache: Dict[str, int] = {}  # Cache to avoid duplicate writes
-        self._register_handlers()
-
-    def _register_handler(self, pending_attr: str) -> Callable:
-        """Decorator for registering handler functions."""
-        def decorator(func: Callable) -> Callable:
-            self._handlers[pending_attr] = func
-            _LOGGER.debug("Registered handler for '%s': %s", pending_attr, func.__name__)
-            return func
-        return decorator
-
-    def get_handlers(self) -> Dict[str, Callable]:
-        """Return all registered handlers."""
-        return self._handlers.copy()
-
-    def _register_handlers(self) -> None:
-        """Register all handlers: dynamically from SIMPLE_REGISTER_MAP + special cases."""
-        # 1. Dynamic handlers from SIMPLE_REGISTER_MAP
-        for attr_name in SIMPLE_REGISTER_MAP:
-            addr, label = SIMPLE_REGISTER_MAP[attr_name]
-            pending_attr = f"_pending_{attr_name}"
-            unbound_handler = _make_simple_handler(attr_name, addr, label)
-            bound_handler = unbound_handler.__get__(self, self.__class__)
-            self._handlers[pending_attr] = bound_handler
-            _LOGGER.debug("Registered dynamic handler for '%s'", pending_attr)
-
-        # 2. Power State Handler
-        self._handlers["_pending_charging_state"] = self.handle_charging_state
-        _LOGGER.debug("Registered special handler for '_pending_charging_state'")
-
-        self._handlers["_pending_discharging_state"] = self.handle_discharging_state
-        _LOGGER.debug("Registered special handler for '_pending_discharging_state'")
-
-        _LOGGER.debug("time_enable handlers NOW ACTIVE via SIMPLE_REGISTER_MAP")
 
     # ========== HELPER METHODS ==========
 
@@ -535,6 +466,42 @@ class ChargeSettingHandler:
         """Handle discharge settings for a specific slot index (1-7)."""
         mode = f"discharge{index}"
         await self.handle_settings(mode, mode)
+
+    async def _process_simple_setting(self, key: str) -> None:
+        """Process a simple setting by looking up its register map."""
+        value = self._pending_simple.get(key)
+        
+        if value is None:
+            _LOGGER.debug("Skip %s: no pending value", key)
+            return
+
+        if key not in SIMPLE_REGISTER_MAP:
+            _LOGGER.warning("No register map found for pending key: %s", key)
+            # Remove unhandled key to prevent stuck pending state
+            if key in self._pending_simple:
+                del self._pending_simple[key]
+            return
+
+        address, label = SIMPLE_REGISTER_MAP[key]
+
+        if address is None:
+            _LOGGER.warning("%s register not configured; skip write", key)
+            return
+
+        # Use exponential backoff retry
+        ok = await self._write_register_with_backoff(address, int(value), label)
+        if ok:
+            try:
+                # Clear pending value
+                if key in self._pending_simple:
+                    del self._pending_simple[key]
+            except Exception:
+                pass
+        else:
+            _LOGGER.error(
+                "Failed to write %s after %d attempts with exponential backoff",
+                label, MAX_HANDLER_RETRIES
+            )
 
     def _reset_pending_values(self, mode: str) -> None:
         """Reset pending values for a charge or discharge slot."""
@@ -1042,16 +1009,7 @@ class ChargeSettingHandler:
         simple_keys = list(self._pending_simple.keys())
         
         for key in simple_keys:
-            handler_key = f"_pending_{key}"
-            handler = self._handlers.get(handler_key)
-            
-            if handler:
-                simple_tasks.append(handler())
-            else:
-                _LOGGER.warning("No handler found for pending key: %s", key)
-                # Remove unhandled key to prevent stuck pending state
-                if key in self._pending_simple:
-                    del self._pending_simple[key]
+            simple_tasks.append(self._process_simple_setting(key))
         
         if simple_tasks:
             await asyncio.gather(*simple_tasks, return_exceptions=True)

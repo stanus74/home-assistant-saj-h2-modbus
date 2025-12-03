@@ -1,3 +1,8 @@
+
+- **Refactored Charge Control**: Replaced dynamic method generation ("magic") in `charge_control.py` with explicit dictionary-based lookups. This improves code readability, debuggability, and static analysis support.
+
+
+
 ## [v2.7.0]
 
 ### New Inverter Card Version 1.2.1

@@ -111,8 +111,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
 
     def _get_options_schema(self):
         return vol.Schema({
-            vol.Required(CONF_HOST, default=self.config_entry.data.get(CONF_HOST)): str,
-            vol.Required(CONF_PORT, default=self.config_entry.data.get(CONF_PORT, 502)): int,
-            vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.data.get(CONF_SCAN_INTERVAL, 60)): int,
+            vol.Required(CONF_HOST, default=self.config_entry.options.get(CONF_HOST, self.config_entry.data.get(CONF_HOST))): str,
+            vol.Required(CONF_PORT, default=self.config_entry.options.get(CONF_PORT, self.config_entry.data.get(CONF_PORT, 502))): int,
+            vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, 60))): int,
             vol.Optional(CONF_FAST_ENABLED, default=self.config_entry.options.get(CONF_FAST_ENABLED, False)): bool,
         })
