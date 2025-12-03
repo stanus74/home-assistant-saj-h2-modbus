@@ -252,29 +252,47 @@ class ChargeSettingHandler:
 
             # Handle day mask and power percent
             if "day_mask_power" in registers:
-                # Read current day_mask from inverter cache if not provided
+                # Read current value from device to ensure we have the latest state
+                # This is crucial for read-modify-write operations on packed registers
+                current_regs = await self.hub._read_registers(registers["day_mask_power"], 1)
+                if current_regs:
+                    cached_day_mask_power = current_regs[0]
+                    # Update cache to keep it in sync
+                    self.hub.inverter_data[f"{mode}_day_mask_power"] = cached_day_mask_power
+                else:
+                    # Fallback to cache if read fails
+                    cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
+                
+                # Determine effective day mask
                 if day_mask_value is None:
-                    # Try to get current day_mask from inverter data cache
-                    cache_key = f"{mode}_day_mask"
-                    if cache_key in self.hub.inverter_data:
-                        # Extract day_mask from cached day_mask_power value
-                        cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
-                        effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
-                    else:
-                        # Fallback to default if not in cache
+                    if cached_day_mask_power == 0:
+                        # If register is uninitialized (0), default to 127 (all days)
                         effective_day_mask = 127
+                    else:
+                        effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
                 else:
                     effective_day_mask = day_mask_value
 
-                if power_percent_value is not None and not (0 <= power_percent_value <= 100):
+                # Determine effective power percent
+                if power_percent_value is None:
+                    if cached_day_mask_power == 0:
+                         # If register is uninitialized (0), default to 10%
+                         effective_power_percent = 10
+                         _LOGGER.info("Defaulting power to 10%% for uninitialized slot %s", label)
+                    else:
+                        effective_power_percent = cached_day_mask_power & 0xFF
+                elif not (0 <= power_percent_value <= 100):
                     _LOGGER.error(
                         "Invalid power range for %s: %s%%. Expected 0-100.",
                         label, power_percent_value
                     )
-                    power_percent_value = None
+                    effective_power_percent = cached_day_mask_power & 0xFF
+                else:
+                    effective_power_percent = power_percent_value
 
-                day_mask_power_value = self._calculate_day_mask_power_value(effective_day_mask, power_percent_value)
-                if day_mask_power_value is not None:
+                day_mask_power_value = (effective_day_mask << 8) | effective_power_percent
+                
+                if day_mask_power_value != cached_day_mask_power:
                     _LOGGER.debug("Adding day_mask_power update for %s", label)
                     write_operations.append((
                         registers["day_mask_power"],
@@ -553,14 +571,6 @@ class ChargeSettingHandler:
             return (hours << 8) | minutes
         except (ValueError, TypeError):
             return 0
-
-    def _calculate_day_mask_power_value(self, day_mask: int, power_percent: Optional[int]) -> Optional[int]:
-        """Calculate day_mask_power register value."""
-        if power_percent is None:
-            # Read current value to preserve power_percent
-            return None  # Signal to read current value first
-
-        return (day_mask << 8) | power_percent
 
     async def _write_time_register(
         self, address: int, time_str: str, label: str
