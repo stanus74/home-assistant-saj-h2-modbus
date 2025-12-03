@@ -184,13 +184,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 return
         
         try:
+            # Execute reader for fast poll sensors
+            # All requested power sensors are in additional_data_1_part_2
             result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
+            
             if result:
                 # Filter result to only include fast poll sensors
                 fast_data = {k: v for k, v in result.items() if k in FAST_POLL_SENSORS}
                 
                 if fast_data:
-                    # Update internal cache with all data
+                    # Update internal cache with all data (even non-fast ones from the block)
                     self.inverter_data.update(result)
                     
                     # Only notify fast listeners about fast sensor changes
@@ -199,7 +202,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     
                     if ADVANCED_LOGGING:
                         _LOGGER.debug(
-                            f"Fast update completed: {len(fast_data)}/{len(result)} sensors updated "
+                            f"Fast update completed: {len(fast_data)} sensors updated "
                             f"(filtered to fast sensors only)"
                         )
                 else:

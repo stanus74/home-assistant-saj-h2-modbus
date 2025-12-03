@@ -135,9 +135,10 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     def _handle_fast_update(self) -> None:
         """Handle fast update notification (10s interval)."""
         # This is ONLY called for sensors registered in FAST_POLL_SENSORS
-        # Only update if the value actually changed to reduce write operations
         new_value = self._hub.inverter_data.get(self.entity_description.key)
-        if new_value != self._last_value:
+        
+        # Update if value changed OR force_update is enabled
+        if new_value != self._last_value or self.force_update:
             self._last_value = new_value
             self.async_write_ha_state()
             
