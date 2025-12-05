@@ -99,6 +99,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             CONF_MQTT_PUBLISH_ALL,
             config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False),
         )
+        self._ha_mqtt_available = None
+        self._ha_mqtt_last_check = 0.0
+        self._ha_mqtt_check_interval = 30.0
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -132,6 +135,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._fast_coordinator = None
         self._fast_unsub = None
         self._cancel_fast_update = None
+        self._pending_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
  
         self._scan_interval = scan_interval
@@ -211,6 +215,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if self._cancel_fast_update is not None:
             _LOGGER.debug("Fast updates already running")
             return
+        if self._pending_fast_start_cancel is not None:
+            _LOGGER.debug("Fast update start already scheduled; skipping duplicate schedule")
+            return
 
         interval = 1 if self.ultra_fast_enabled else 10
         
@@ -240,8 +247,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         @callback
         def _start_loop(_):
+            # clear pending marker
+            self._pending_fast_start_cancel = None
             if self._cancel_fast_update is not None:
-                return # Already started
+                return  # Already started
 
             _LOGGER.info("Starting fast update loop now")
             self._cancel_fast_update = async_track_time_interval(
@@ -250,7 +259,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 timedelta(seconds=interval)
             )
             
-        async_call_later(self.hass, startup_delay, _start_loop)
+        self._pending_fast_start_cancel = async_call_later(self.hass, startup_delay, _start_loop)
 
     async def _async_update_fast(self, now=None) -> None:
         """Fast update function called by async_track_time_interval."""
@@ -310,8 +319,30 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as e:
             _LOGGER.warning("Fast update failed: %s", e)
 
+    def _is_ha_mqtt_available(self) -> bool:
+        now = time.monotonic()
+        if (
+            self._ha_mqtt_available is not None
+            and (now - self._ha_mqtt_last_check) < self._ha_mqtt_check_interval
+        ):
+            return self._ha_mqtt_available
+        available = False
+        if "mqtt" in self.hass.config.components:
+            try:
+                available = bool(mqtt.is_connected(self.hass))
+            except (AttributeError, ImportError, KeyError):
+                available = False
+        if not available and self.hass.services.has_service("mqtt", "publish"):
+            available = True
+        self._ha_mqtt_available = available
+        self._ha_mqtt_last_check = now
+        return available
+
     def _publish_fast_data_to_mqtt(self, data: Dict[str, Any]) -> None:
         """Publish fast poll data to MQTT."""
+        if not data:
+            return
+
         def normalize_sensor_key(raw_key: str) -> str:
             parts = [segment for segment in raw_key.split("/") if segment]
             for segment in reversed(parts):
@@ -320,96 +351,88 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return parts[-1] if parts else raw_key
 
         base_topic = self._get_base_topic()
+        messages: List[tuple[str, str]] = []
+        for key, value in data.items():
+            sensor_key = normalize_sensor_key(key) or key.replace("/", "_")
+            messages.append((sensor_key, str(value)))
 
-        # Option 1: Try Home Assistant MQTT Integration
-        # Check if MQTT is connected (preferred) or service is available
-        ha_mqtt_available = False
-        
-        # Only try HA MQTT if it was found in config components
-        if "mqtt" in self.hass.config.components:
-            try:
-                if mqtt.is_connected(self.hass):
-                    ha_mqtt_available = True
-            except (AttributeError, ImportError, KeyError) as e:
-                # is_connected might not be available in all versions or if mqtt not loaded
-                # KeyError can happen if 'mqtt' key is missing in hass.data during startup
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug("HA MQTT detection check failed: %s", e)
-                pass
-                
-            if not ha_mqtt_available and self.hass.services.has_service("mqtt", "publish"):
-                ha_mqtt_available = True
+        if not messages:
+            return
 
-        if ha_mqtt_available:
+        if self._is_ha_mqtt_available():
             try:
-                # If we were using internal client, stop it now that HA MQTT is available
                 if self._paho_client and self._paho_started:
-                    _LOGGER.info("Home Assistant MQTT integration detected. Disconnecting internal fallback client.")
                     self._paho_client.loop_stop()
                     self._paho_client.disconnect()
                     self._paho_started = False
-
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug("Publishing %s fast sensors to MQTT via HA Integration", len(data))
-                
-                for key, value in data.items():
-                    sensor_key = normalize_sensor_key(key)
+                for sensor_key, payload in messages:
                     topic = f"{base_topic}/{sensor_key}"
                     self.hass.async_create_task(
-                        mqtt.async_publish(self.hass, topic, str(value))
+                        mqtt.async_publish(self.hass, topic, payload)
                     )
                 return
-            except Exception as e:
-                # If HA MQTT fails (e.g. KeyError 'mqtt' if data not ready), fall back to internal
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug("Failed to publish via HA MQTT (fallback to internal): %s", e)
-                # Fall through to Option 2
+            except Exception as err:
+                _LOGGER.debug("HA MQTT publish failed, falling back: %s", err)
+                self._ha_mqtt_available = False
+                self._ha_mqtt_last_check = 0.0
 
-        # Option 2: Fallback to internal Paho MQTT Client using configured credentials
-        if self._paho_client:
-            try:
-                if not self._paho_started:
-                    _LOGGER.info("HA MQTT integration not usable. Connecting internal MQTT client to %s...", self.mqtt_host)
-                    self._paho_client.connect_async(self.mqtt_host, self.mqtt_port)
-                    self._paho_client.loop_start()
-                    self._paho_started = True
+        if PAHO_AVAILABLE and (self._paho_client or self.mqtt_host):
+            if self._paho_client is None and self.mqtt_host:
+                try:
+                    self._paho_client = mqtt_client.Client()
+                    if self.mqtt_user:
+                        self._paho_client.username_pw_set(self.mqtt_user, self.mqtt_password)
+                except Exception as err:
+                    _LOGGER.error("Failed to initialize internal MQTT client: %s", err)
+                    return
+            if self._paho_client:
+                try:
+                    if not self._paho_started:
+                        self._paho_client.connect_async(self.mqtt_host, self.mqtt_port)
+                        self._paho_client.loop_start()
+                        self._paho_started = True
+                    for sensor_key, payload in messages:
+                        self._paho_client.publish(f"{base_topic}/{sensor_key}", payload)
+                    return
+                except Exception as err:
+                    _LOGGER.error("Internal MQTT publish failed: %s", err)
+                    return
 
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug("Publishing %s fast sensors to MQTT via Internal Client", len(data))
-                    # Log sample topic for verification
-                    if data:
-                        sample_key = normalize_sensor_key(next(iter(data)))
-                        _LOGGER.debug("Sample MQTT topic: %s/%s", base_topic, sample_key)
-                
-                for key, value in data.items():
-                    sensor_key = normalize_sensor_key(key)
-                    topic = f"{base_topic}/{sensor_key}"
-                    self._paho_client.publish(topic, str(value))
-                return
-            except Exception as e:
-                _LOGGER.error("Internal MQTT publish failed: %s", e)
-                return
-
-        # Option 3: Fail
         if not PAHO_AVAILABLE:
-             _LOGGER.warning("MQTT service not found and paho-mqtt library not installed. Cannot publish to MQTT.")
+            _LOGGER.warning(
+                "MQTT service unavailable and paho-mqtt not installed; cannot publish MQTT data."
+            )
         else:
-             _LOGGER.warning("MQTT service not found and internal client not available (check host/port)! Please configure the MQTT integration in Home Assistant.")
+            _LOGGER.warning(
+                "MQTT service unavailable and no internal client configured. Check MQTT settings."
+            )
 
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
-        """Add a listener specifically for fast updates."""
+        """Register a callback for fast-update notifications."""
         self._fast_listeners.append(update_callback)
-        
+
         @callback
         def remove_listener() -> None:
-            """Remove listener."""
             if update_callback in self._fast_listeners:
                 self._fast_listeners.remove(update_callback)
-        
+
         return remove_listener
 
-    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool, ultra_fast_enabled: bool, mqtt_host: str = "", mqtt_port: int = 1883, mqtt_user: str = "", mqtt_password: str = "", mqtt_topic_prefix: str = "saj", mqtt_publish_all: bool = False) -> None:
+    async def update_connection_settings(
+        self,
+        host: str,
+        port: int,
+        scan_interval: int,
+        fast_enabled: bool,
+        ultra_fast_enabled: bool,
+        mqtt_host: str = "",
+        mqtt_port: int = 1883,
+        mqtt_user: str = "",
+        mqtt_password: str = "",
+        mqtt_topic_prefix: Optional[str] = None,
+        mqtt_publish_all: bool = False,
+    ) -> None:
         """Update connection settings from config entry options."""
         if self.updating_settings:
             if ADVANCED_LOGGING:
@@ -442,8 +465,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.mqtt_port = mqtt_port
                 self.mqtt_user = mqtt_user
                 self.mqtt_password = mqtt_password
-                new_prefix = (mqtt_topic_prefix or "").strip()
-                new_prefix = new_prefix.rstrip("/") if new_prefix else "saj"
+
+                last_prefix = (self.mqtt_topic_prefix or "").strip()
+                if not last_prefix:
+                    entry_prefix = (
+                        (self._config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, "") or "")
+                        or (self._config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "") or "")
+                    )
+                    last_prefix = entry_prefix.strip() or "saj"
+                incoming_prefix = mqtt_topic_prefix if mqtt_topic_prefix is not None else last_prefix
+                if not isinstance(incoming_prefix, str):
+                    incoming_prefix = str(incoming_prefix)
+                incoming_prefix = incoming_prefix.strip()
+                if not incoming_prefix:
+                    incoming_prefix = last_prefix
+                new_prefix = incoming_prefix.rstrip("/")
                 prefix_changed = new_prefix != self.mqtt_topic_prefix
                 self.mqtt_topic_prefix = new_prefix
                 if prefix_changed:
@@ -452,6 +488,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.mqtt_publish_all = mqtt_publish_all
                 if publish_all_changed:
                     _LOGGER.info("MQTT full publish toggled to %s", self.mqtt_publish_all)
+                if mqtt_changed or prefix_changed:
+                    self._ha_mqtt_available = None
+                    self._ha_mqtt_last_check = 0.0
 
                 if mqtt_changed:
                     _LOGGER.info("MQTT settings changed, re-initializing client...")
@@ -514,14 +553,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Restart the fast update interval with current config."""
         if not self.fast_enabled:
             return
-        
+        # Cancel any pending start
+        if self._pending_fast_start_cancel is not None:
+            self._pending_fast_start_cancel()
+            self._pending_fast_start_cancel = None
+            _LOGGER.debug("Cancelled pending fast start")
         # Stop existing fast updates
         if self._cancel_fast_update is not None:
             self._cancel_fast_update()
             self._cancel_fast_update = None
             _LOGGER.debug("Stopped old fast updates")
-        
-        # Start new fast updates
         await self.start_fast_updates()
 
     async def reconnect_client(self) -> bool:
