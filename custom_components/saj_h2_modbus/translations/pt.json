@@ -18,5 +18,16 @@
   },
   "abort": {
     "already_configured": "O dispositivo já se encontra configurado"
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "fast_enabled": "Sensores em tempo real (consulta a cada 10s)",
+          "mqtt_topic_prefix": "Prefixo do tópico MQTT (ex.: saj/h2)",
+          "ultra_fast_enabled": "Ultra Rápido (1s via MQTT)"
+        }
+      }
+    }
   }
 }

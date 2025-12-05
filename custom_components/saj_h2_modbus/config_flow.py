@@ -19,6 +19,7 @@ CONF_MQTT_HOST = "mqtt_host"
 CONF_MQTT_PORT = "mqtt_port"
 CONF_MQTT_USER = "mqtt_user"
 CONF_MQTT_PASSWORD = "mqtt_password"
+CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
+            topic_prefix = user_input.get(CONF_MQTT_TOPIC_PREFIX, "").strip()
+            user_input[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or "saj"
             try:
                 hub = self.hass.data[DOMAIN][self.config_entry.entry_id]["hub"]
                 await hub.update_connection_settings(
@@ -103,6 +106,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     user_input.get(CONF_MQTT_PORT, 1883),
                     user_input.get(CONF_MQTT_USER, ""),
                     user_input.get(CONF_MQTT_PASSWORD, ""),
+                    user_input[CONF_MQTT_TOPIC_PREFIX],
                 )
             except Exception as e:
                 _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
@@ -125,9 +129,20 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             vol.Required(CONF_PORT, default=self.config_entry.options.get(CONF_PORT, self.config_entry.data.get(CONF_PORT, 502))): int,
             vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, 60))): int,
             vol.Optional(CONF_FAST_ENABLED, default=self.config_entry.options.get(CONF_FAST_ENABLED, False)): bool,
-            vol.Optional(CONF_ULTRA_FAST_ENABLED, default=self.config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)): bool,
+            vol.Optional(
+                CONF_ULTRA_FAST_ENABLED,
+                default=self.config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False),
+                description={"name": "Ultra Fast (1s over MQTT)"},
+            ): bool,
             vol.Optional(CONF_MQTT_HOST, default=self.config_entry.options.get(CONF_MQTT_HOST, "")): str,
             vol.Optional(CONF_MQTT_PORT, default=self.config_entry.options.get(CONF_MQTT_PORT, 1883)): int,
             vol.Optional(CONF_MQTT_USER, default=self.config_entry.options.get(CONF_MQTT_USER, "")): str,
             vol.Optional(CONF_MQTT_PASSWORD, default=self.config_entry.options.get(CONF_MQTT_PASSWORD, "")): str,
+            vol.Optional(
+                CONF_MQTT_TOPIC_PREFIX,
+                default=self.config_entry.options.get(
+                    CONF_MQTT_TOPIC_PREFIX,
+                    self.config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"),
+                ),
+            ): str,
         })

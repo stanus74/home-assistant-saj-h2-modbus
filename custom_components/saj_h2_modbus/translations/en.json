@@ -18,5 +18,16 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "fast_enabled": "Realtime sensors (10s polling)",
+          "mqtt_topic_prefix": "MQTT topic prefix (e.g. saj/h2)",
+          "ultra_fast_enabled": "Ultra Fast (1s over MQTT)"
+        }
+      }
+    }
   }
 }

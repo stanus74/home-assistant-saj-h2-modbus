@@ -43,6 +43,7 @@ FAST_POLL_DEFAULT = False
 # ULTRA_FAST_POLL removed, now dynamic via config
 ADVANCED_LOGGING = False
 CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
+CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 
 # Define which sensor keys should be updated in fast polling (10s interval)
 FAST_POLL_SENSORS = {
@@ -87,6 +88,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.mqtt_port = config_entry.options.get("mqtt_port", 1883)
         self.mqtt_user = config_entry.options.get("mqtt_user", "")
         self.mqtt_password = config_entry.options.get("mqtt_password", "")
+        raw_prefix = (
+            config_entry.options.get(CONF_MQTT_TOPIC_PREFIX)
+            or config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "")
+        )
+        normalized_prefix = (raw_prefix or "").strip()
+        self.mqtt_topic_prefix = normalized_prefix.rstrip("/") if normalized_prefix else "saj"
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -300,8 +307,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     def _publish_fast_data_to_mqtt(self, data: Dict[str, Any]) -> None:
         """Publish fast poll data to MQTT."""
-        # Topics now follow scheme: saj/<sensor_name>
-        device_name = self._config_entry.title.lower().replace(" ", "_") if self._config_entry.title else "saj"
+        def normalize_sensor_key(raw_key: str) -> str:
+            parts = [segment for segment in raw_key.split("/") if segment]
+            for segment in reversed(parts):
+                if segment.lower() not in {"saj", "mqtt"}:
+                    return segment
+            return parts[-1] if parts else raw_key
+
+        base_topic = self._get_base_topic()
 
         # Option 1: Try Home Assistant MQTT Integration
         # Check if MQTT is connected (preferred) or service is available
@@ -335,7 +348,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.debug("Publishing %s fast sensors to MQTT via HA Integration", len(data))
                 
                 for key, value in data.items():
-                    topic = f"saj/{key}"
+                    sensor_key = normalize_sensor_key(key)
+                    topic = f"{base_topic}/{sensor_key}"
                     self.hass.async_create_task(
                         mqtt.async_publish(self.hass, topic, str(value))
                     )
@@ -359,11 +373,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.debug("Publishing %s fast sensors to MQTT via Internal Client", len(data))
                     # Log sample topic for verification
                     if data:
-                        sample_key = next(iter(data))
-                        _LOGGER.debug("Sample MQTT topic: saj/%s", sample_key)
+                        sample_key = normalize_sensor_key(next(iter(data)))
+                        _LOGGER.debug("Sample MQTT topic: %s/%s", base_topic, sample_key)
                 
                 for key, value in data.items():
-                    topic = f"saj/{key}"
+                    sensor_key = normalize_sensor_key(key)
+                    topic = f"{base_topic}/{sensor_key}"
                     self._paho_client.publish(topic, str(value))
                 return
             except Exception as e:
@@ -389,7 +404,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         return remove_listener
 
-    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool, ultra_fast_enabled: bool, mqtt_host: str = "", mqtt_port: int = 1883, mqtt_user: str = "", mqtt_password: str = "") -> None:
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool, ultra_fast_enabled: bool, mqtt_host: str = "", mqtt_port: int = 1883, mqtt_user: str = "", mqtt_password: str = "", mqtt_topic_prefix: str = "saj") -> None:
         """Update connection settings from config entry options."""
         if self.updating_settings:
             if ADVANCED_LOGGING:
@@ -422,6 +437,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.mqtt_port = mqtt_port
                 self.mqtt_user = mqtt_user
                 self.mqtt_password = mqtt_password
+                new_prefix = (mqtt_topic_prefix or "").strip()
+                new_prefix = new_prefix.rstrip("/") if new_prefix else "saj"
+                prefix_changed = new_prefix != self.mqtt_topic_prefix
+                self.mqtt_topic_prefix = new_prefix
+                if prefix_changed:
+                    _LOGGER.info("MQTT topic prefix updated to %s", self.mqtt_topic_prefix)
 
                 if mqtt_changed:
                     _LOGGER.info("MQTT settings changed, re-initializing client...")
@@ -832,3 +853,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._optimistic_overlay = overlay
         except Exception as e:
             _LOGGER.debug("Optimistic overlay skipped: %s", e)
+
+    def _get_base_topic(self) -> str:
+        base = (self.mqtt_topic_prefix or "").rstrip("/")
+        return base or "saj"

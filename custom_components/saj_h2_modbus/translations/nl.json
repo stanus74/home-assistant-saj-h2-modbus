@@ -18,5 +18,16 @@
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "fast_enabled": "Realtime sensoren (10s polling)",
+          "mqtt_topic_prefix": "MQTT-topicvoorvoegsel (bijv. saj/h2)",
+          "ultra_fast_enabled": "Ultrasnel (1s via MQTT)"
+        }
+      }
+    }
   }
 }
