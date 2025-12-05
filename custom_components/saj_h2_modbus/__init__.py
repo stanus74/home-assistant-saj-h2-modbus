@@ -1,17 +1,23 @@
-"""The SAJ Modbus Integration."""
+"""The SAJ Modbus integration."""
 import logging
 import time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 
 from .hub import SAJModbusHub
-from .const import DOMAIN, ATTR_MANUFACTURER, DEFAULT_SCAN_INTERVAL, DEFAULT_PORT, CONF_FAST_ENABLED
+from .const import (
+    DOMAIN, 
+    ATTR_MANUFACTURER, 
+    DEFAULT_SCAN_INTERVAL, 
+    DEFAULT_PORT, 
+    CONF_FAST_ENABLED, 
+)
 from homeassistant.helpers import config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "switch", "number", "text"]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -84,6 +90,11 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
             port=_get_config_value(entry, CONF_PORT, DEFAULT_PORT),
             scan_interval=_get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
             fast_enabled=_get_config_value(entry, CONF_FAST_ENABLED, False),
+            ultra_fast_enabled=_get_config_value(entry, "ultra_fast_enabled", False),
+            mqtt_host=_get_config_value(entry, "mqtt_host", ""),
+            mqtt_port=_get_config_value(entry, "mqtt_port", 1883),
+            mqtt_user=_get_config_value(entry, "mqtt_user", ""),
+            mqtt_password=_get_config_value(entry, "mqtt_password", ""),
         )
     else:
         # If hub doesn't exist, reload the entry to create it with new options

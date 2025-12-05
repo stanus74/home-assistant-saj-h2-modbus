@@ -14,6 +14,11 @@ from .const import (
     CONF_FAST_ENABLED,
 )
 
+CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
+CONF_MQTT_HOST = "mqtt_host"
+CONF_MQTT_PORT = "mqtt_port"
+CONF_MQTT_USER = "mqtt_user"
+CONF_MQTT_PASSWORD = "mqtt_password"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +98,11 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     user_input[CONF_PORT],
                     user_input.get(CONF_SCAN_INTERVAL, 60),
                     user_input.get(CONF_FAST_ENABLED, False),
+                    user_input.get(CONF_ULTRA_FAST_ENABLED, False),
+                    user_input.get(CONF_MQTT_HOST, ""),
+                    user_input.get(CONF_MQTT_PORT, 1883),
+                    user_input.get(CONF_MQTT_USER, ""),
+                    user_input.get(CONF_MQTT_PASSWORD, ""),
                 )
             except Exception as e:
                 _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
@@ -115,4 +125,9 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             vol.Required(CONF_PORT, default=self.config_entry.options.get(CONF_PORT, self.config_entry.data.get(CONF_PORT, 502))): int,
             vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, 60))): int,
             vol.Optional(CONF_FAST_ENABLED, default=self.config_entry.options.get(CONF_FAST_ENABLED, False)): bool,
+            vol.Optional(CONF_ULTRA_FAST_ENABLED, default=self.config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)): bool,
+            vol.Optional(CONF_MQTT_HOST, default=self.config_entry.options.get(CONF_MQTT_HOST, "")): str,
+            vol.Optional(CONF_MQTT_PORT, default=self.config_entry.options.get(CONF_MQTT_PORT, 1883)): int,
+            vol.Optional(CONF_MQTT_USER, default=self.config_entry.options.get(CONF_MQTT_USER, "")): str,
+            vol.Optional(CONF_MQTT_PASSWORD, default=self.config_entry.options.get(CONF_MQTT_PASSWORD, "")): str,
         })

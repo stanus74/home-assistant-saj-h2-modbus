@@ -1,5 +1,5 @@
 /**
- * SAJ Discharge Schedule Card
+ * SAJ Charge/Discharge Schedule Card
  * Visual weekly schedule overview for SAJ H2 Inverter discharge slots
  * Shows discharge time slots in a weekly calendar view
  * 
@@ -14,7 +14,7 @@ class SajDischargeScheduleCard extends HTMLElement {
     this._config = null;
     this._hass = null;
     
-    console.log('[SAJ Discharge Schedule Card] Version 1.0.1');
+    console.log('[SAJ Charge/Discharge Schedule Card] Version 1.0.1');
   }
 
   setConfig(config) {
@@ -23,15 +23,16 @@ class SajDischargeScheduleCard extends HTMLElement {
     }
     
     this._config = {
-      title: config.title || 'Discharge Schedule',
+      title: config.title || 'Charge/Discharge Schedule',
       slotCount: config.slot_count || 7,
       startHour: config.start_hour || 0,
       endHour: config.end_hour || 24,
       hourStep: config.hour_step || 1,
       showPower: config.show_power !== false,
-      colorEnabled: config.color_enabled || 'var(--primary-color)',
+      colorCharge: config.color_charge || 'var(--success-color, #4CAF50)', // Green
+      colorDischarge: config.color_discharge || 'var(--error-color, #F44336)', // Red
       colorDisabled: config.color_disabled || 'var(--disabled-text-color)',
-      mode: config.mode || 'discharge', // 'discharge' or 'charge'
+      mode: config.mode || 'combined', // 'discharge', 'charge' or 'combined'
       ...config
     };
     
@@ -65,75 +66,75 @@ class SajDischargeScheduleCard extends HTMLElement {
   }
 
   _getScheduleData() {
-    const mode = this._config.mode;
-    const prefix = mode === 'charge' ? 'charge' : 'discharge';
     const slots = [];
+    const modes = this._config.mode === 'combined' ? ['charge', 'discharge'] : [this._config.mode];
     
-    console.log(`[Schedule Card] Looking for ${prefix} sensors...`);
+    modes.forEach(prefix => {
+      console.log(`[Schedule Card] Looking for ${prefix} sensors...`);
 
-    for (let i = 1; i <= this._config.slotCount; i++) {
-      // Slot 1 has NO number, slots 2-7 have _X
-      const slotNum = i === 1 ? '' : `_${i}`;
-      
-      // Build entity IDs with correct pattern
-      const startEntityId = `sensor.saj_${prefix}${slotNum}_start_time`;
-      const endEntityId = `sensor.saj_${prefix}${slotNum}_end_time`;
-      const powerEntityId = `sensor.saj_${prefix}${slotNum}_power_percent`;
-      const dayMaskEntityId = `sensor.saj_${prefix}${slotNum}_day_mask`;
-      
-      // Get entities from hass
-      const startEntity = this._hass.states[startEntityId];
-      const endEntity = this._hass.states[endEntityId];
-      const powerEntity = this._hass.states[powerEntityId];
-      const dayMaskEntity = this._hass.states[dayMaskEntityId];
+      for (let i = 1; i <= this._config.slotCount; i++) {
+        // Slot 1 has NO number (e.g. saj_charge_start_time), slots 2-7 have _X
+        const slotNum = i === 1 ? '' : `_${i}`;
+        
+        // Build entity IDs with correct pattern
+        const startEntityId = `sensor.saj_${prefix}${slotNum}_start_time`;
+        const endEntityId = `sensor.saj_${prefix}${slotNum}_end_time`;
+        const powerEntityId = `sensor.saj_${prefix}${slotNum}_power_percent`;
+        const dayMaskEntityId = `sensor.saj_${prefix}${slotNum}_day_mask`;
+        
+        // Get entities from hass
+        const startEntity = this._hass.states[startEntityId];
+        const endEntity = this._hass.states[endEntityId];
+        const powerEntity = this._hass.states[powerEntityId];
+        const dayMaskEntity = this._hass.states[dayMaskEntityId];
 
-      // Debug logging
-      if (!startEntity) {
-        console.warn(`[Schedule Card] Entity not found: ${startEntityId}`);
-      }
-      if (!endEntity) {
-        console.warn(`[Schedule Card] Entity not found: ${endEntityId}`);
-      }
-      if (!powerEntity) {
-        console.warn(`[Schedule Card] Entity not found: ${powerEntityId}`);
-      }
-      if (!dayMaskEntity) {
-        console.warn(`[Schedule Card] Entity not found: ${dayMaskEntityId}`);
-      }
+        // Debug logging
+        if (!startEntity) {
+          console.warn(`[Schedule Card] Entity not found: ${startEntityId}`);
+        }
+        if (!endEntity) {
+          console.warn(`[Schedule Card] Entity not found: ${endEntityId}`);
+        }
+        if (!powerEntity) {
+          console.warn(`[Schedule Card] Entity not found: ${powerEntityId}`);
+        }
+        if (!dayMaskEntity) {
+          console.warn(`[Schedule Card] Entity not found: ${dayMaskEntityId}`);
+        }
 
-      if (startEntity && endEntity) {
-        const startTime = startEntity.state;
-        const endTime = endEntity.state;
-        const power = powerEntity ? parseInt(powerEntity.state) || 0 : 0;
-        const dayMask = dayMaskEntity ? parseInt(dayMaskEntity.state) || 127 : 127;
+        if (startEntity && endEntity) {
+          const startTime = startEntity.state;
+          const endTime = endEntity.state;
+          const power = powerEntity ? parseInt(powerEntity.state) || 0 : 0;
+          const dayMask = dayMaskEntity ? parseInt(dayMaskEntity.state) || 127 : 127;
 
-        console.log(`[Schedule Card] Slot ${i}: ${startTime}-${endTime}, Power: ${power}%, Days: ${dayMask}`);
+          // Parse time strings (HH:MM)
+          const startMatch = startTime.match(/(\d{1,2}):(\d{2})/);
+          const endMatch = endTime.match(/(\d{1,2}):(\d{2})/);
 
-        // Parse time strings (HH:MM)
-        const startMatch = startTime.match(/(\d{1,2}):(\d{2})/);
-        const endMatch = endTime.match(/(\d{1,2}):(\d{2})/);
+          if (startMatch && endMatch) {
+            const startHour = parseInt(startMatch[1]);
+            const startMinute = parseInt(startMatch[2]);
+            const endHour = parseInt(endMatch[1]);
+            const endMinute = parseInt(endMatch[2]);
 
-        if (startMatch && endMatch) {
-          const startHour = parseInt(startMatch[1]);
-          const startMinute = parseInt(startMatch[2]);
-          const endHour = parseInt(endMatch[1]);
-          const endMinute = parseInt(endMatch[2]);
-
-          slots.push({
-            slot: i,
-            startHour,
-            startMinute,
-            endHour,
-            endMinute,
-            power,
-            dayMask,
-            enabled: power > 0 && dayMask > 0
-          });
-        } else {
-          console.warn(`[Schedule Card] Invalid time format for slot ${i}: ${startTime} - ${endTime}`);
+            slots.push({
+              type: prefix, // 'charge' or 'discharge'
+              slot: i,
+              startHour,
+              startMinute,
+              endHour,
+              endMinute,
+              power,
+              dayMask,
+              enabled: power > 0 && dayMask > 0
+            });
+          } else {
+            console.warn(`[Schedule Card] Invalid time format for slot ${i}: ${startTime} - ${endTime}`);
+          }
         }
       }
-    }
+    });
     
     console.log(`[Schedule Card] Found ${slots.length} valid slots:`, slots);
     return slots;
@@ -152,16 +153,14 @@ class SajDischargeScheduleCard extends HTMLElement {
       return `
         <div class="debug-message">
           <h3>⚠️ No slots found</h3>
-          <p>Please check if the following sensors exist:</p>
+          <p>Please check if the sensors exist. Expected naming convention:</p>
           <ul>
-            <li>sensor.saj_discharge_start_time (slot 1 - no number)</li>
-            <li>sensor.saj_discharge_end_time</li>
-            <li>sensor.saj_discharge_power_percent</li>
-            <li>sensor.saj_discharge_day_mask</li>
-            <li>sensor.saj_discharge_2_start_time (slot 2-7 - with number)</li>
-            <li>... (through _7)</li>
+            <li>sensor.saj_charge_start_time (Slot 1 - no number)</li>
+            <li>sensor.saj_charge_2_start_time (Slot 2)</li>
+            <li>sensor.saj_discharge_start_time (Slot 1 - no number)</li>
+            <li>sensor.saj_discharge_2_start_time (Slot 2)</li>
           </ul>
-          <p>Open browser console (F12) for more details.</p>
+          <p>Check browser console (F12) for details.</p>
         </div>
       `;
     }
@@ -184,19 +183,23 @@ class SajDischargeScheduleCard extends HTMLElement {
       days.forEach((day, dayIndex) => {
         const slotsAtTime = this._getSlotsForDayAndHour(slots, dayIndex, hour);
         const cellClass = slotsAtTime.length > 0 ? 'day-cell active' : 'day-cell';
+        
         const slotInfo = slotsAtTime.length > 0 
-          ? `data-slots="${slotsAtTime.map(s => `Slot ${s.slot}: ${s.power}%`).join(', ')}"` 
+          ? `data-slots="${slotsAtTime.map(s => `${s.type === 'charge' ? '🟢' : '🔴'} Slot ${s.slot}: ${s.power}%`).join(', ')}"` 
           : '';
         
         html += `<div class="${cellClass}" ${slotInfo}>`;
         if (slotsAtTime.length > 0) {
-          const maxPower = Math.max(...slotsAtTime.map(s => s.power));
-          const opacity = 0.3 + (maxPower / 100) * 0.7;
-          html += `<div class="slot-indicator" style="opacity: ${opacity}"></div>`;
-          if (this._config.showPower && slotsAtTime.length === 1) {
-            html += `<span class="power-label">${slotsAtTime[0].power}%</span>`;
-          } else if (this._config.showPower && slotsAtTime.length > 1) {
-            html += `<span class="power-label">×${slotsAtTime.length}</span>`;
+          // Render indicators for all active slots in this hour
+          slotsAtTime.forEach(slot => {
+            const opacity = 0.3 + (slot.power / 100) * 0.7;
+            const color = slot.type === 'charge' ? this._config.colorCharge : this._config.colorDischarge;
+            html += `<div class="slot-indicator" style="opacity: ${opacity}; background-color: ${color}"></div>`;
+          });
+          
+          if (this._config.showPower) {
+            const label = slotsAtTime.length > 1 ? 'Mix' : `${slotsAtTime[0].power}%`;
+            html += `<span class="power-label">${label}</span>`;
           }
         }
         html += '</div>';
@@ -234,13 +237,22 @@ class SajDischargeScheduleCard extends HTMLElement {
     let html = '<div class="legend">';
     html += '<div class="legend-title">Active Slots:</div>';
     
-    slots.filter(s => s.enabled).forEach(slot => {
+    // Sort by type then slot number
+    const sortedSlots = slots.filter(s => s.enabled).sort((a, b) => {
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return a.slot - b.slot;
+    });
+
+    sortedSlots.forEach(slot => {
       const days = this._getDaysFromMask(slot.dayMask);
+      const color = slot.type === 'charge' ? this._config.colorCharge : this._config.colorDischarge;
+      const typeLabel = slot.type.charAt(0).toUpperCase() + slot.type.slice(1);
+      
       html += `
         <div class="legend-item">
-          <div class="legend-indicator"></div>
+          <div class="legend-indicator" style="background-color: ${color}"></div>
           <span class="legend-text">
-            Slot ${slot.slot}: 
+            <b>${typeLabel}</b> Slot ${slot.slot}: 
             ${String(slot.startHour).padStart(2, '0')}:${String(slot.startMinute).padStart(2, '0')} - 
             ${String(slot.endHour).padStart(2, '0')}:${String(slot.endMinute).padStart(2, '0')} 
             (${slot.power}%) - ${days}
@@ -384,7 +396,7 @@ class SajDischargeScheduleCard extends HTMLElement {
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: var(--primary-color);
+        /* background-color is now set inline */
         pointer-events: none;
       }
       
@@ -420,7 +432,7 @@ class SajDischargeScheduleCard extends HTMLElement {
       .legend-indicator {
         width: 20px;
         height: 12px;
-        background-color: var(--primary-color);
+        /* background-color is now set inline */
         border-radius: 2px;
         flex-shrink: 0;
       }
@@ -535,8 +547,8 @@ customElements.define('saj-discharge-schedule-card', SajDischargeScheduleCard);
 // Register card for UI editor
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'saj-discharge-schedule-card',
-  name: 'SAJ Discharge Schedule Card',
+  type: 'saj-dis-charge-schedule-card',
+  name: 'SAJ Charge/Discharge Schedule Card',
   description: 'Visual weekly schedule overview for discharge slots',
   preview: true,
   documentationURL: 'https://github.com/stanu74/saj-h2-ha-card'
