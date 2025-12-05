@@ -44,6 +44,7 @@ FAST_POLL_DEFAULT = False
 ADVANCED_LOGGING = False
 CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
+CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
 # Define which sensor keys should be updated in fast polling (10s interval)
 FAST_POLL_SENSORS = {
@@ -94,6 +95,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
         normalized_prefix = (raw_prefix or "").strip()
         self.mqtt_topic_prefix = normalized_prefix.rstrip("/") if normalized_prefix else "saj"
+        self.mqtt_publish_all = config_entry.options.get(
+            CONF_MQTT_PUBLISH_ALL,
+            config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False),
+        )
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -404,7 +409,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         return remove_listener
 
-    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool, ultra_fast_enabled: bool, mqtt_host: str = "", mqtt_port: int = 1883, mqtt_user: str = "", mqtt_password: str = "", mqtt_topic_prefix: str = "saj") -> None:
+    async def update_connection_settings(self, host: str, port: int, scan_interval: int, fast_enabled: bool, ultra_fast_enabled: bool, mqtt_host: str = "", mqtt_port: int = 1883, mqtt_user: str = "", mqtt_password: str = "", mqtt_topic_prefix: str = "saj", mqtt_publish_all: bool = False) -> None:
         """Update connection settings from config entry options."""
         if self.updating_settings:
             if ADVANCED_LOGGING:
@@ -443,6 +448,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.mqtt_topic_prefix = new_prefix
                 if prefix_changed:
                     _LOGGER.info("MQTT topic prefix updated to %s", self.mqtt_topic_prefix)
+                publish_all_changed = mqtt_publish_all != self.mqtt_publish_all
+                self.mqtt_publish_all = mqtt_publish_all
+                if publish_all_changed:
+                    _LOGGER.info("MQTT full publish toggled to %s", self.mqtt_publish_all)
 
                 if mqtt_changed:
                     _LOGGER.info("MQTT settings changed, re-initializing client...")
@@ -588,8 +597,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._optimistic_overlay = None
             self.inverter_data = cache
 
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Update cycle completed - Cache size: %d items", len(cache))
+            if self.mqtt_publish_all and self.inverter_data:
+                self._publish_fast_data_to_mqtt(self.inverter_data)
             
             return self.inverter_data
         except Exception as err:

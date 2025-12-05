@@ -20,6 +20,7 @@ CONF_MQTT_PORT = "mqtt_port"
 CONF_MQTT_USER = "mqtt_user"
 CONF_MQTT_PASSWORD = "mqtt_password"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
+CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         if user_input is not None:
             topic_prefix = user_input.get(CONF_MQTT_TOPIC_PREFIX, "").strip()
             user_input[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or "saj"
+            user_input[CONF_MQTT_PUBLISH_ALL] = user_input.get(CONF_MQTT_PUBLISH_ALL, False)
             try:
                 hub = self.hass.data[DOMAIN][self.config_entry.entry_id]["hub"]
                 await hub.update_connection_settings(
@@ -107,6 +109,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     user_input.get(CONF_MQTT_USER, ""),
                     user_input.get(CONF_MQTT_PASSWORD, ""),
                     user_input[CONF_MQTT_TOPIC_PREFIX],
+                    user_input[CONF_MQTT_PUBLISH_ALL],
                 )
             except Exception as e:
                 _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
@@ -145,4 +148,11 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     self.config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"),
                 ),
             ): str,
+            vol.Optional(
+                CONF_MQTT_PUBLISH_ALL,
+                default=self.config_entry.options.get(
+                    CONF_MQTT_PUBLISH_ALL,
+                    self.config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False),
+                ),
+            ): bool,
         })
