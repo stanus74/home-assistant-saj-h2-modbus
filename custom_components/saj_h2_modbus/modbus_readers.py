@@ -425,6 +425,20 @@ def decode_time(value: int) -> str:
     """
     return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
 
+def _decode_time_power_slots(data: DataDict, prefix: str, slots: int = 7) -> None:
+    """Normalize *_start_time, *_end_time und *_power_raw Felder in-place."""
+    for i in range(slots):
+        p = "" if i == 0 else str(i + 1)
+        k_start, k_end, k_raw = f"{prefix}{p}_start_time", f"{prefix}{p}_end_time", f"{prefix}{p}_power_raw"
+        if k_start in data:
+            data[k_start] = decode_time(data[k_start])
+        if k_end in data:
+            data[k_end] = decode_time(data[k_end])
+        if k_raw in data:
+            raw = data.pop(k_raw)
+            data[f"{prefix}{p}_day_mask"] = (raw >> 8) & 0xFF
+            data[f"{prefix}{p}_power_percent"] = raw & 0xFF
+
 async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads the Charge registers including all 7 charge slots."""
     # Read from 0x3604 to 0x361A (23 registers total: 2 + 7*3)
@@ -432,26 +446,9 @@ async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
 
     if data:
         try:
-            # Process all 7 charge slots
-            for i in range(7):
-                p = "" if i == 0 else str(i + 1)
-                k_start = f"charge{p}_start_time"
-                k_end = f"charge{p}_end_time"
-                k_raw = f"charge{p}_power_raw"
-                
-                if k_start in data:
-                    data[k_start] = decode_time(data[k_start])
-                if k_end in data:
-                    data[k_end] = decode_time(data[k_end])
-                if k_raw in data:
-                    raw = data.pop(k_raw)
-                    data[f"charge{p}_day_mask"] = (raw >> 8) & 0xFF
-                    data[f"charge{p}_power_percent"] = raw & 0xFF
-
-            # Create boolean sensors for compatibility (derived from raw values)
+            _decode_time_power_slots(data, "charge")
             data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
             data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
-
         except Exception as e:
             _LOGGER.error("Error processing Charge data: %s", e)
             return {}
@@ -463,19 +460,8 @@ async def read_discharge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     data = await _read_modbus_data(client, lock, 0x361B, 21, DISCHARGE_DATA_MAP, "discharge_data", default_factor=1)
     if not data:
         return {}
-
     try:
-        for i in range(7):
-            p = "" if i == 0 else str(i + 1)
-            k_start, k_end, k_raw = f"discharge{p}_start_time", f"discharge{p}_end_time", f"discharge{p}_power_raw"
-            if k_start in data:
-                data[k_start] = decode_time(data[k_start])
-            if k_end in data:
-                data[k_end] = decode_time(data[k_end])
-            if k_raw in data:
-                raw = data.pop(k_raw)
-                data[f"discharge{p}_day_mask"] = (raw >> 8) & 0xFF
-                data[f"discharge{p}_power_percent"] = raw & 0xFF
+        _decode_time_power_slots(data, "discharge")
     except Exception as e:
         _LOGGER.error("Error processing discharge data: %s", e)
         return {}
