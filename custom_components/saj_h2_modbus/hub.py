@@ -8,6 +8,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.components import mqtt
+from homeassistant.exceptions import HomeAssistantError
 from .const import DOMAIN, CONF_FAST_ENABLED
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
@@ -102,6 +103,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._ha_mqtt_available = None
         self._ha_mqtt_last_check = 0.0
         self._ha_mqtt_check_interval = 30.0
+        self._ha_mqtt_block_until = 0.0
+        self._ha_mqtt_error_log_until = 0.0
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -321,6 +324,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     def _is_ha_mqtt_available(self) -> bool:
         now = time.monotonic()
+        if now < self._ha_mqtt_block_until:
+            return False
         if (
             self._ha_mqtt_available is not None
             and (now - self._ha_mqtt_last_check) < self._ha_mqtt_check_interval
@@ -332,8 +337,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 available = bool(mqtt.is_connected(self.hass))
             except (AttributeError, ImportError, KeyError):
                 available = False
-        if not available and self.hass.services.has_service("mqtt", "publish"):
-            available = True
         self._ha_mqtt_available = available
         self._ha_mqtt_last_check = now
         return available
@@ -360,21 +363,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return
 
         if self._is_ha_mqtt_available():
-            try:
-                if self._paho_client and self._paho_started:
-                    self._paho_client.loop_stop()
-                    self._paho_client.disconnect()
-                    self._paho_started = False
-                for sensor_key, payload in messages:
-                    topic = f"{base_topic}/{sensor_key}"
-                    self.hass.async_create_task(
-                        mqtt.async_publish(self.hass, topic, payload)
-                    )
-                return
-            except Exception as err:
-                _LOGGER.debug("HA MQTT publish failed, falling back: %s", err)
-                self._ha_mqtt_available = False
-                self._ha_mqtt_last_check = 0.0
+            if self._paho_client and self._paho_started:
+                self._paho_client.loop_stop()
+                self._paho_client.disconnect()
+                self._paho_started = False
+            for sensor_key, payload in messages:
+                topic = f"{base_topic}/{sensor_key}"
+                self.hass.async_create_task(
+                    self._async_publish_via_ha(topic, payload)
+                )
+            return
 
         if PAHO_AVAILABLE and (self._paho_client or self.mqtt_host):
             if self._paho_client is None and self.mqtt_host:
@@ -406,6 +404,24 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.warning(
                 "MQTT service unavailable and no internal client configured. Check MQTT settings."
             )
+
+    async def _async_publish_via_ha(self, topic: str, payload: str) -> None:
+        """Publish a single payload via Home Assistant MQTT and handle disabled state."""
+        try:
+            await mqtt.async_publish(self.hass, topic, payload)
+        except HomeAssistantError as err:
+            self._handle_ha_mqtt_failure(err)
+        except Exception as err:  # noqa: BLE001
+            self._handle_ha_mqtt_failure(err)
+
+    def _handle_ha_mqtt_failure(self, err: Exception) -> None:
+        now = time.monotonic()
+        self._ha_mqtt_available = False
+        self._ha_mqtt_last_check = 0.0
+        self._ha_mqtt_block_until = now + 60.0
+        if now >= self._ha_mqtt_error_log_until:
+            _LOGGER.debug("HA MQTT publish skipped (%s)", err)
+            self._ha_mqtt_error_log_until = now + 60.0
 
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
