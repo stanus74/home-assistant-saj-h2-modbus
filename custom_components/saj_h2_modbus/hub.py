@@ -149,6 +149,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._warned_missing_states: bool = False
         self._inverter_static_data: Optional[Dict[str, Any]] = None
 
+        self._pending_charging_state = None
+        self._pending_discharging_state = None
+        self._pending_passive_mode_state = None
         self._setting_handler = ChargeSettingHandler(self)
         
         # Generate setters that delegate to the handler
@@ -164,17 +167,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         # Define explicit setters for power states
         async def _set_charging_state(value: bool) -> None:
+            self._pending_charging_state = value
             self._setting_handler.set_charging_state(value)
             _LOGGER.info("Set pending charging state to: %s", value)
             self.hass.async_create_task(self.process_pending_now())
 
         async def _set_discharging_state(value: bool) -> None:
+            self._pending_discharging_state = value
             self._setting_handler.set_discharging_state(value)
             _LOGGER.info("Set pending discharging state to: %s", value)
             self.hass.async_create_task(self.process_pending_now())
 
+        async def _set_passive_mode(value: Optional[int]) -> None:
+            state = None if value is None else int(value)
+            self._pending_passive_mode_state = state
+            self._setting_handler.set_passive_mode(state)
+            _LOGGER.info("Set pending passive mode state to: %s", state)
+            self.hass.async_create_task(self.process_pending_now())
+
         self.set_charging = _set_charging_state
         self.set_discharging = _set_discharging_state
+        self.set_passive_mode = _set_passive_mode
 
     async def start_main_coordinator(self) -> None:
         """Start the main coordinator scheduling."""

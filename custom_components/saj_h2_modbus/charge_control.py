@@ -176,12 +176,19 @@ class ChargeSettingHandler:
         # Power states
         self._pending_charging_state: Optional[bool] = None
         self._pending_discharging_state: Optional[bool] = None
+        self._pending_passive_mode_state: Optional[int] = None
+        self._app_mode_before_passive: Optional[int] = None
 
         # Locks
         self._charging_state_lock_until: Optional[float] = None
         self._discharging_state_lock_until: Optional[float] = None
 
         self._time_enable_cache: Dict[str, int] = {}  # Cache to avoid duplicate writes
+
+        # Initialize hub pending states
+        self.hub._pending_charging_state = None
+        self.hub._pending_discharging_state = None
+        self.hub._pending_passive_mode_state = None
 
     # ========== HELPER METHODS ==========
 
@@ -199,6 +206,22 @@ class ChargeSettingHandler:
             return 0 <= hours < 24 and 0 <= minutes < 60
         except (ValueError, TypeError):
             return False
+
+    def _capture_app_mode_before_passive(self) -> None:
+        if self._app_mode_before_passive is not None:
+            return
+        current_mode = self.hub.inverter_data.get("AppMode")
+        if current_mode is None:
+            _LOGGER.debug("AppMode value unavailable when capturing passive baseline")
+            return
+        try:
+            self._app_mode_before_passive = int(current_mode)
+            _LOGGER.debug(
+                "Captured AppMode %s before entering passive mode",
+                self._app_mode_before_passive,
+            )
+        except (TypeError, ValueError):
+            _LOGGER.debug("Invalid AppMode %s; skipping capture", current_mode)
 
     async def handle_settings(self, mode: str, label: str) -> None:
         """Handles settings dynamically based on mode (charge1-7 or discharge1-7) with optimized batch processing."""
@@ -410,6 +433,47 @@ class ChargeSettingHandler:
         mode = f"discharge{index}"
         await self.handle_settings(mode, mode)
 
+    async def handle_passive_mode(self) -> bool:
+        desired = self._pending_passive_mode_state
+        if desired is None:
+            return False
+        desired_int = int(desired)
+        ok = await self._write_register_with_backoff(
+            REGISTERS["passive_charge_enable"],
+            desired_int,
+            "passive charge enable (0x3636)",
+        )
+        if not ok:
+            return False
+        self.hub.inverter_data["passive_charge_enable"] = desired_int
+        self._pending_passive_mode_state = None
+        self.hub._pending_passive_mode_state = None
+
+        if desired_int > 0:
+            self._capture_app_mode_before_passive()
+            await self._set_app_mode(3, "passive mode activation")
+        else:
+            restored = False
+            if self._app_mode_before_passive is not None:
+                await self._set_app_mode(
+                    self._app_mode_before_passive,
+                    "restore from passive mode",
+                    force=True,
+                )
+                restored = True
+            if not restored:
+                chg_active = bool(self.hub.inverter_data.get("charging_enabled", 0))
+                dchg_active = bool(self.hub.inverter_data.get("discharging_enabled", 0))
+                await self._update_app_mode_from_states(
+                    charge_enabled=chg_active,
+                    discharge_enabled=dchg_active,
+                    force=True,
+                )
+            self._app_mode_before_passive = None
+
+        self.hub.async_set_updated_data(self.hub.inverter_data)
+        return True
+
     async def _process_simple_setting(self, key: str) -> None:
         """Process a simple setting by looking up its register map."""
         value = self._pending_simple.get(key)
@@ -429,6 +493,12 @@ class ChargeSettingHandler:
 
         if address is None:
             _LOGGER.warning("%s register not configured; skip write", key)
+            return
+
+        # Special handling for passive_charge_enable
+        if key == "passive_charge_enable":
+            self._pending_simple.pop(key, None)
+            self.set_passive_mode(value)
             return
 
         # Use exponential backoff retry
@@ -649,6 +719,7 @@ class ChargeSettingHandler:
 
         # Clear pending state
         self._pending_charging_state = None
+        self.hub._pending_charging_state = None
         _LOGGER.debug("Cleared _pending_charging_state after successful write")
 
         # Get current discharging state from cache (not async call)
@@ -706,6 +777,7 @@ class ChargeSettingHandler:
 
         # Clear pending state
         self._pending_discharging_state = None
+        self.hub._pending_discharging_state = None
         _LOGGER.debug("Cleared _pending_discharging_state after successful write")
 
         # Get current charging state from cache (not async call)
@@ -720,35 +792,34 @@ class ChargeSettingHandler:
 
         return True
 
+    async def _set_app_mode(self, desired_app_mode: int, reason: str, force: bool = False) -> None:
+        current_app_mode = self.hub.inverter_data.get("AppMode")
+        if not force and current_app_mode == desired_app_mode:
+            _LOGGER.debug("AppMode already %s (%s)", desired_app_mode, reason)
+            return
+        ok = await self._write_register_with_backoff(
+            REGISTERS["app_mode"],
+            desired_app_mode,
+            f"AppMode ({reason})",
+        )
+        if ok:
+            self.hub.inverter_data["AppMode"] = desired_app_mode
+        else:
+            _LOGGER.error("Failed to set AppMode to %s (%s)", desired_app_mode, reason)
+
     async def _update_app_mode_from_states(
         self,
         charge_enabled: bool,
         discharge_enabled: bool,
+        force: bool = False,
     ) -> None:
-        """Update AppMode (0x3647) based on charging/discharging states."""
-        desired_app_mode = 1 if (charge_enabled or discharge_enabled) else 0
-
-        current_app_mode = self.hub.inverter_data.get("AppMode")
-
-        if current_app_mode == desired_app_mode:
-            _LOGGER.info(f"AppMode already at {desired_app_mode}, skipping write")
-            return
-
-        _LOGGER.info(
-            "Updating AppMode from %s to %s (charge=%s, discharge=%s)",
-            current_app_mode, desired_app_mode, charge_enabled, discharge_enabled
+        passive_active = self._is_passive_mode_active()
+        desired_app_mode = 3 if passive_active else (1 if (charge_enabled or discharge_enabled) else 0)
+        await self._set_app_mode(
+            desired_app_mode,
+            "state synchronization",
+            force=force,
         )
-
-        ok = await self._write_register_with_backoff(
-            REGISTERS["app_mode"], desired_app_mode, "AppMode"
-        )
-        if ok:
-            _LOGGER.info("Successfully set AppMode to %s", desired_app_mode)
-            self.hub.inverter_data["AppMode"] = desired_app_mode
-        else:
-            _LOGGER.error(
-                "Failed to write AppMode %s", desired_app_mode
-            )
 
     # --- State Setters ---
 
@@ -787,10 +858,27 @@ class ChargeSettingHandler:
 
     def set_charging_state(self, value: bool) -> None:
         self._pending_charging_state = value
+        self.hub._pending_charging_state = value
         self.invalidate_cache()
 
     def set_discharging_state(self, value: bool) -> None:
         self._pending_discharging_state = value
+        self.hub._pending_discharging_state = value
+        self.invalidate_cache()
+
+    def set_passive_mode(self, value: Optional[int]) -> None:
+        try:
+            target = None if value is None else int(value)
+        except (TypeError, ValueError):
+            _LOGGER.error("Invalid passive mode value: %s", value)
+            return
+        if target is not None and target not in (0, 1, 2):
+            _LOGGER.error("Unsupported passive mode target: %s", target)
+            return
+        if target and target > 0:
+            self._capture_app_mode_before_passive()
+        self._pending_passive_mode_state = target
+        self.hub._pending_passive_mode_state = self._pending_passive_mode_state
         self.invalidate_cache()
 
     def invalidate_cache(self) -> None:
@@ -827,6 +915,10 @@ class ChargeSettingHandler:
                 any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
                 for slot in (self._pending_charges + self._pending_discharges)
             )
+
+        # Check passive mode
+        if not has_pending:
+            has_pending = self._pending_passive_mode_state is not None
 
         self._pending_cache = has_pending
         self._pending_cache_valid = True
@@ -871,6 +963,21 @@ class ChargeSettingHandler:
             overlay["discharging_enabled"] = 1 if dchg else 0
         overlay["AppMode"] = app_mode
 
+        passive_pending = self._pending_passive_mode_state
+        if passive_pending is not None:
+            overlay["passive_charge_enable"] = passive_pending
+            if passive_pending > 0:
+                overlay["AppMode"] = 3
+            else:
+                overlay["AppMode"] = (
+                    self._app_mode_before_passive
+                    if self._app_mode_before_passive is not None
+                    else (
+                        1
+                        if overlay.get("charging_enabled") or overlay.get("discharging_enabled")
+                        else 0
+                    )
+                )
         return overlay
 
     # --- Processing Logic (Moved from Hub) ---
@@ -899,6 +1006,13 @@ class ChargeSettingHandler:
                 results.append(("discharging_state", True))
             except Exception as e:
                 _LOGGER.error("Error setting discharging state: %s", e)
+
+        if self._pending_passive_mode_state is not None:
+            try:
+                await self.handle_passive_mode()
+                results.append(("passive_mode", True))
+            except Exception as e:
+                _LOGGER.error("Error setting passive mode: %s", e)
 
         # 2. Slots
         charge_indices = [i for i, s in enumerate(self._pending_charges) if any(s.values())]
