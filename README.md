@@ -111,6 +111,8 @@ Features:
 - Checkbox selection for charging days 
 - Button to enable/disable charging
 
+
+
 For detailed installation instructions, see [SAJ H2 Charge Card Installation](https://github.com/stanus74/saj-h2-lovelace-card)
 
 

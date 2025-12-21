@@ -105,6 +105,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._ha_mqtt_check_interval = 30.0
         self._ha_mqtt_block_until = 0.0
         self._ha_mqtt_error_log_until = 0.0
+        self._ha_mqtt_failure_count = 0
+        self._ha_mqtt_block_base = 30.0
+        self._ha_mqtt_block_max = 600.0
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -140,6 +143,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._cancel_fast_update = None
         self._pending_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
+        self._fast_debug_log_next = 0.0
  
         self._scan_interval = scan_interval
         self._reconnecting = False
@@ -283,7 +287,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return
             
         # Debug log to confirm loop is running
-        if ADVANCED_LOGGING:
+        if self._should_log_fast_debug():
             _LOGGER.debug("Fast update loop triggered")
 
         if self._client is None or not self._client.connected:
@@ -313,20 +317,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     # In ultra fast mode (1s), we only push to MQTT to avoid overloading HA state machine
                     # NOTE: The regular coordinator update (every 60s) will still update these sensors in HA.
                     if not self.ultra_fast_enabled:
-                        for listener in self._fast_listeners:
-                            listener()
-                    elif ADVANCED_LOGGING:
+                        if self._fast_listeners:
+                            for listener in self._fast_listeners:
+                                listener()
+                    elif self._should_log_fast_debug():
                         _LOGGER.debug("Skipping HA entity updates in Ultra Fast mode to save DB")
                     
-                    if ADVANCED_LOGGING:
+                    if self._should_log_fast_debug():
                         _LOGGER.debug(
                             f"Fast update completed: {len(fast_data)} sensors updated "
                             f"(filtered to fast sensors only)"
                         )
                 else:
-                    _LOGGER.debug("Fast update: No fast-poll sensors in result")
+                    if self._should_log_fast_debug():
+                        _LOGGER.debug("Fast update: No fast-poll sensors in result")
             else:
-                if ADVANCED_LOGGING:
+                if self._should_log_fast_debug():
                     _LOGGER.debug("Fast update: Reader returned no data")
 
         except ReconnectionNeededError as e:
@@ -352,6 +358,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 available = False
         self._ha_mqtt_available = available
         self._ha_mqtt_last_check = now
+        if available:
+            self._reset_ha_mqtt_backoff()
         return available
 
     def _publish_fast_data_to_mqtt(self, data: Dict[str, Any]) -> None:
@@ -404,6 +412,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         self._paho_started = True
                     for sensor_key, payload in messages:
                         self._paho_client.publish(f"{base_topic}/{sensor_key}", payload)
+                    self._reset_ha_mqtt_backoff()
                     return
                 except Exception as err:
                     _LOGGER.error("Internal MQTT publish failed: %s", err)
@@ -422,6 +431,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """Publish a single payload via Home Assistant MQTT and handle disabled state."""
         try:
             await mqtt.async_publish(self.hass, topic, payload)
+            self._reset_ha_mqtt_backoff()
         except HomeAssistantError as err:
             self._handle_ha_mqtt_failure(err)
         except Exception as err:  # noqa: BLE001
@@ -431,10 +441,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         now = time.monotonic()
         self._ha_mqtt_available = False
         self._ha_mqtt_last_check = 0.0
-        self._ha_mqtt_block_until = now + 60.0
+        self._ha_mqtt_failure_count += 1
+        backoff = min(self._ha_mqtt_block_base * (2 ** (self._ha_mqtt_failure_count - 1)), self._ha_mqtt_block_max)
+        if self.ultra_fast_enabled:
+            backoff = min(self._ha_mqtt_block_max, backoff * 1.5)
+        self._ha_mqtt_block_until = now + backoff
+        self._ha_mqtt_check_interval = max(30.0, backoff)
+        throttle_until = max(60.0, backoff)
         if now >= self._ha_mqtt_error_log_until:
             _LOGGER.debug("HA MQTT publish skipped (%s)", err)
-            self._ha_mqtt_error_log_until = now + 60.0
+            self._ha_mqtt_error_log_until = now + throttle_until
 
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
@@ -936,3 +952,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def _get_base_topic(self) -> str:
         base = (self.mqtt_topic_prefix or "").rstrip("/")
         return base or "saj"
+
+    def _reset_ha_mqtt_backoff(self) -> None:
+        if self._ha_mqtt_failure_count:
+            self._ha_mqtt_failure_count = 0
+            self._ha_mqtt_check_interval = 30.0
+            self._ha_mqtt_block_until = 0.0
+
+    def _should_log_fast_debug(self) -> bool:
+        if not ADVANCED_LOGGING:
+            return False
+        now = time.monotonic()
+        if now < self._fast_debug_log_next:
+            return False
+        self._fast_debug_log_next = now + 5.0
+        return True
