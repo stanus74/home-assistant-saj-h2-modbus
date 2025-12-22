@@ -333,7 +333,16 @@ class SajH2InverterCard extends HTMLElement {
           slotErrors.push(`Slot ${i+1}: ${missing || 'invalid config'}`);
       }
 
-      const enabled = (timeEnableValue & (1 << i)) !== 0;
+      const sensorEnabled = (timeEnableValue & (1 << i)) !== 0;
+      // Check for pending data on this slot's entities (Optimistic UI)
+      const hasPendingData = (
+          sStart?.attributes?.pending_write === true ||
+          sEnd?.attributes?.pending_write === true ||
+          sPower?.attributes?.pending_write === true ||
+          sMask?.attributes?.pending_write === true
+      );
+      
+      const enabled = sensorEnabled || hasPendingData;
       
       // DEBUG LOGGING per slot
       if (this._debug && i === 0) { // Only log slot 1 to avoid spam
@@ -471,8 +480,19 @@ class SajH2InverterCard extends HTMLElement {
           slotErrors.push(`Slot ${i+1}: ${missing || 'invalid config'}`);
       }
 
+      const sensorEnabled = (timeEnableValue & (1 << i)) !== 0;
+      // Check for pending data on this slot's entities (Optimistic UI)
+      const hasPendingData = (
+          sStart?.attributes?.pending_write === true ||
+          sEnd?.attributes?.pending_write === true ||
+          sPower?.attributes?.pending_write === true ||
+          sMask?.attributes?.pending_write === true
+      );
+      
+      const enabled = sensorEnabled || hasPendingData;
+
       return {
-        index: i, valid, enabled: (timeEnableValue & (1 << i)) !== 0,
+        index: i, valid, enabled: enabled,
         startTime: valid ? sStart.state : '00:00', endTime: valid ? sEnd.state : '00:00',
         power: valid ? parseInt(sPower.state) || 0 : 0, dayMask: valid ? parseInt(sMask.state) || 0 : 0,
         config: slotConfig
