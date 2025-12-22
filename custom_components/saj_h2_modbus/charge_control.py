@@ -1,6 +1,8 @@
 """Optimized charge control with exponential backoff and improved error handling."""
 import asyncio
 import logging
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Any, List, Dict, Tuple, Callable
 
 _LOGGER = logging.getLogger(__name__)
@@ -12,7 +14,7 @@ ADVANCED_LOGGING = False
 MAX_HANDLER_RETRIES = 3
 HANDLER_RETRY_DELAY = 1.0  # seconds
 
-# --- Definitions for Pending Setter ---
+# --- Definitions for Pending Setter (Restored for compatibility) ---
 PENDING_FIELDS: List[tuple[str, str]] = (
     [
         (f"charge{i}_{suffix}", f"charges[{i-1}][{suffix}]")
@@ -47,147 +49,270 @@ PENDING_FIELDS: List[tuple[str, str]] = (
 )
 
 # --- Centralized Modbus Address Definitions ---
-CHARGE_BLOCK_START_ADDRESSES = [0x3606 + i * 3 for i in range(7)]
-DISCHARGE_BLOCK_START_ADDRESSES = [0x361B + i * 3 for i in range(7)]
-
-# --- Register Definitions ---
-REGISTERS = {
-    **{
-        f"charge{i+1}": {
-            "start_time": CHARGE_BLOCK_START_ADDRESSES[i],
-            "end_time": CHARGE_BLOCK_START_ADDRESSES[i] + 1,
-            "day_mask_power": CHARGE_BLOCK_START_ADDRESSES[i] + 2,
-        }
-        for i in range(7)
+MODBUS_ADDRESSES = {
+    "power_states": {
+        "charging": {"address": 0x3604, "label": "charging state"},
+        "discharging": {"address": 0x3605, "label": "discharging state"},
     },
-    **{
-        f"discharge{i+1}": {
-            "start_time": DISCHARGE_BLOCK_START_ADDRESSES[i],
-            "end_time": DISCHARGE_BLOCK_START_ADDRESSES[i] + 1,
-            "day_mask_power": DISCHARGE_BLOCK_START_ADDRESSES[i] + 2,
-        }
-        for i in range(7)
+    "time_enables": {
+        "charge": {"address": 0x3604, "label": "charge time enable"},
+        "discharge": {"address": 0x3605, "label": "discharge time enable"},
     },
-    "export_limit": 0x365A,
-    "app_mode": 0x3647,
-    "charging_state": 0x3604,
-    "charge_time_enable": 0x3604,
-    "discharging_state": 0x3605,
-    "discharge_time_enable": 0x3605,
-    "battery_on_grid_discharge_depth": 0x3644,
-    "battery_off_grid_discharge_depth": 0x3645,
-    "battery_capacity_charge_upper_limit": 0x3646,
-    "battery_charge_power_limit": 0x364D,
-    "battery_discharge_power_limit": 0x364E,
-    "grid_max_charge_power": 0x364F,
-    "grid_max_discharge_power": 0x3650,
-    "passive_charge_enable": 0x3636,
-    "passive_grid_charge_power": 0x3637,
-    "passive_grid_discharge_power": 0x3638,
-    "passive_bat_charge_power": 0x3639,
-    "passive_bat_discharge_power": 0x363A,
+    "slots": {
+        "charge": [
+            {"start": 0x3606 + i * 3, "end": 0x3606 + i * 3 + 1, "day_mask_power": 0x3606 + i * 3 + 2}
+            for i in range(7)
+        ],
+        "discharge": [
+            {"start": 0x361B + i * 3, "end": 0x361B + i * 3 + 1, "day_mask_power": 0x361B + i * 3 + 2}
+            for i in range(7)
+        ],
+    },
+    "simple_settings": {
+        "export_limit": {"address": 0x365A, "label": "export limit"},
+        "app_mode": {"address": 0x3647, "label": "app mode"},
+        "charge_time_enable": {"address": 0x3604, "label": "charge time enable"},
+        "discharge_time_enable": {"address": 0x3605, "label": "discharge time enable"},
+        "battery_on_grid_discharge_depth": {"address": 0x3644, "label": "battery on grid discharge depth"},
+        "battery_off_grid_discharge_depth": {"address": 0x3645, "label": "battery off grid discharge depth"},
+        "battery_capacity_charge_upper_limit": {"address": 0x3646, "label": "battery capacity charge upper limit"},
+        "battery_charge_power_limit": {"address": 0x364D, "label": "battery charge power limit"},
+        "battery_discharge_power_limit": {"address": 0x364E, "label": "battery discharge power limit"},
+        "grid_max_charge_power": {"address": 0x364F, "label": "grid max charge power"},
+        "grid_max_discharge_power": {"address": 0x3650, "label": "grid max discharge power"},
+        "passive_charge_enable": {"address": 0x3636, "label": "passive charge enable"},
+        "passive_grid_charge_power": {"address": 0x3637, "label": "passive grid charge power"},
+        "passive_grid_discharge_power": {"address": 0x3638, "label": "passive grid discharge power"},
+        "passive_bat_charge_power": {"address": 0x3639, "label": "passive battery charge power"},
+        "passive_bat_discharge_power": {"address": 0x363A, "label": "passive battery discharge power"},
+    }
 }
 
-# Mapping of simple pending attributes to their register addresses and labels
-SIMPLE_REGISTER_MAP: Dict[str, Tuple[int, str]] = {
-    "export_limit": (REGISTERS["export_limit"], "export limit"),
-    "app_mode": (REGISTERS["app_mode"], "app mode"),
-    "charge_time_enable": (REGISTERS["charge_time_enable"], "charge time enable"),
-    "discharge_time_enable": (REGISTERS["discharge_time_enable"], "discharge time enable"),
-    "battery_on_grid_discharge_depth": (
-        REGISTERS["battery_on_grid_discharge_depth"],
-        "battery on grid discharge depth",
-    ),
-    "battery_off_grid_discharge_depth": (
-        REGISTERS["battery_off_grid_discharge_depth"],
-        "battery off grid discharge depth",
-    ),
-    "battery_capacity_charge_upper_limit": (
-        REGISTERS["battery_capacity_charge_upper_limit"],
-        "battery capacity charge upper limit",
-    ),
-    "battery_charge_power_limit": (
-        REGISTERS["battery_charge_power_limit"],
-        "battery charge power limit",
-    ),
-    "battery_discharge_power_limit": (
-        REGISTERS["battery_discharge_power_limit"],
-        "battery discharge power limit",
-    ),
-    "grid_max_charge_power": (
-        REGISTERS["grid_max_charge_power"],
-        "grid max charge power",
-    ),
-    "grid_max_discharge_power": (
-        REGISTERS["grid_max_discharge_power"],
-        "grid max discharge power",
-    ),
-    "passive_charge_enable": (
-        REGISTERS["passive_charge_enable"],
-        "passive charge enable",
-    ),
-    "passive_grid_charge_power": (
-        REGISTERS["passive_grid_charge_power"],
-        "passive grid charge power",
-    ),
-    "passive_grid_discharge_power": (
-        REGISTERS["passive_grid_discharge_power"],
-        "passive grid discharge power",
-    ),
-    "passive_bat_charge_power": (
-        REGISTERS["passive_bat_charge_power"],
-        "passive battery charge power",
-    ),
-    "passive_bat_discharge_power": (
-        REGISTERS["passive_bat_discharge_power"],
-        "passive battery discharge power",
-    ),
-}
+class CommandType(Enum):
+    CHARGE_SLOT = "charge_slot"
+    DISCHARGE_SLOT = "discharge_slot"
+    CHARGING_STATE = "charging_state"
+    DISCHARGING_STATE = "discharging_state"
+    PASSIVE_MODE = "passive_mode"
+    SIMPLE_SETTING = "simple_setting"
 
+@dataclass
+class Command:
+    type: CommandType
+    payload: dict
 
 class ChargeSettingHandler:
-    """Handler for all Charge/Discharge-Settings."""
+    """Handler for all Charge/Discharge-Settings using a Command Queue."""
 
     def __init__(self, hub) -> None:
         self.hub = hub
+        self._command_queue: asyncio.Queue = asyncio.Queue()
+        self._is_processing = False
 
-        # --- Pending State Management (Moved from Hub) ---
-        self._pending_cache: Optional[bool] = None
-        self._pending_cache_valid: bool = False
-
-        # Simple attributes storage
-        self._pending_simple: Dict[str, Any] = {}
-
-        # Charge/Discharge slots
-        self._pending_charges = [
-            {key: None for key in CHARGE_PENDING_SUFFIXES}
-            for _ in range(7)
-        ]
-        self._pending_discharges = [
-            {key: None for key in CHARGE_PENDING_SUFFIXES}
-            for _ in range(7)
-        ]
-
-        # Time enable masks
-        self._pending_charge_time_enable: Optional[int] = None
-        self._pending_discharge_time_enable: Optional[int] = None
-
-        # Power states
-        self._pending_charging_state: Optional[bool] = None
-        self._pending_discharging_state: Optional[bool] = None
-        self._pending_passive_mode_state: Optional[int] = None
+        # Locks & Caches
         self._app_mode_before_passive: Optional[int] = None
-
-        # Locks
         self._charging_state_lock_until: Optional[float] = None
         self._discharging_state_lock_until: Optional[float] = None
+        self._time_enable_cache: Dict[str, int] = {}
 
-        self._time_enable_cache: Dict[str, int] = {}  # Cache to avoid duplicate writes
-
-        # Initialize hub pending states
+        # Initialize hub pending states (kept for compatibility if hub accesses them directly)
         self.hub._pending_charging_state = None
         self.hub._pending_discharging_state = None
         self.hub._pending_passive_mode_state = None
+
+    # ========== QUEUE MANAGEMENT ==========
+
+    async def queue_command(self, command: Command):
+        """Adds a new command to the queue and starts processing if needed."""
+        await self._command_queue.put(command)
+        if not self._is_processing:
+            self._is_processing = True
+            asyncio.create_task(self._process_queue())
+
+    async def _process_queue(self):
+        """Processes the command queue."""
+        while not self._command_queue.empty():
+            command = await self._command_queue.get()
+            try:
+                await self._execute_command(command)
+            except Exception as e:
+                _LOGGER.error("Error executing command %s: %s", command.type, e, exc_info=True)
+            
+            # Small delay to prevent bus saturation
+            await asyncio.sleep(0.1)
+            
+        self._is_processing = False
+
+    async def _execute_command(self, command: Command):
+        """Executes a single command based on its type."""
+        if command.type == CommandType.SIMPLE_SETTING:
+            await self._handle_simple_setting(command.payload)
+        elif command.type == CommandType.CHARGE_SLOT:
+            await self._handle_slot_setting("charge", command.payload)
+        elif command.type == CommandType.DISCHARGE_SLOT:
+            await self._handle_slot_setting("discharge", command.payload)
+        elif command.type == CommandType.CHARGING_STATE:
+            await self._handle_charging_state(command.payload.get("value"))
+        elif command.type == CommandType.DISCHARGING_STATE:
+            await self._handle_discharging_state(command.payload.get("value"))
+        elif command.type == CommandType.PASSIVE_MODE:
+            await self._handle_passive_mode(command.payload.get("value"))
+
+    # ========== COMMAND HANDLERS ==========
+
+    async def _handle_simple_setting(self, payload: dict) -> None:
+        key = payload.get("key")
+        value = payload.get("value")
+        
+        setting_def = MODBUS_ADDRESSES["simple_settings"].get(key)
+        if not setting_def:
+            _LOGGER.warning("Unknown simple setting: %s", key)
+            return
+
+        # Special handling for passive_charge_enable if it comes through simple settings
+        if key == "passive_charge_enable":
+            await self._handle_passive_mode(value)
+            return
+
+        await self._write_register_with_backoff(setting_def["address"], int(value), setting_def["label"])
+
+    async def _handle_slot_setting(self, mode_type: str, payload: dict) -> None:
+        """Handles settings for a specific slot (charge/discharge)."""
+        index = payload.get("index") # 0-based index
+        field = payload.get("field")
+        value = payload.get("value")
+
+        if index is None or index < 0 or index > 6:
+            _LOGGER.error("Invalid slot index: %s", index)
+            return
+
+        slot_defs = MODBUS_ADDRESSES["slots"][mode_type][index]
+        label = f"{mode_type}{index+1}"
+
+        if field == "start":
+            if self._is_valid_time_format(value):
+                await self._write_register_with_backoff(slot_defs["start"], self._time_to_register_value(value), f"{label} start")
+            else:
+                _LOGGER.error("Invalid start time format for %s: %s", label, value)
+        
+        elif field == "end":
+            if self._is_valid_time_format(value):
+                await self._write_register_with_backoff(slot_defs["end"], self._time_to_register_value(value), f"{label} end")
+            else:
+                _LOGGER.error("Invalid end time format for %s: %s", label, value)
+        
+        elif field in ["day_mask", "power_percent"]:
+            # For day_mask and power_percent, we need read-modify-write
+            await self._update_day_mask_and_power(
+                slot_defs["day_mask_power"],
+                value if field == "day_mask" else None,
+                value if field == "power_percent" else None,
+                label
+            )
+
+        # Handle time_enable for slots 2-7 (index 1-6)
+        if index > 0:
+            await self._ensure_slot_enabled(mode_type, index, label)
+
+    async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str):
+        """Ensures the time_enable bit is set for the given slot."""
+        enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
+        address = enable_def["address"]
+        cache_key = f"{mode_type}_time_enable"
+
+        # Read current
+        current_regs = await self.hub._read_registers(address, 1)
+        if not current_regs:
+            return
+
+        current_mask = current_regs[0]
+        new_mask = current_mask | (1 << index)
+
+        if cache_key in self._time_enable_cache and self._time_enable_cache[cache_key] == new_mask:
+            return
+
+        if new_mask != current_mask:
+            _LOGGER.info("Enabling %s in time_enable: %s -> %s", label, bin(current_mask), bin(new_mask))
+            if await self._write_register_with_backoff(address, new_mask, f"{label} time_enable"):
+                self._time_enable_cache[cache_key] = new_mask
+                # Update hub data
+                key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
+                self.hub.inverter_data[key] = new_mask
+                self.hub.async_set_updated_data(self.hub.inverter_data)
+
+    async def _handle_charging_state(self, value: bool) -> None:
+        addr = MODBUS_ADDRESSES["power_states"]["charging"]["address"]
+        write_value = 1 if value else 0
+        
+        try:
+            if await self._write_register_with_backoff(addr, write_value, "charging state"):
+                self.hub.inverter_data["charging_enabled"] = write_value
+                self.hub.inverter_data["charge_time_enable"] = write_value
+                self._time_enable_cache["charge_time_enable"] = write_value
+                
+                # Lock
+                import time as time_module
+                self._charging_state_lock_until = time_module.monotonic() + 10.0
+                
+                # Update AppMode
+                dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
+                await self._update_app_mode_from_states(charge_enabled=value, discharge_enabled=dchg)
+                self.hub.async_set_updated_data(self.hub.inverter_data)
+        finally:
+            # Clear pending state regardless of success/failure to avoid stuck UI
+            self.hub._pending_charging_state = None
+
+    async def _handle_discharging_state(self, value: bool) -> None:
+        addr = MODBUS_ADDRESSES["power_states"]["discharging"]["address"]
+        write_value = 1 if value else 0 # Logic inverted in original? Original: 0 if not desired else 1 -> same as 1 if desired else 0
+        # Wait, original: write_value = 0 if not desired else 1. Yes, same.
+        
+        try:
+            if await self._write_register_with_backoff(addr, write_value, "discharging state"):
+                self.hub.inverter_data["discharging_enabled"] = write_value
+                self.hub.inverter_data["discharge_time_enable"] = write_value
+                self._time_enable_cache["discharge_time_enable"] = write_value
+                
+                # Lock
+                import time as time_module
+                self._discharging_state_lock_until = time_module.monotonic() + 10.0
+                
+                # Update AppMode
+                chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
+                await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=value)
+                self.hub.async_set_updated_data(self.hub.inverter_data)
+        finally:
+            # Clear pending state regardless of success/failure
+            self.hub._pending_discharging_state = None
+
+    async def _handle_passive_mode(self, value: Optional[int]) -> None:
+        if value is None: return
+        desired_int = int(value)
+        
+        addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
+        try:
+            if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
+                self.hub.inverter_data["passive_charge_enable"] = desired_int
+                
+                if desired_int > 0:
+                    self._capture_app_mode_before_passive()
+                    await self._set_app_mode(3, "passive mode activation")
+                else:
+                    restored = False
+                    if self._app_mode_before_passive is not None:
+                        await self._set_app_mode(self._app_mode_before_passive, "restore from passive mode", force=True)
+                        restored = True
+                    
+                    if not restored:
+                        chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
+                        dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
+                        await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
+                    self._app_mode_before_passive = None
+                
+                self.hub.async_set_updated_data(self.hub.inverter_data)
+        finally:
+            # Clear pending state
+            self.hub._pending_passive_mode_state = None
 
     # ========== HELPER METHODS ==========
 
@@ -195,745 +320,144 @@ class ChargeSettingHandler:
         """Validates time format HH:MM."""
         if not isinstance(time_str, str):
             return False
-
         parts = time_str.split(":")
         if len(parts) != 2:
             return False
-
         try:
             hours, minutes = map(int, parts)
             return 0 <= hours < 24 and 0 <= minutes < 60
         except (ValueError, TypeError):
             return False
 
-    def _capture_app_mode_before_passive(self) -> None:
-        if self._app_mode_before_passive is not None:
-            return
-        current_mode = self.hub.inverter_data.get("AppMode")
-        if current_mode is None:
-            _LOGGER.debug("AppMode value unavailable when capturing passive baseline")
-            return
-        try:
-            self._app_mode_before_passive = int(current_mode)
-            _LOGGER.debug(
-                "Captured AppMode %s before entering passive mode",
-                self._app_mode_before_passive,
-            )
-        except (TypeError, ValueError):
-            _LOGGER.debug("Invalid AppMode %s; skipping capture", current_mode)
-
-    async def handle_settings(self, mode: str, label: str) -> None:
-        """Handles settings dynamically based on mode (charge1-7 or discharge1-7) with optimized batch processing."""
-        try:
-            registers = REGISTERS[mode]
-
-            # Determine if this is a charge or discharge slot
-            if mode.startswith("charge"):
-                index = int(mode.replace("charge", "")) - 1
-                slot_pending = self._pending_charges[index]
-                is_charge = True
-                time_enable_entity_id = REGISTERS["charge_time_enable"]
-            else:  # discharge
-                index = int(mode.replace("discharge", "")) - 1
-                slot_pending = self._pending_discharges[index]
-                is_charge = False
-                time_enable_entity_id = REGISTERS["discharge_time_enable"]
-
-            start_value = slot_pending.get("start")
-            end_value = slot_pending.get("end")
-            day_mask_value = slot_pending.get("day_mask")
-            power_percent_value = slot_pending.get("power_percent")
-
-            # Only write if there are pending values for this slot
-            if not any(v is not None for v in [start_value, end_value, day_mask_value, power_percent_value]):
-                return
-
-            # Batch write operations for better performance
-            write_operations = []
-
-            # Add start and end times if available
-            if start_value is not None:
-                if not self._is_valid_time_format(start_value):
-                    _LOGGER.error(
-                        "Invalid time format for start (%s) of %s.",
-                        start_value, label
-                    )
-                else:
-                    _LOGGER.debug("Adding start time: %s", start_value)
-                    write_operations.append((registers["start_time"], self._time_to_register_value(start_value), f"{label} start"))
-
-            if end_value is not None:
-                if not self._is_valid_time_format(end_value):
-                    _LOGGER.error(
-                        "Invalid time format for end (%s) of %s.",
-                        end_value, label
-                    )
-                else:
-                    _LOGGER.debug("Adding end time: %s", end_value)
-                    write_operations.append((registers["end_time"], self._time_to_register_value(end_value), f"{label} end"))
-
-            # Handle day mask and power percent
-            if "day_mask_power" in registers:
-                # Read current value from device to ensure we have the latest state
-                # This is crucial for read-modify-write operations on packed registers
-                current_regs = await self.hub._read_registers(registers["day_mask_power"], 1)
-                if current_regs:
-                    cached_day_mask_power = current_regs[0]
-                    # Update cache to keep it in sync
-                    self.hub.inverter_data[f"{mode}_day_mask_power"] = cached_day_mask_power
-                else:
-                    # Fallback to cache if read fails
-                    cached_day_mask_power = self.hub.inverter_data.get(f"{mode}_day_mask_power", 0)
-                
-                # Determine effective day mask
-                if day_mask_value is None:
-                    if cached_day_mask_power == 0:
-                        # If register is uninitialized (0), default to 127 (all days)
-                        effective_day_mask = 127
-                    else:
-                        effective_day_mask = (cached_day_mask_power >> 8) & 0xFF
-                else:
-                    effective_day_mask = day_mask_value
-
-                # Determine effective power percent
-                if power_percent_value is None:
-                    if cached_day_mask_power == 0:
-                         # If register is uninitialized (0), default to 10%
-                         effective_power_percent = 10
-                         _LOGGER.info("Defaulting power to 10%% for uninitialized slot %s", label)
-                    else:
-                        effective_power_percent = cached_day_mask_power & 0xFF
-                elif not (0 <= power_percent_value <= 100):
-                    _LOGGER.error(
-                        "Invalid power range for %s: %s%%. Expected 0-100.",
-                        label, power_percent_value
-                    )
-                    effective_power_percent = cached_day_mask_power & 0xFF
-                else:
-                    effective_power_percent = power_percent_value
-
-                day_mask_power_value = (effective_day_mask << 8) | effective_power_percent
-                
-                if day_mask_power_value != cached_day_mask_power:
-                    _LOGGER.debug("Adding day_mask_power update for %s", label)
-                    write_operations.append((
-                        registers["day_mask_power"],
-                        day_mask_power_value,
-                        f"{label} day_mask_power"
-                    ))
-            else:
-                _LOGGER.warning("No day_mask_power register found for %s", mode)
-
-            # Execute all write operations in parallel where possible
-            if write_operations:
-                _LOGGER.debug(
-                    "Executing %d write operations for %s",
-                    len(write_operations), label
-                )
-
-                # Write all operations
-                for address, value, label in write_operations:
-                    await self._write_register_with_backoff(address, value, label)
-
-                # Reset pending values for this specific slot
-                self._reset_pending_values(mode)
-
-                # Handle time_enable separately for slots 2-7
-                if index > 0:  # index 0 = Slot 1, skip it
-                    cache_key = f"{'charge' if is_charge else 'discharge'}_time_enable"
-
-                    # Add delay to allow inverter to process previous writes
-                    await asyncio.sleep(1.0)
-
-                    # Read current time_enable value
-                    current_regs = await self.hub._read_registers(time_enable_entity_id, 1)
-                    if not current_regs:
-                        _LOGGER.error(
-                            "Failed to read current time_enable for %s", label
-                        )
-                        return
-
-                    current_mask = current_regs[0]
-                    # IMPORTANT: Bit ADD (OR), not replace!
-                    new_mask = current_mask | (1 << index)
-
-                    # Check cache to avoid duplicate writes
-                    if cache_key in self._time_enable_cache and self._time_enable_cache[cache_key] == new_mask:
-                        return
-
-                    if new_mask == current_mask:
-                        # Update cache even if no write needed
-                        self._time_enable_cache[cache_key] = new_mask
-                        return
-
-                    _LOGGER.info(
-                        "Enabling %s in time_enable register: %s (binary: %s) → %s (binary: %s)",
-                        label, current_mask, bin(current_mask), new_mask, bin(new_mask)
-                    )
-                    write_ok = await self._write_register_with_backoff(
-                        time_enable_entity_id, new_mask, f"{label} time_enable"
-                    )
-
-                    if not write_ok:
-                        _LOGGER.error(
-                            "Failed to write time_enable for %s", label
-                        )
-                        return
-
-                    # Update cache immediately after successful write
-                    self._time_enable_cache[cache_key] = new_mask
-
-                    # Wait for write to complete
-                    await asyncio.sleep(0.3)
-
-                    # IMPORTANT: Read back to confirm
-                    verify_regs = await self.hub._read_registers(time_enable_entity_id, 1)
-                    if not verify_regs:
-                        _LOGGER.error(
-                            "Failed to verify time_enable write for %s", label
-                        )
-                        return
-
-                    actual_value = verify_regs[0]
-                    _LOGGER.info(
-                        "Verified time_enable after write: %s (binary: %s) (expected: %s)",
-                        actual_value, bin(actual_value), new_mask
-                    )
-
-                    # Update cache with ACTUAL value from inverter
-                    if is_charge:
-                        self.hub.inverter_data["charge_time_enable"] = actual_value
-                    else:
-                        self.hub.inverter_data["discharge_time_enable"] = actual_value
-
-                    # Force immediate data update to UI
-                    self.hub.async_set_updated_data(self.hub.inverter_data)
-
-                    if actual_value != new_mask:
-                        _LOGGER.warning(
-                            "Inverter returned different value! Wrote %s, got %s",
-                            new_mask, actual_value
-                        )
-                        # Update cache with actual value from inverter
-                        self._time_enable_cache[cache_key] = actual_value
-
-        except Exception as e:
-            _LOGGER.error(
-                "Error handling %s settings: %s", label, e, exc_info=True
-            )
-
-    async def handle_charge_settings_by_index(self, index: int) -> None:
-        """Handle charge settings for a specific slot index (1-7)."""
-        mode = f"charge{index}"
-        await self.handle_settings(mode, mode)
-
-    async def handle_discharge_settings_by_index(self, index: int) -> None:
-        """Handle discharge settings for a specific slot index (1-7)."""
-        mode = f"discharge{index}"
-        await self.handle_settings(mode, mode)
-
-    async def handle_passive_mode(self) -> bool:
-        desired = self._pending_passive_mode_state
-        if desired is None:
-            return False
-        desired_int = int(desired)
-        ok = await self._write_register_with_backoff(
-            REGISTERS["passive_charge_enable"],
-            desired_int,
-            "passive charge enable (0x3636)",
-        )
-        if not ok:
-            return False
-        self.hub.inverter_data["passive_charge_enable"] = desired_int
-        self._pending_passive_mode_state = None
-        self.hub._pending_passive_mode_state = None
-
-        if desired_int > 0:
-            self._capture_app_mode_before_passive()
-            await self._set_app_mode(3, "passive mode activation")
-        else:
-            restored = False
-            if self._app_mode_before_passive is not None:
-                await self._set_app_mode(
-                    self._app_mode_before_passive,
-                    "restore from passive mode",
-                    force=True,
-                )
-                restored = True
-            if not restored:
-                chg_active = bool(self.hub.inverter_data.get("charging_enabled", 0))
-                dchg_active = bool(self.hub.inverter_data.get("discharging_enabled", 0))
-                await self._update_app_mode_from_states(
-                    charge_enabled=chg_active,
-                    discharge_enabled=dchg_active,
-                    force=True,
-                )
-            self._app_mode_before_passive = None
-
-        self.hub.async_set_updated_data(self.hub.inverter_data)
-        return True
-
-    async def _process_simple_setting(self, key: str) -> None:
-        """Process a simple setting by looking up its register map."""
-        value = self._pending_simple.get(key)
-        
-        if value is None:
-            _LOGGER.debug("Skip %s: no pending value", key)
-            return
-
-        if key not in SIMPLE_REGISTER_MAP:
-            _LOGGER.warning("No register map found for pending key: %s", key)
-            # Remove unhandled key to prevent stuck pending state
-            if key in self._pending_simple:
-                del self._pending_simple[key]
-            return
-
-        address, label = SIMPLE_REGISTER_MAP[key]
-
-        if address is None:
-            _LOGGER.warning("%s register not configured; skip write", key)
-            return
-
-        # Special handling for passive_charge_enable
-        if key == "passive_charge_enable":
-            self._pending_simple.pop(key, None)
-            self.set_passive_mode(value)
-            return
-
-        # Use exponential backoff retry
-        ok = await self._write_register_with_backoff(address, int(value), label)
-        if ok:
-            try:
-                # Clear pending value
-                if key in self._pending_simple:
-                    del self._pending_simple[key]
-            except Exception:
-                pass
-        else:
-            _LOGGER.error(
-                "Failed to write %s after %d attempts with exponential backoff",
-                label, MAX_HANDLER_RETRIES
-            )
-
-    def _reset_pending_values(self, mode: str) -> None:
-        """Reset pending values for a charge or discharge slot."""
-        attributes = ["start", "end", "day_mask", "power_percent"]
-        if mode.startswith("charge"):
-            index = int(mode.replace("charge", "")) - 1
-            for attr in attributes:
-                self._pending_charges[index][attr] = None
-        elif mode.startswith("discharge"):
-            index = int(mode.replace("discharge", "")) - 1
-            for attr in attributes:
-                self._pending_discharges[index][attr] = None
-
-    # ========== HELPER METHODS (Reading/Writing Registers) ==========
-    
-    async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
-        """Write register with exponential backoff retry."""
-        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
-            try:
-                ok = await self.hub._write_register(address, int(value))
-                if ok:
-                    _LOGGER.info(
-                        "Successfully wrote %s=%s to 0x%04x (attempt %d/%d)",
-                        label, value, address, attempt, MAX_HANDLER_RETRIES
-                    )
-                    return True
-                else:
-                    _LOGGER.warning(
-                        "Failed to write %s (attempt %d/%d)",
-                        label, attempt, MAX_HANDLER_RETRIES
-                    )
-            except Exception as e:
-                _LOGGER.error(
-                    "Error writing %s (attempt %d/%d): %s",
-                    label, attempt, MAX_HANDLER_RETRIES, e
-                )
-
-            # Exponential backoff: 1s, 2s, 4s
-            if attempt < MAX_HANDLER_RETRIES:
-                delay = 2 ** (attempt - 1)
-                _LOGGER.debug(
-                    "Waiting %.1fs before retry (exponential backoff)", delay
-                )
-                await asyncio.sleep(delay)
-
-        return False
-
-    async def _update_day_mask_and_power(
-        self,
-        address: int,
-        day_mask: Optional[int],
-        power_percent: Optional[int],
-        label: str,
-    ) -> None:
-        """Updates the day mask and power percentage, reading current values if not provided."""
-        try:
-            regs = await self.hub._read_registers(address)
-            if not regs:
-                _LOGGER.error(
-                    "Failed to read current day_mask_power for %s at address %s. No registers returned.",
-                    label, hex(address)
-                )
-                return
-
-            current_value = regs[0]
-            current_day_mask = (current_value >> 8) & 0xFF
-            current_power_percent = current_value & 0xFF
-
-            # Use current day_mask if not provided
-            new_day_mask = current_day_mask if day_mask is None else day_mask
-
-            # Handle power_percent:
-            # 1. If explicitly provided, use it
-            # 2. If register is uninitialized (0/0), use default 10%
-            # 3. Otherwise preserve current value
-            if power_percent is not None:
-                new_power_percent = power_percent
-            elif current_value == 0:
-                # Register never initialized - use default 10% to make slot active
-                new_power_percent = 10
-                _LOGGER.info(
-                    "Register for %s uninitialized, using default power_percent: 10%%",
-                    label
-                )
-            else:
-                # Preserve existing power_percent
-                new_power_percent = current_power_percent
-
-            combined_value = (new_day_mask << 8) | new_power_percent
-
-            if combined_value == current_value:
-                _LOGGER.info(
-                    "No change detected for %s day_mask_power. Current value: %s. Not writing to Modbus.",
-                    label, current_value
-                )
-                return
-
-            success = await self._write_register_with_backoff(
-                address, combined_value, f"{label} day_mask_power"
-            )
-
-            if success:
-                _LOGGER.info(
-                    "Successfully set %s day_mask_power to: %s (day_mask: %s, power_percent: %s)",
-                    label, combined_value, new_day_mask, new_power_percent
-                )
-            else:
-                _LOGGER.error(
-                    "Failed to write %s day_mask_power", label
-                )
-        except Exception as e:
-            _LOGGER.error(
-                "Error updating day mask and power for %s: %s", label, e
-            )
-
     def _time_to_register_value(self, time_str: str) -> int:
         """Convert time string HH:MM to register value."""
         parts = time_str.split(":")
         if len(parts) != 2:
             return 0
-
         try:
             hours, minutes = map(int, parts)
             return (hours << 8) | minutes
         except (ValueError, TypeError):
             return 0
 
-    async def _write_time_register(
-        self, address: int, time_str: str, label: str
-    ) -> None:
-        """Writes a time register in HH:MM format with exponential backoff retry."""
-        parts = time_str.split(":")
-        if len(parts) != 2:
-            _LOGGER.error(
-                "Invalid time format for %s: %s", label, time_str
-            )
+    def _capture_app_mode_before_passive(self) -> None:
+        if self._app_mode_before_passive is not None:
             return
-
-        try:
-            hours, minutes = map(int, parts)
-        except ValueError:
-            _LOGGER.error(
-                "Non-integer time parts for %s: %s", label, time_str
-            )
-            return
-
-        value = (hours << 8) | minutes
-        success = await self._write_register_with_backoff(address, value, label)
-        if success:
-            _LOGGER.info(
-                "Successfully set %s: %s", label, time_str
-            )
-        else:
-            _LOGGER.error(
-                "Failed to write %s", label
-            )
-
-    # ========== POWER STATE HANDLER (Charging/Discharging) ==========
-    
-    async def handle_charging_state(self) -> bool:
-        """Handles the pending charging state with optimized time_enable handling."""
-        _LOGGER.debug("handle_charging_state called")
-        desired = self._pending_charging_state
-        if desired is None:
-            _LOGGER.debug("No pending charging state to handle")
-            return False
-
-        _LOGGER.debug(f"Processing pending charging state: {desired}")
-
-        addr = REGISTERS["charging_state"]
-        write_value = 1 if desired else 0
-
-        _LOGGER.info(
-            "Charging turned %s, writing %s to register 0x3604",
-            "ON" if desired else "OFF", write_value
-        )
-
-        ok = await self._write_register_with_backoff(
-            addr, write_value, "charging state (0x3604)"
-        )
-        if not ok:
-            _LOGGER.error(f"Failed to write {write_value} to register 0x3604")
-            return False
-
-        _LOGGER.info("Successfully wrote %s to register 0x3604", write_value)
-        self.hub.inverter_data["charging_enabled"] = write_value
-
-        # Update charge_time_enable in cache to reflect new state (same register)
-        self.hub.inverter_data["charge_time_enable"] = write_value
-
-        # Update time_enable cache to avoid duplicate writes
-        self._time_enable_cache["charge_time_enable"] = write_value
-
-        # Set locks to prevent overwrites for next 10 seconds
-        import time as time_module
-        self._charging_state_lock_until = time_module.monotonic() + 10.0
-        self._charge_time_enable_lock_until = time_module.monotonic() + 10.0
-        _LOGGER.debug(
-            "[PENDING DEBUG] Updated cache after charging state: charge_time_enable = %s (LOCKED for 10s)",
-            write_value
-        )
-
-        # Clear pending state
-        self._pending_charging_state = None
-        self.hub._pending_charging_state = None
-        _LOGGER.debug("Cleared _pending_charging_state after successful write")
-
-        # Get current discharging state from cache (not async call)
-        dchg_value = self.hub.inverter_data.get("discharging_enabled", 0)
-        dchg = bool(dchg_value > 0)
-
-        # Update AppMode: 1 if ANY is enabled, 0 if BOTH are disabled
-        await self._update_app_mode_from_states(charge_enabled=desired, discharge_enabled=dchg)
-
-        # Force immediate data update to UI
-        self.hub.async_set_updated_data(self.hub.inverter_data)
-
-        return True
-
-    async def handle_discharging_state(self) -> bool:
-        """Handles the pending discharging state with optimized time_enable handling."""
-        desired = self._pending_discharging_state
-        if desired is None:
-            return False
-
-        _LOGGER.debug(f"Processing discharging state change: {desired}")
-
-        addr = REGISTERS["discharging_state"]
-        write_value = 0 if not desired else 1
-
-        _LOGGER.info(
-            "Discharging turned %s, writing %s to register 0x3605",
-            "OFF" if not desired else "ON", write_value
-        )
-
-        ok = await self._write_register_with_backoff(
-            addr, write_value, "discharging state (0x3605)"
-        )
-        if not ok:
-            _LOGGER.error(f"Failed to write {write_value} to register 0x3605")
-            return False
-
-        _LOGGER.info("Successfully wrote %s to register 0x3605", write_value)
-        self.hub.inverter_data["discharging_enabled"] = write_value
-
-        # Update discharge_time_enable in cache to reflect new state (same register)
-        self.hub.inverter_data["discharge_time_enable"] = write_value
-
-        # Update time_enable cache to avoid duplicate writes
-        self._time_enable_cache["discharge_time_enable"] = write_value
-
-        # Set locks to prevent overwrites for next 10 seconds
-        import time as time_module
-        self._discharging_state_lock_until = time_module.monotonic() + 10.0
-        self._discharge_time_enable_lock_until = time_module.monotonic() + 10.0
-        _LOGGER.debug(
-            "[PENDING DEBUG] Updated cache after discharging state: discharge_time_enable = %s (LOCKED for 10s)",
-            write_value
-        )
-
-        # Clear pending state
-        self._pending_discharging_state = None
-        self.hub._pending_discharging_state = None
-        _LOGGER.debug("Cleared _pending_discharging_state after successful write")
-
-        # Get current charging state from cache (not async call)
-        chg_value = self.hub.inverter_data.get("charging_enabled", 0)
-        chg = bool(chg_value > 0)
-
-        # Update AppMode: 1 if ANY is enabled, 0 if BOTH are disabled
-        await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=desired)
-
-        # Force immediate data update to UI
-        self.hub.async_set_updated_data(self.hub.inverter_data)
-
-        return True
+        current_mode = self.hub.inverter_data.get("AppMode")
+        if current_mode is not None:
+            try:
+                self._app_mode_before_passive = int(current_mode)
+            except (TypeError, ValueError):
+                pass
 
     async def _set_app_mode(self, desired_app_mode: int, reason: str, force: bool = False) -> None:
         current_app_mode = self.hub.inverter_data.get("AppMode")
         if not force and current_app_mode == desired_app_mode:
-            _LOGGER.debug("AppMode already %s (%s)", desired_app_mode, reason)
             return
-        ok = await self._write_register_with_backoff(
-            REGISTERS["app_mode"],
-            desired_app_mode,
-            f"AppMode ({reason})",
-        )
-        if ok:
-            self.hub.inverter_data["AppMode"] = desired_app_mode
-        else:
-            _LOGGER.error("Failed to set AppMode to %s (%s)", desired_app_mode, reason)
-
-    async def _update_app_mode_from_states(
-        self,
-        charge_enabled: bool,
-        discharge_enabled: bool,
-        force: bool = False,
-    ) -> None:
-        passive_active = self._is_passive_mode_active()
-        desired_app_mode = 3 if passive_active else (1 if (charge_enabled or discharge_enabled) else 0)
-        await self._set_app_mode(
-            desired_app_mode,
-            "state synchronization",
-            force=force,
-        )
-
-    def _is_passive_mode_active(self) -> bool:
-        """Check if passive mode is currently active or pending."""
-        # Check pending first
-        if self._pending_passive_mode_state is not None:
-            return self._pending_passive_mode_state > 0
         
-        # Check current data
-        val = self.hub.inverter_data.get("passive_charge_enable", 0)
-        return int(val) > 0
+        addr = MODBUS_ADDRESSES["simple_settings"]["app_mode"]["address"]
+        if await self._write_register_with_backoff(addr, desired_app_mode, f"AppMode ({reason})"):
+            self.hub.inverter_data["AppMode"] = desired_app_mode
 
-    # --- State Setters ---
+    async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
+        passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
+        desired_app_mode = 3 if passive_active else (1 if (charge_enabled or discharge_enabled) else 0)
+        await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
+
+    async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
+        """Write register with exponential backoff retry."""
+        for attempt in range(1, MAX_HANDLER_RETRIES + 1):
+            try:
+                ok = await self.hub._write_register(address, int(value))
+                if ok:
+                    _LOGGER.info("Successfully wrote %s=%s to 0x%04x", label, value, address)
+                    return True
+            except Exception as e:
+                _LOGGER.error("Error writing %s (attempt %d/%d): %s", label, attempt, MAX_HANDLER_RETRIES, e)
+
+            if attempt < MAX_HANDLER_RETRIES:
+                await asyncio.sleep(2 ** (attempt - 1))
+        return False
+
+    async def _update_day_mask_and_power(self, address: int, day_mask: Optional[int], power_percent: Optional[int], label: str) -> None:
+        """Updates the day mask and power percentage, reading current values if not provided."""
+        try:
+            regs = await self.hub._read_registers(address)
+            if not regs:
+                return
+
+            current_value = regs[0]
+            current_day_mask = (current_value >> 8) & 0xFF
+            current_power_percent = current_value & 0xFF
+
+            new_day_mask = current_day_mask if day_mask is None else day_mask
+            
+            if power_percent is not None:
+                new_power_percent = power_percent
+            elif current_value == 0:
+                new_power_percent = 10 # Default
+            else:
+                new_power_percent = current_power_percent
+
+            combined_value = (new_day_mask << 8) | new_power_percent
+
+            if combined_value != current_value:
+                await self._write_register_with_backoff(address, combined_value, f"{label} day_mask_power")
+        except Exception as e:
+            _LOGGER.error("Error updating day mask and power for %s: %s", label, e)
+
+    # --- Public API (Adapters to Queue) ---
 
     def set_pending(self, key: str, value: Any) -> None:
-        """Generic setter for pending values."""
+        """Generic setter that queues commands."""
         # Handle array-based keys (e.g. charges[0][start])
         if "[" in key:
-            # Parse charges[0][start] -> ['charges', '0', 'start']
             parts = key.replace("]", "").split("[")
-            
             if len(parts) == 3:
                 base = parts[0]
                 try:
                     idx = int(parts[1])
                     field = parts[2]
                 except ValueError:
-                    _LOGGER.warning("Invalid index in pending key: %s", key)
                     return
 
                 if base == "charges":
-                    if 0 <= idx < 7 and field in CHARGE_PENDING_SUFFIXES:
-                        self._pending_charges[idx][field] = value
-                        self.invalidate_cache()
-                        return
+                    asyncio.create_task(self.queue_command(Command(CommandType.CHARGE_SLOT, {"index": idx, "field": field, "value": value})))
                 elif base == "discharges":
-                    if 0 <= idx < 7 and field in CHARGE_PENDING_SUFFIXES:
-                        self._pending_discharges[idx][field] = value
-                        self.invalidate_cache()
-                        return
-            else:
-                _LOGGER.warning("Unexpected array key format: %s", key)
+                    asyncio.create_task(self.queue_command(Command(CommandType.DISCHARGE_SLOT, {"index": idx, "field": field, "value": value})))
+            return
 
         # Handle simple attributes
-        self._pending_simple[key] = value
-        self.invalidate_cache()
+        asyncio.create_task(self.queue_command(Command(CommandType.SIMPLE_SETTING, {"key": key, "value": value})))
 
     def set_charging_state(self, value: bool) -> None:
-        self._pending_charging_state = value
         self.hub._pending_charging_state = value
-        self.invalidate_cache()
+        asyncio.create_task(self.queue_command(Command(CommandType.CHARGING_STATE, {"value": value})))
 
     def set_discharging_state(self, value: bool) -> None:
-        self._pending_discharging_state = value
         self.hub._pending_discharging_state = value
-        self.invalidate_cache()
+        asyncio.create_task(self.queue_command(Command(CommandType.DISCHARGING_STATE, {"value": value})))
 
     def set_passive_mode(self, value: Optional[int]) -> None:
-        try:
-            target = None if value is None else int(value)
-        except (TypeError, ValueError):
-            _LOGGER.error("Invalid passive mode value: %s", value)
-            return
-        if target is not None and target not in (0, 1, 2):
-            _LOGGER.error("Unsupported passive mode target: %s", target)
-            return
-        if target and target > 0:
-            self._capture_app_mode_before_passive()
-        self._pending_passive_mode_state = target
-        self.hub._pending_passive_mode_state = self._pending_passive_mode_state
-        self.invalidate_cache()
+        self.hub._pending_passive_mode_state = value
+        asyncio.create_task(self.queue_command(Command(CommandType.PASSIVE_MODE, {"value": value})))
 
-    def invalidate_cache(self) -> None:
-        self._pending_cache_valid = False
+    # --- Legacy / Compatibility Methods ---
 
     def has_pending(self) -> bool:
         """Check if there are any pending settings."""
-        if self._pending_cache_valid:
-            return self._pending_cache
+        return not self._command_queue.empty() or self._is_processing
 
-        has_pending = False
+    async def process_pending(self) -> None:
+        """Legacy method. Queue processing is now automatic."""
+        # Ensure processing is running if queue is not empty
+        if not self._command_queue.empty() and not self._is_processing:
+            self._is_processing = True
+            asyncio.create_task(self._process_queue())
 
-        # Check simple attributes
-        if self._pending_simple:
-            has_pending = True
-
-        # Check power states
-        if not has_pending:
-            has_pending = (
-                self._pending_charging_state is not None or
-                self._pending_discharging_state is not None
-            )
-
-        # Check time enables
-        if not has_pending:
-            has_pending = (
-                self._pending_charge_time_enable is not None or
-                self._pending_discharge_time_enable is not None
-            )
-
-        # Check slots
-        if not has_pending:
-            has_pending = any(
-                any(slot[suffix] is not None for suffix in CHARGE_PENDING_SUFFIXES)
-                for slot in (self._pending_charges + self._pending_discharges)
-            )
-
-        # Check passive mode
-        if not has_pending:
-            has_pending = self._pending_passive_mode_state is not None
-
-        self._pending_cache = has_pending
-        self._pending_cache_valid = True
-        return has_pending
-
-    # --- Locking Logic ---
+    def get_optimistic_overlay(self, current_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Returns None as optimistic UI is less relevant with immediate queue processing."""
+        return None
 
     def is_charging_locked(self, current_time: float) -> bool:
         return self._charging_state_lock_until is not None and current_time < self._charging_state_lock_until
@@ -946,106 +470,3 @@ class ChargeSettingHandler:
             self._charging_state_lock_until = None
         if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
             self._discharging_state_lock_until = None
-
-    # --- Optimistic UI ---
-
-    def get_optimistic_overlay(self, current_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Returns a data overlay with pending values applied."""
-        if not current_data:
-            return None
-
-        base = dict(current_data)
-        chg = base.get("charging_enabled")
-        dchg = base.get("discharging_enabled")
-
-        if self._pending_charging_state is not None:
-            chg = 1 if self._pending_charging_state else 0
-        if self._pending_discharging_state is not None:
-            dchg = 1 if self._pending_discharging_state else 0
-
-        app_mode = 1 if bool(chg) or bool(dchg) else 0
-
-        overlay = dict(base)
-        if chg is not None:
-            overlay["charging_enabled"] = 1 if chg else 0
-        if dchg is not None:
-            overlay["discharging_enabled"] = 1 if dchg else 0
-        overlay["AppMode"] = app_mode
-
-        passive_pending = self._pending_passive_mode_state
-        if passive_pending is not None:
-            overlay["passive_charge_enable"] = passive_pending
-            if passive_pending > 0:
-                overlay["AppMode"] = 3
-            else:
-                overlay["AppMode"] = (
-                    self._app_mode_before_passive
-                    if self._app_mode_before_passive is not None
-                    else (
-                        1
-                        if overlay.get("charging_enabled") or overlay.get("discharging_enabled")
-                        else 0
-                    )
-                )
-        return overlay
-
-    # --- Processing Logic (Moved from Hub) ---
-
-    async def process_pending(self) -> None:
-        """Process all pending settings."""
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] process_pending started")
-
-        if not self.has_pending():
-            return
-
-        results = []
-
-        # 1. Power States
-        if self._pending_charging_state is not None:
-            try:
-                await self.handle_charging_state()
-                results.append(("charging_state", True))
-            except Exception as e:
-                _LOGGER.error("Error setting charging state: %s", e)
-
-        if self._pending_discharging_state is not None:
-            try:
-                await self.handle_discharging_state()
-                results.append(("discharging_state", True))
-            except Exception as e:
-                _LOGGER.error("Error setting discharging state: %s", e)
-
-        if self._pending_passive_mode_state is not None:
-            try:
-                await self.handle_passive_mode()
-                results.append(("passive_mode", True))
-            except Exception as e:
-                _LOGGER.error("Error setting passive mode: %s", e)
-
-        # 2. Slots
-        charge_indices = [i for i, s in enumerate(self._pending_charges) if any(s.values())]
-        discharge_indices = [i for i, s in enumerate(self._pending_discharges) if any(s.values())]
-
-        slot_tasks = []
-        for idx in charge_indices:
-            slot_tasks.append(self.handle_charge_settings_by_index(idx + 1)) # 1-based
-        for idx in discharge_indices:
-            slot_tasks.append(self.handle_discharge_settings_by_index(idx + 1)) # 1-based
-
-        if slot_tasks:
-            await asyncio.gather(*slot_tasks, return_exceptions=True)
-
-        # 3. Simple Attributes
-        simple_tasks = []
-        # Create a copy of keys to iterate safely
-        simple_keys = list(self._pending_simple.keys())
-        
-        for key in simple_keys:
-            simple_tasks.append(self._process_simple_setting(key))
-        
-        if simple_tasks:
-            await asyncio.gather(*simple_tasks, return_exceptions=True)
-
-        # Clear cache after processing
-        self.invalidate_cache()
