@@ -7,7 +7,7 @@
  * - Protects specific input interactions (time, range) from disruptive re-renders.
  *
  * @author stanu74 
- * @version 1.2.1
+ * @version 1.2.2
  */
 
 class SajH2InverterCard extends HTMLElement {
@@ -47,7 +47,7 @@ class SajH2InverterCard extends HTMLElement {
   constructor() {
     super();
 
-    console.log(`[SAJ H2 Inverter Card] Version: 1.2.1`);
+    console.log(`[SAJ H2 Inverter Card] Version: 1.2.2`);
     
     this.attachShadow({ mode: 'open' });
     
@@ -56,7 +56,7 @@ class SajH2InverterCard extends HTMLElement {
     this._mode = 'both';
     this._hass = null;
     this._debug = false;
-    this._sliderTimeouts = {};
+    this._debounceTimeouts = {}; // Generic debounce storage
     this._showAllChargeSlots = false;
     this._showAllDischargeSlots = false;
   }
@@ -377,7 +377,7 @@ class SajH2InverterCard extends HTMLElement {
 
     const html = `
       <div class="section charging-section">
-        <div class="section-header">Charging Settings (Version 1.2.1)</div>
+        <div class="section-header">Charging Settings (Version 1.2.2)</div>
         ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. <b>Start time, end time and power are essential.</b></div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
@@ -428,7 +428,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`charge-slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">
@@ -570,7 +570,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">
@@ -609,24 +609,25 @@ class SajH2InverterCard extends HTMLElement {
     );
   }
 
+  // Generic debounce function
+  _debounce(key, func, delay = 1000) {
+    if (this._debounceTimeouts[key]) {
+      clearTimeout(this._debounceTimeouts[key]);
+    }
+    this._debounceTimeouts[key] = setTimeout(() => {
+      func();
+      delete this._debounceTimeouts[key];
+    }, delay);
+  }
+
   // Debounce Slider-Änderungen (verzögert Service-Call)
   // Verhindert zu viele Modbus-Calls bei schnellen Slider-Bewegungen
   _debouncedSliderChange(sliderId, entityId, value, delay = 800) {
-    // Alten Timer löschen, falls noch aktiv
-    if (this._sliderTimeouts[sliderId]) {
-      clearTimeout(this._sliderTimeouts[sliderId]);
-      if (this._debug) {
-        console.log(`[saj-h2-inverter-card] Debounce Timer abgebrochen für ${sliderId}`);
-      }
-    }
-
-    // Neuen Timer starten
-    this._sliderTimeouts[sliderId] = setTimeout(() => {
+    this._debounce(sliderId, () => {
       if (this._debug) {
         console.log(`[saj-h2-inverter-card] Debounce abgelaufen: Sende ${sliderId} = ${value}`);
       }
       this._setEntityValue(entityId, parseInt(value, 10), 'number');
-      delete this._sliderTimeouts[sliderId];
     }, delay);
 
     if (this._debug) {
@@ -979,10 +980,14 @@ class SajH2InverterCard extends HTMLElement {
       if (input && !input.hasAttribute('data-listener-added')) {
         input.setAttribute('data-listener-added', 'true');
         input.addEventListener('change', e => {
-            if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(e.target.value)) {
-                 this._setEntityValue(entityId, e.target.value, 'text');
+            const val = e.target.value;
+            if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(val)) {
+                 // Debounce time updates to catch rapid changes
+                 this._debounce(`time-${entityId}`, () => {
+                    this._setEntityValue(entityId, val, 'text');
+                 }, 1000);
             } else {
-                console.warn(`[saj-h2-inverter-card] Invalid time format entered for ${entityId}: ${e.target.value}. Reverting.`);
+                console.warn(`[saj-h2-inverter-card] Invalid time format entered for ${entityId}: ${val}. Reverting.`);
                 const prevState = this._hass.states[entityId]?.state;
                  if (prevState && /^([01]\d|2[0-3]):([0-5]\d)$/.test(prevState)) {
                      e.target.value = prevState;
@@ -1011,7 +1016,10 @@ class SajH2InverterCard extends HTMLElement {
                         if (!isNaN(dayIndex)) newMask |= (1 << dayIndex);
                     }
                 });
-                this._setEntityValue(maskEntity, newMask, 'number');
+                // Debounce mask updates to allow multiple checkbox clicks (e.g. selecting Mon, Tue, Wed)
+                this._debounce(`mask-${maskEntity}`, () => {
+                    this._setEntityValue(maskEntity, newMask, 'number');
+                }, 1000);
             }
         });
         container.querySelectorAll(`input[type="checkbox"][id^="${prefix}-day-"]`).forEach(chk => {
@@ -1224,14 +1232,14 @@ class SajH2InverterCard extends HTMLElement {
       .power-value {
         display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px;
         border: 1px solid var(--input-ink-color, var(--divider-color)); border-radius: 8px;
-        background-color: var(--input-fill-color, var(--card-background-color)); font-size: 1.1em; font-weight: 500;
+        background-color: var(--input-fill-color, var,--card-background-color)); font-size: 1.1em; font-weight: 500;
         color: var(--primary-text-color); min-width: 60px; min-height: 40px; box-sizing: border-box; text-align: center;
         transition: background-color 0.2s ease, border-color 0.2s ease;
       }
       .time-box.power-time:has(input:disabled) .power-value,
       .time-power-row:has(input.power-slider:disabled) .power-value {
         background-color: var(--input-disabled-fill-color, rgba(var(--disabled-text-color-rgb), 0.1));
-        border-color: var(--input-disabled-ink-color, var(--divider-color)); color: var(--disabled-text-color);
+        border-color: var(--input-disabled-ink-color, var,--divider-color)); color: var(--disabled-text-color);
       }
 
       /* Days Selection */

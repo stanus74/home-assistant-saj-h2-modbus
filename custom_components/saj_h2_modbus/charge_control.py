@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Any, List, Dict, Tuple, Callable
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
 
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
@@ -257,10 +259,20 @@ class ChargeSettingHandler:
                 # Update AppMode
                 dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
                 await self._update_app_mode_from_states(charge_enabled=value, discharge_enabled=dchg)
-                self.hub.async_set_updated_data(self.hub.inverter_data)
         finally:
-            # Clear pending state regardless of success/failure to avoid stuck UI
+            # Clear pending state immediately
             self.hub._pending_charging_state = None
+            
+            # Force immediate data update to UI to reflect cleared pending state
+            self.hub.async_set_updated_data(self.hub.inverter_data)
+            
+            # Force notification for all entities (extra safety)
+            if self.hub.hass:
+                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
+                if "entities" in entry_data:
+                    for entity in entry_data["entities"]:
+                        if hasattr(entity, "async_write_ha_state"):
+                            entity.async_write_ha_state()
 
     async def _handle_discharging_state(self, value: bool) -> None:
         addr = MODBUS_ADDRESSES["power_states"]["discharging"]["address"]
@@ -280,10 +292,20 @@ class ChargeSettingHandler:
                 # Update AppMode
                 chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
                 await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=value)
-                self.hub.async_set_updated_data(self.hub.inverter_data)
         finally:
-            # Clear pending state regardless of success/failure
+            # Clear pending state immediately
             self.hub._pending_discharging_state = None
+            
+            # Force immediate data update to UI to reflect cleared pending state
+            self.hub.async_set_updated_data(self.hub.inverter_data)
+
+            # Force notification for all entities
+            if self.hub.hass:
+                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
+                if "entities" in entry_data:
+                    for entity in entry_data["entities"]:
+                        if hasattr(entity, "async_write_ha_state"):
+                            entity.async_write_ha_state()
 
     async def _handle_passive_mode(self, value: Optional[int]) -> None:
         if value is None: return
@@ -308,11 +330,20 @@ class ChargeSettingHandler:
                         dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
                         await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
                     self._app_mode_before_passive = None
-                
-                self.hub.async_set_updated_data(self.hub.inverter_data)
         finally:
-            # Clear pending state
+            # Clear pending state immediately
             self.hub._pending_passive_mode_state = None
+            
+            # Force immediate data update to UI to reflect cleared pending state
+            self.hub.async_set_updated_data(self.hub.inverter_data)
+
+            # Force notification for all entities
+            if self.hub.hass:
+                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
+                if "entities" in entry_data:
+                    for entity in entry_data["entities"]:
+                        if hasattr(entity, "async_write_ha_state"):
+                            entity.async_write_ha_state()
 
     # ========== HELPER METHODS ==========
 
