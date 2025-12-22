@@ -620,18 +620,18 @@ class SajH2InverterCard extends HTMLElement {
     }, delay);
   }
 
-  // Debounce Slider-Änderungen (verzögert Service-Call)
-  // Verhindert zu viele Modbus-Calls bei schnellen Slider-Bewegungen
+  // Debounce slider changes (delays service call)
+  // Prevents too many Modbus calls during rapid slider movements
   _debouncedSliderChange(sliderId, entityId, value, delay = 800) {
     this._debounce(sliderId, () => {
       if (this._debug) {
-        console.log(`[saj-h2-inverter-card] Debounce abgelaufen: Sende ${sliderId} = ${value}`);
+        console.log(`[saj-h2-inverter-card] Debounce expired: Sending ${sliderId} = ${value}`);
       }
       this._setEntityValue(entityId, parseInt(value, 10), 'number');
     }, delay);
 
     if (this._debug) {
-      console.log(`[saj-h2-inverter-card] Debounce Timer gestartet für ${sliderId} (${delay}ms)`);
+      console.log(`[saj-h2-inverter-card] Debounce timer started for ${sliderId} (${delay}ms)`);
     }
   }
 
@@ -794,7 +794,7 @@ class SajH2InverterCard extends HTMLElement {
                 return;
             }
             
-            // WICHTIG: currentMask von SENSOR lesen (aktueller Hardware-Status)
+            // IMPORTANT: Read currentMask from SENSOR (actual hardware status)
             const currentMask = parseInt(timeEnableSensor.state || '0');
             const bit = 1 << i;
             const newMask = chk.checked ? (currentMask | bit) : (currentMask & ~bit);
@@ -822,7 +822,7 @@ class SajH2InverterCard extends HTMLElement {
       // Slot Time Inputs
       this._setupTimeListeners(`charge-slot-${i}`, slotConfig.startTime, slotConfig.endTime);
 
-      // Slot Power Slider
+      // Slot Power Slider - WITH DEBOUNCING
       const slider = q(`#charge-slot-${i}-power`);
       if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -924,7 +924,7 @@ class SajH2InverterCard extends HTMLElement {
                 return;
             }
             
-            // WICHTIG: currentMask von SENSOR lesen (aktueller Hardware-Status)
+            // IMPORTANT: Read currentMask from SENSOR (actual hardware status)
             const currentMask = parseInt(timeEnableSensor.state || '0');
             const bit = 1 << i;
             const newMask = chk.checked ? (currentMask | bit) : (currentMask & ~bit);
@@ -951,7 +951,7 @@ class SajH2InverterCard extends HTMLElement {
       // Slot Time Inputs
       this._setupTimeListeners(`slot-${i}`, slotConfig.startTime, slotConfig.endTime);
 
-      // Slot Power Slider - MIT DEBOUNCING
+      // Slot Power Slider - WITH DEBOUNCING
       const slider = q(`#slot-${i}-power`);
       if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -1226,7 +1226,7 @@ class SajH2InverterCard extends HTMLElement {
       .time-input:disabled { color: var(--disabled-text-color); cursor: not-allowed; }
       .time-input-container:has(input:disabled) {
         background-color: var(--input-disabled-fill-color, rgba(var(--disabled-text-color-rgb), 0.1));
-        border-color: var(--input-disabled-ink-color, var(--divider-color)); cursor: not-allowed;
+        border-color: var(--input-disabled-ink-color, var,--divider-color)); cursor: not-allowed;
       }
       .power-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 40px; box-sizing: border-box; }
       .power-value {

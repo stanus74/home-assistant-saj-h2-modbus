@@ -1,7 +1,21 @@
 ## [v2.7.3]
 
 ### New Features
-- **Passive Charge/Discharge Switches**: Added dedicated switches with pending-state handling for passive charge and discharge modes, including locking to prevent conflicting writes.
+- **Passive Charge/Discharge Switches**: Added dedicated switches for passive charge and discharge modes , explained here https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
+
+- **Charge Control** and **Number Entities**: Implementation of an asynchronous command queue for immediate execution of setting changes, independent of the polling interval.
+
+
+### Changed
+
+- **Number Entities**: Reduced maximum value for passive power settings (`passive_grid_charge_power`, `passive_grid_discharge_power`, etc.) to 500.
+- **Number Entities**: Reduced maximum value for power percentages of charge/discharge time slots (`chargeX_power_percent`, `dischargeX_power_percent`) to 50%.
+
+*Read >* https://github.com/stanus74/home-assistant-saj-h2-modbus/issues/141
+
+- **Inverter Card**: Bumped version to 1.2.2.
+- Adjusted slider range for power percentages to 0-50%.
+- Added debouncing for sliders, time input fields, and weekday checkboxes.                    
 
 ### Improvements
 - **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
@@ -134,3 +148,4 @@ Go to *Apps → Home Assistant → Storage → Clear Cache and Data*.
   - `switch.py`: `is_on` property now checks BOTH registers (discharging_enabled > 0 AND AppMode == 1)
   - Removed blocking `asyncio.run_coroutine_threadsafe()` calls → Reads directly from cache (synchronous, fast)
   - No more "took 1.001 seconds" warnings
+

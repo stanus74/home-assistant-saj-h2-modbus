@@ -28,7 +28,7 @@ DATA_SCHEMA = vol.Schema({
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
     vol.Required(CONF_HOST): str,
     vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(int, vol.Range(min=60, msg="invalid_scan_interval")),
+    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")),
 })
 
 
@@ -100,9 +100,15 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
+        errors = {}
         if user_input is not None:
             merged = dict(user_input)
             merged.setdefault(CONF_SCAN_INTERVAL, self._get_option_default(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+            
+            # Enforce minimum scan interval of 60s
+            if merged[CONF_SCAN_INTERVAL] < 60:
+                errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
+
             merged.setdefault(CONF_FAST_ENABLED, self._get_option_default(CONF_FAST_ENABLED, False))
             merged.setdefault(CONF_ULTRA_FAST_ENABLED, self._get_option_default(CONF_ULTRA_FAST_ENABLED, False))
             # Enforce fast poll when ultra-fast is active
@@ -119,61 +125,66 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 CONF_MQTT_PUBLISH_ALL,
                 self._get_option_default(CONF_MQTT_PUBLISH_ALL, False),
             )
-            try:
-                hub = self.hass.data[DOMAIN][self.config_entry.entry_id]["hub"]
-                await hub.update_connection_settings(
-                    merged[CONF_HOST],
-                    merged[CONF_PORT],
-                    merged.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-                    merged.get(CONF_FAST_ENABLED, False),
-                    merged.get(CONF_ULTRA_FAST_ENABLED, False),
-                    merged.get(CONF_MQTT_HOST, ""),
-                    merged.get(CONF_MQTT_PORT, 1883),
-                    merged.get(CONF_MQTT_USER, ""),
-                    merged.get(CONF_MQTT_PASSWORD, ""),
-                    merged[CONF_MQTT_TOPIC_PREFIX],
-                    merged[CONF_MQTT_PUBLISH_ALL],
-                )
-            except Exception as e:
-                _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
-                return self.async_show_form(
-                    step_id="init",
-                    data_schema=self._get_options_schema(),
-                    errors={"base": "update_failed"}
-                )
 
-            updated_data = dict(self.config_entry.data)
-            for key in (
-                CONF_HOST,
-                CONF_PORT,
-                CONF_SCAN_INTERVAL,
-                CONF_FAST_ENABLED,
-                CONF_ULTRA_FAST_ENABLED,
-                CONF_MQTT_HOST,
-                CONF_MQTT_PORT,
-                CONF_MQTT_USER,
-                CONF_MQTT_PASSWORD,
-                CONF_MQTT_TOPIC_PREFIX,
-                CONF_MQTT_PUBLISH_ALL,
-            ):
-                if key == CONF_MQTT_TOPIC_PREFIX:
-                    updated_data[key] = merged[CONF_MQTT_TOPIC_PREFIX] or updated_data.get(key, "saj")
-                elif key == CONF_FAST_ENABLED and merged.get(CONF_ULTRA_FAST_ENABLED):
-                    updated_data[key] = True
-                else:
-                    updated_data[key] = merged.get(key, updated_data.get(key))
-            self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
-            return self.async_create_entry(title="", data=merged)
+            if not errors:
+                try:
+                    # Check if the integration is loaded before trying to update the hub
+                    if DOMAIN in self.hass.data and self.config_entry.entry_id in self.hass.data[DOMAIN]:
+                        hub = self.hass.data[DOMAIN][self.config_entry.entry_id]["hub"]
+                        await hub.update_connection_settings(
+                            merged[CONF_HOST],
+                            merged[CONF_PORT],
+                            merged.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                            merged.get(CONF_FAST_ENABLED, False),
+                            merged.get(CONF_ULTRA_FAST_ENABLED, False),
+                            merged.get(CONF_MQTT_HOST, ""),
+                            merged.get(CONF_MQTT_PORT, 1883),
+                            merged.get(CONF_MQTT_USER, ""),
+                            merged.get(CONF_MQTT_PASSWORD, ""),
+                            merged[CONF_MQTT_TOPIC_PREFIX],
+                            merged[CONF_MQTT_PUBLISH_ALL],
+                        )
+                except Exception as e:
+                    _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
+                    # Do not return error form here. If the hub update fails (e.g. integration not running),
+                    # we still want to save the new configuration so it works on next reload.
+
+                updated_data = dict(self.config_entry.data)
+                for key in (
+                    CONF_HOST,
+                    CONF_PORT,
+                    CONF_SCAN_INTERVAL,
+                    CONF_FAST_ENABLED,
+                    CONF_ULTRA_FAST_ENABLED,
+                    CONF_MQTT_HOST,
+                    CONF_MQTT_PORT,
+                    CONF_MQTT_USER,
+                    CONF_MQTT_PASSWORD,
+                    CONF_MQTT_TOPIC_PREFIX,
+                    CONF_MQTT_PUBLISH_ALL,
+                ):
+                    if key == CONF_MQTT_TOPIC_PREFIX:
+                        updated_data[key] = merged[CONF_MQTT_TOPIC_PREFIX] or updated_data.get(key, "saj")
+                    elif key == CONF_FAST_ENABLED and merged.get(CONF_ULTRA_FAST_ENABLED):
+                        updated_data[key] = True
+                    else:
+                        updated_data[key] = merged.get(key, updated_data.get(key))
+                self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
+                return self.async_create_entry(title="", data=merged)
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self._get_options_schema()
+            data_schema=self._get_options_schema(),
+            errors=errors
         )
 
     def _get_options_schema(self):
         host_default = self._get_option_default(CONF_HOST, self.config_entry.data.get(CONF_HOST))
         port_default = self._get_option_default(CONF_PORT, self.config_entry.data.get(CONF_PORT, DEFAULT_PORT))
         scan_default = self._get_option_default(CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        if scan_default < 60:
+            scan_default = 60
+            
         fast_default = self._get_option_default(CONF_FAST_ENABLED, False)
         ultra_fast_default = self._get_option_default(CONF_ULTRA_FAST_ENABLED, False)
         mqtt_host_default = self._get_option_default(CONF_MQTT_HOST, "")
@@ -185,7 +196,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         return vol.Schema({
             vol.Required(CONF_HOST, default=host_default): str,
             vol.Required(CONF_PORT, default=port_default): int,
-            vol.Optional(CONF_SCAN_INTERVAL, default=scan_default): int,
+            vol.Optional(CONF_SCAN_INTERVAL, default=scan_default): vol.All(vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")),
             vol.Optional(CONF_FAST_ENABLED, default=fast_default): bool,
             vol.Optional(
                 CONF_ULTRA_FAST_ENABLED,
