@@ -1,5 +1,14 @@
-## [v2.7.2]
+## [v2.7.3]
 
+### New Features
+- **Passive Charge/Discharge Switches**: Added dedicated switches with pending-state handling for passive charge and discharge modes, including locking to prevent conflicting writes.
+
+### Improvements
+- **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
+
+
+## [v2.7.2]
+  
 ### New Features
 - **Ultra Fast Polling (1s)**: Added a new "Ultra Fast" mode that polls critical power sensors every second.
 - **Direct MQTT Configuration**: Added specific configuration fields (Host, Port, User, Password) for an MQTT broker in the integration options.
