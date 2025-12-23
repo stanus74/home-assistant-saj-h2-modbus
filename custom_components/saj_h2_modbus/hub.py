@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional, Any, Dict, List, Callable
+from typing import Optional, Any, Dict, List, Callable, Union
 from datetime import timedelta
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
@@ -39,6 +39,48 @@ from .charge_control import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+class MqttCircuitBreaker:
+    """Circuit breaker pattern for MQTT publishing to prevent hammering a failing service."""
+
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+
+    async def call(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute a function through the circuit breaker."""
+        now = time.monotonic()
+
+        if self.state == "OPEN":
+            if now - self.last_failure_time > self.timeout:
+                self.state = "HALF_OPEN"
+                _LOGGER.info("MQTT Circuit Breaker transitioning to HALF_OPEN")
+            else:
+                raise ConnectionError("MQTT Circuit Breaker is OPEN")
+
+        try:
+            result = await func(*args, **kwargs)
+            # Success
+            if self.state == "HALF_OPEN":
+                self.state = "CLOSED"
+                self.failure_count = 0
+                _LOGGER.info("MQTT Circuit Breaker transitioning to CLOSED")
+            return result
+        except Exception as e:
+            self.failure_count += 1
+            self.last_failure_time = now
+
+            if self.failure_count >= self.failure_threshold:
+                self.state = "OPEN"
+                _LOGGER.warning(
+                    f"MQTT Circuit Breaker transitioning to OPEN after {self.failure_count} failures"
+                )
+            raise e
+
+
 # Enable defaults for debugging
 FAST_POLL_DEFAULT = False
 # ULTRA_FAST_POLL removed, now dynamic via config
@@ -55,6 +97,11 @@ FAST_POLL_SENSORS = {
     "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA", "totalgridPowerVA",
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
 }
+
+
+# Define which reader groups require sequential execution to ensure data consistency
+# and avoid race conditions when reading interdependent registers.
+CRITICAL_READER_GROUPS = {1, 2}
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -100,14 +147,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             CONF_MQTT_PUBLISH_ALL,
             config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False),
         )
-        self._ha_mqtt_available = None
-        self._ha_mqtt_last_check = 0.0
-        self._ha_mqtt_check_interval = 30.0
-        self._ha_mqtt_block_until = 0.0
-        self._ha_mqtt_error_log_until = 0.0
-        self._ha_mqtt_failure_count = 0
-        self._ha_mqtt_block_base = 30.0
-        self._ha_mqtt_block_max = 600.0
+        
+        # Initialize fast/ultra-fast settings BEFORE circuit breaker
+        self.fast_enabled = config_entry.options.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
+        self.ultra_fast_enabled = config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)
+        
+        # Force fast_enabled if ultra_fast is enabled to ensure loop starts
+        if self.ultra_fast_enabled:
+            self.fast_enabled = True
+        
+        # Initialize Circuit Breaker for MQTT publishing
+        # Must be AFTER ultra_fast_enabled is set
+        self._mqtt_circuit_breaker = MqttCircuitBreaker(
+            failure_threshold=3 if self.ultra_fast_enabled else 5,
+            timeout=30 if self.ultra_fast_enabled else 60,
+        )
 
         # Initialize internal MQTT client as fallback
         self._paho_client = None
@@ -131,12 +185,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-        self.fast_enabled = config_entry.options.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
-        self.ultra_fast_enabled = config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)
-        
-        # Force fast_enabled if ultra_fast is enabled to ensure loop starts
-        if self.ultra_fast_enabled:
-            self.fast_enabled = True
 
         self._fast_coordinator = None
         self._fast_unsub = None
@@ -344,49 +392,31 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         except Exception as e:
             _LOGGER.warning("Fast update failed: %s", e)
 
-    def _is_ha_mqtt_available(self) -> bool:
-        now = time.monotonic()
-        if now < self._ha_mqtt_block_until:
-            return False
-        if (
-            self._ha_mqtt_available is not None
-            and (now - self._ha_mqtt_last_check) < self._ha_mqtt_check_interval
-        ):
-            return self._ha_mqtt_available
-        available = False
-        if "mqtt" in self.hass.config.components:
-            try:
-                available = bool(mqtt.is_connected(self.hass))
-            except (AttributeError, ImportError, KeyError):
-                available = False
-        self._ha_mqtt_available = available
-        self._ha_mqtt_last_check = now
-        if available:
-            self._reset_ha_mqtt_backoff()
-        return available
-
     def _publish_fast_data_to_mqtt(self, data: Dict[str, Any]) -> None:
         """Publish fast poll data to MQTT."""
         if not data:
             return
-
         def normalize_sensor_key(raw_key: str) -> str:
             parts = [segment for segment in raw_key.split("/") if segment]
             for segment in reversed(parts):
                 if segment.lower() not in {"saj", "mqtt"}:
                     return segment
             return parts[-1] if parts else raw_key
-
         base_topic = self._get_base_topic()
         messages: List[tuple[str, str]] = []
         for key, value in data.items():
             sensor_key = normalize_sensor_key(key) or key.replace("/", "_")
             messages.append((sensor_key, str(value)))
-
         if not messages:
             return
 
-        if self._is_ha_mqtt_available():
+        # Try publishing via HA MQTT integration first
+        try:
+            mqtt_available = "mqtt" in self.hass.config.components and mqtt.is_connected(self.hass)
+        except (AttributeError, KeyError, Exception):
+            mqtt_available = False
+        
+        if mqtt_available:
             if self._paho_client and self._paho_started:
                 self._paho_client.loop_stop()
                 self._paho_client.disconnect()
@@ -415,10 +445,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         self._paho_started = True
                     for sensor_key, payload in messages:
                         self._paho_client.publish(f"{base_topic}/{sensor_key}", payload)
-                    self._reset_ha_mqtt_backoff()
                     return
                 except Exception as err:
                     _LOGGER.error("Internal MQTT publish failed: %s", err)
+                    _LOGGER.warning("Internal MQTT client failed, will retry via circuit breaker")
                     return
 
         if self.mqtt_host:
@@ -436,27 +466,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _async_publish_via_ha(self, topic: str, payload: str) -> None:
         """Publish a single payload via Home Assistant MQTT and handle disabled state."""
         try:
-            await mqtt.async_publish(self.hass, topic, payload)
-            self._reset_ha_mqtt_backoff()
-        except HomeAssistantError as err:
-            self._handle_ha_mqtt_failure(err)
-        except Exception as err:  # noqa: BLE001
-            self._handle_ha_mqtt_failure(err)
-
-    def _handle_ha_mqtt_failure(self, err: Exception) -> None:
-        now = time.monotonic()
-        self._ha_mqtt_available = False
-        self._ha_mqtt_last_check = 0.0
-        self._ha_mqtt_failure_count += 1
-        backoff = min(self._ha_mqtt_block_base * (2 ** (self._ha_mqtt_failure_count - 1)), self._ha_mqtt_block_max)
-        if self.ultra_fast_enabled:
-            backoff = min(self._ha_mqtt_block_max, backoff * 1.5)
-        self._ha_mqtt_block_until = now + backoff
-        self._ha_mqtt_check_interval = max(30.0, backoff)
-        throttle_until = max(60.0, backoff)
-        if now >= self._ha_mqtt_error_log_until:
-            _LOGGER.debug("HA MQTT publish skipped (%s)", err)
-            self._ha_mqtt_error_log_until = now + throttle_until
+            # Use the circuit breaker to wrap the actual publish call
+            await self._mqtt_circuit_breaker.call(mqtt.async_publish, self.hass, topic, payload)
+        except Exception as err:
+            # The circuit breaker will handle the state transition and logging
+            _LOGGER.warning("HA MQTT publish failed: %s", err)
 
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
@@ -504,6 +518,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.ultra_fast_enabled = ultra_fast_enabled
                 # Force fast_enabled if ultra_fast is enabled
                 self.fast_enabled = fast_enabled or ultra_fast_enabled
+                
+                # Adjust circuit breaker thresholds based on ultra_fast mode
+                self._mqtt_circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
+                self._mqtt_circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
 
                 # Update MQTT settings
                 mqtt_changed = (
@@ -539,9 +557,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self.mqtt_publish_all = mqtt_publish_all
                 if publish_all_changed:
                     _LOGGER.info("MQTT full publish toggled to %s", self.mqtt_publish_all)
-                if mqtt_changed or prefix_changed:
-                    self._ha_mqtt_available = None
-                    self._ha_mqtt_last_check = 0.0
 
                 if mqtt_changed:
                     _LOGGER.info("MQTT settings changed, re-initializing client...")
@@ -791,13 +806,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         for group_idx, group in enumerate(reader_groups, 1):
             group_start = time.monotonic()
             
-            # Create tasks for all readers in this group
-            tasks = [method(self._client, self._read_lock) for method in group]
-            
-            # Execute group in parallel with exception handling
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            if group_idx in CRITICAL_READER_GROUPS:
+                # Sequential execution for critical groups to prevent race conditions
+                # and ensure a consistent data snapshot from the device.
+                _LOGGER.debug("[RACE_CONDITION_FIX] Executing critical reader group %d sequentially", group_idx)
+                results = []
+                for method in group:
+                    try:
+                        result = await method(self._client, self._read_lock)
+                        results.append(result)
+                    except Exception as e:
+                        results.append(e)
+            else:
+                # Parallel execution for non-critical groups to maintain performance.
+                _LOGGER.debug("[RACE_CONDITION_FIX] Executing non-critical reader group %d in parallel", group_idx)
+                tasks = [method(self._client, self._read_lock) for method in group]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
             
             group_duration = time.monotonic() - group_start
+            
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(f"[ADVANCED] Group {group_idx}/{len(reader_groups)} completed in {group_duration:.2f}s "
+                              f"({'sequential' if group_idx in CRITICAL_READER_GROUPS else 'parallel'} execution)")
             
             # Process results from this group
             for method, result in zip(group, results):
@@ -822,12 +852,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     # Lock checks removed
                     new_cache.update(result)
                     successful_count += 1
-            
-            if ADVANCED_LOGGING:
-                _LOGGER.debug(
-                    f"[ADVANCED] Group {group_idx}/{len(reader_groups)} completed in {group_duration:.2f}s "
-                    f"({len(group)} readers)"
-                )
         
         if ADVANCED_LOGGING:
             _LOGGER.info(
@@ -937,12 +961,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def _get_base_topic(self) -> str:
         base = (self.mqtt_topic_prefix or "").rstrip("/")
         return base or "saj"
-
-    def _reset_ha_mqtt_backoff(self) -> None:
-        if self._ha_mqtt_failure_count:
-            self._ha_mqtt_failure_count = 0
-            self._ha_mqtt_check_interval = 30.0
-            self._ha_mqtt_block_until = 0.0
 
     def _should_log_fast_debug(self) -> bool:
         if not ADVANCED_LOGGING:
