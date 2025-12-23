@@ -172,12 +172,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Define explicit setters for power states
         async def _set_charging_state(value: bool) -> None:
             self._pending_charging_state = value
+            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
             self._setting_handler.set_charging_state(value)
             _LOGGER.info("Set pending charging state to: %s", value)
             self.hass.async_create_task(self.process_pending_now())
 
         async def _set_discharging_state(value: bool) -> None:
             self._pending_discharging_state = value
+            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
             self._setting_handler.set_discharging_state(value)
             _LOGGER.info("Set pending discharging state to: %s", value)
             self.hass.async_create_task(self.process_pending_now())
@@ -185,6 +187,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         async def _set_passive_mode(value: Optional[int]) -> None:
             state = None if value is None else int(value)
             self._pending_passive_mode_state = state
+            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
             self._setting_handler.set_passive_mode(state)
             _LOGGER.info("Set pending passive mode state to: %s", state)
             self.hass.async_create_task(self.process_pending_now())
@@ -418,14 +421,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.error("Internal MQTT publish failed: %s", err)
                     return
 
-        if not PAHO_AVAILABLE:
-            _LOGGER.warning(
-                "MQTT service unavailable and paho-mqtt not installed; cannot publish MQTT data."
-            )
+        if self.mqtt_host:
+            if not PAHO_AVAILABLE:
+                _LOGGER.warning(
+                    "MQTT service unavailable and paho-mqtt not installed; cannot publish MQTT data."
+                )
+            else:
+                _LOGGER.warning(
+                    "MQTT service unavailable and no internal client configured. Check MQTT settings."
+                )
         else:
-            _LOGGER.warning(
-                "MQTT service unavailable and no internal client configured. Check MQTT settings."
-            )
+            _LOGGER.debug("MQTT not configured and HA MQTT unavailable; skipping MQTT publish")
 
     async def _async_publish_via_ha(self, topic: str, payload: str) -> None:
         """Publish a single payload via Home Assistant MQTT and handle disabled state."""
@@ -772,7 +778,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             ],
         ]
 
-        current_time = time.monotonic()
+        # Race Condition Prevention removed as per user request for simplicity.
+        # Locks are no longer checked.
+
         total_readers = sum(len(group) for group in reader_groups)
         successful_count = 0
         
@@ -811,18 +819,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.warning("Reader %s failed: %s", method_name, result)
                 
                 elif isinstance(result, dict) and result:
-                    # Check for locked values that should NOT be overwritten
-                    # Delegated check to handler
-                    if self._setting_handler.is_charging_locked(current_time):
-                        if "charging_enabled" in result:
-                            _LOGGER.info("[CACHE LOCK] Ignoring charging_enabled (locked)")
-                            result.pop("charging_enabled")
-                    
-                    if self._setting_handler.is_discharging_locked(current_time):
-                        if "discharging_enabled" in result:
-                            _LOGGER.info("[CACHE LOCK] Ignoring discharging_enabled (locked)")
-                            result.pop("discharging_enabled")
-                    
+                    # Lock checks removed
                     new_cache.update(result)
                     successful_count += 1
             
@@ -837,19 +834,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 f"[ADVANCED] All reader groups completed: {successful_count}/{total_readers} successful"
             )
         
-        # Clear expired locks
-        self._setting_handler.cleanup_locks(current_time)
-        
-        # Preserve locked values if still active - Delegated logic
-        if self._setting_handler.is_charging_locked(current_time):
-            if "charging_enabled" in self.inverter_data:
-                new_cache["charging_enabled"] = self.inverter_data["charging_enabled"]
-                _LOGGER.info("[CACHE LOCK] Preserving charging_enabled = %s", new_cache['charging_enabled'])
-        
-        if self._setting_handler.is_discharging_locked(current_time):
-            if "discharging_enabled" in self.inverter_data:
-                new_cache["discharging_enabled"] = self.inverter_data["discharging_enabled"]
-                _LOGGER.info("[CACHE LOCK] Preserving discharging_enabled = %s", new_cache['discharging_enabled'])
+        # Lock cleanup and preservation removed
         
         return new_cache
 

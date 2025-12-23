@@ -1,6 +1,7 @@
 """Optimized charge control with exponential backoff and improved error handling."""
 import asyncio
 import logging
+# import time removed
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Any, List, Dict, Tuple, Callable
@@ -113,9 +114,8 @@ class ChargeSettingHandler:
 
         # Locks & Caches
         self._app_mode_before_passive: Optional[int] = None
-        self._charging_state_lock_until: Optional[float] = None
-        self._discharging_state_lock_until: Optional[float] = None
-        self._time_enable_cache: Dict[str, int] = {}
+        # Locks removed
+        # Cache removed
 
         # Initialize hub pending states (kept for compatibility if hub accesses them directly)
         self.hub._pending_charging_state = None
@@ -176,7 +176,10 @@ class ChargeSettingHandler:
             await self._handle_passive_mode(value)
             return
 
-        await self._write_register_with_backoff(setting_def["address"], int(value), setting_def["label"])
+        # Write and update cache immediately
+        if await self._write_register_with_backoff(setting_def["address"], int(value), setting_def["label"]):
+            self.hub.inverter_data[key] = int(value)
+            self.hub.async_set_updated_data(self.hub.inverter_data)
 
     async def _handle_slot_setting(self, mode_type: str, payload: dict) -> None:
         """Handles settings for a specific slot (charge/discharge)."""
@@ -193,13 +196,19 @@ class ChargeSettingHandler:
 
         if field == "start":
             if self._is_valid_time_format(value):
-                await self._write_register_with_backoff(slot_defs["start"], self._time_to_register_value(value), f"{label} start")
+                if await self._write_register_with_backoff(slot_defs["start"], self._time_to_register_value(value), f"{label} start"):
+                    # Update cache
+                    self.hub.inverter_data[f"{label}_start"] = value
+                    self.hub.async_set_updated_data(self.hub.inverter_data)
             else:
                 _LOGGER.error("Invalid start time format for %s: %s", label, value)
         
         elif field == "end":
             if self._is_valid_time_format(value):
-                await self._write_register_with_backoff(slot_defs["end"], self._time_to_register_value(value), f"{label} end")
+                if await self._write_register_with_backoff(slot_defs["end"], self._time_to_register_value(value), f"{label} end"):
+                    # Update cache
+                    self.hub.inverter_data[f"{label}_end"] = value
+                    self.hub.async_set_updated_data(self.hub.inverter_data)
             else:
                 _LOGGER.error("Invalid end time format for %s: %s", label, value)
         
@@ -220,8 +229,7 @@ class ChargeSettingHandler:
         """Ensures the time_enable bit is set for the given slot."""
         enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
         address = enable_def["address"]
-        cache_key = f"{mode_type}_time_enable"
-
+        
         # Read current
         current_regs = await self.hub._read_registers(address, 1)
         if not current_regs:
@@ -230,14 +238,10 @@ class ChargeSettingHandler:
         current_mask = current_regs[0]
         new_mask = current_mask | (1 << index)
 
-        if cache_key in self._time_enable_cache and self._time_enable_cache[cache_key] == new_mask:
-            return
-
         if new_mask != current_mask:
             _LOGGER.info("Enabling %s in time_enable: %s -> %s", label, bin(current_mask), bin(new_mask))
             if await self._write_register_with_backoff(address, new_mask, f"{label} time_enable"):
-                self._time_enable_cache[cache_key] = new_mask
-                # Update hub data
+                # Update cache
                 key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
                 self.hub.inverter_data[key] = new_mask
                 self.hub.async_set_updated_data(self.hub.inverter_data)
@@ -248,64 +252,35 @@ class ChargeSettingHandler:
         
         try:
             if await self._write_register_with_backoff(addr, write_value, "charging state"):
+                # Update cache immediately
                 self.hub.inverter_data["charging_enabled"] = write_value
-                self.hub.inverter_data["charge_time_enable"] = write_value
-                self._time_enable_cache["charge_time_enable"] = write_value
                 
-                # Lock
-                import time as time_module
-                self._charging_state_lock_until = time_module.monotonic() + 10.0
-                
-                # Update AppMode
+                # Update AppMode logic still useful to ensure consistency on device
                 dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
                 await self._update_app_mode_from_states(charge_enabled=value, discharge_enabled=dchg)
         finally:
-            # Clear pending state immediately
+            # Clear pending state
             self.hub._pending_charging_state = None
-            
-            # Force immediate data update to UI to reflect cleared pending state
+            # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
-            
-            # Force notification for all entities (extra safety)
-            if self.hub.hass:
-                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
-                if "entities" in entry_data:
-                    for entity in entry_data["entities"]:
-                        if hasattr(entity, "async_write_ha_state"):
-                            entity.async_write_ha_state()
 
     async def _handle_discharging_state(self, value: bool) -> None:
         addr = MODBUS_ADDRESSES["power_states"]["discharging"]["address"]
-        write_value = 1 if value else 0 # Logic inverted in original? Original: 0 if not desired else 1 -> same as 1 if desired else 0
-        # Wait, original: write_value = 0 if not desired else 1. Yes, same.
+        write_value = 1 if value else 0 
         
         try:
             if await self._write_register_with_backoff(addr, write_value, "discharging state"):
+                # Update cache immediately
                 self.hub.inverter_data["discharging_enabled"] = write_value
-                self.hub.inverter_data["discharge_time_enable"] = write_value
-                self._time_enable_cache["discharge_time_enable"] = write_value
-                
-                # Lock
-                import time as time_module
-                self._discharging_state_lock_until = time_module.monotonic() + 10.0
-                
-                # Update AppMode
+
+                # Update AppMode logic
                 chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
                 await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=value)
         finally:
-            # Clear pending state immediately
+            # Clear pending state
             self.hub._pending_discharging_state = None
-            
-            # Force immediate data update to UI to reflect cleared pending state
+            # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
-
-            # Force notification for all entities
-            if self.hub.hass:
-                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
-                if "entities" in entry_data:
-                    for entity in entry_data["entities"]:
-                        if hasattr(entity, "async_write_ha_state"):
-                            entity.async_write_ha_state()
 
     async def _handle_passive_mode(self, value: Optional[int]) -> None:
         if value is None: return
@@ -314,8 +289,9 @@ class ChargeSettingHandler:
         addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
         try:
             if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
+                # Update cache immediately
                 self.hub.inverter_data["passive_charge_enable"] = desired_int
-                
+
                 if desired_int > 0:
                     self._capture_app_mode_before_passive()
                     await self._set_app_mode(3, "passive mode activation")
@@ -331,19 +307,10 @@ class ChargeSettingHandler:
                         await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
                     self._app_mode_before_passive = None
         finally:
-            # Clear pending state immediately
+            # Clear pending state
             self.hub._pending_passive_mode_state = None
-            
-            # Force immediate data update to UI to reflect cleared pending state
+            # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
-
-            # Force notification for all entities
-            if self.hub.hass:
-                entry_data = self.hub.hass.data.get(DOMAIN, {}).get(self.hub.config_entry.entry_id, {})
-                if "entities" in entry_data:
-                    for entity in entry_data["entities"]:
-                        if hasattr(entity, "async_write_ha_state"):
-                            entity.async_write_ha_state()
 
     # ========== HELPER METHODS ==========
 
@@ -388,7 +355,12 @@ class ChargeSettingHandler:
         
         addr = MODBUS_ADDRESSES["simple_settings"]["app_mode"]["address"]
         if await self._write_register_with_backoff(addr, desired_app_mode, f"AppMode ({reason})"):
+            # Update cache
             self.hub.inverter_data["AppMode"] = desired_app_mode
+            
+            # Only notify if value actually changed
+            if current_app_mode != desired_app_mode:
+                self.hub.async_set_updated_data(self.hub.inverter_data)
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
         passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
@@ -433,7 +405,11 @@ class ChargeSettingHandler:
             combined_value = (new_day_mask << 8) | new_power_percent
 
             if combined_value != current_value:
-                await self._write_register_with_backoff(address, combined_value, f"{label} day_mask_power")
+                if await self._write_register_with_backoff(address, combined_value, f"{label} day_mask_power"):
+                    # Update cache
+                    self.hub.inverter_data[f"{label}_day_mask"] = new_day_mask
+                    self.hub.inverter_data[f"{label}_power_percent"] = new_power_percent
+                    self.hub.async_set_updated_data(self.hub.inverter_data)
         except Exception as e:
             _LOGGER.error("Error updating day mask and power for %s: %s", label, e)
 
@@ -489,15 +465,3 @@ class ChargeSettingHandler:
     def get_optimistic_overlay(self, current_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Returns None as optimistic UI is less relevant with immediate queue processing."""
         return None
-
-    def is_charging_locked(self, current_time: float) -> bool:
-        return self._charging_state_lock_until is not None and current_time < self._charging_state_lock_until
-
-    def is_discharging_locked(self, current_time: float) -> bool:
-        return self._discharging_state_lock_until is not None and current_time < self._discharging_state_lock_until
-
-    def cleanup_locks(self, current_time: float) -> None:
-        if self._charging_state_lock_until and current_time >= self._charging_state_lock_until:
-            self._charging_state_lock_until = None
-        if self._discharging_state_lock_until and current_time >= self._discharging_state_lock_until:
-            self._discharging_state_lock_until = None
