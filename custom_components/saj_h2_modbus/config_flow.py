@@ -21,6 +21,7 @@ CONF_MQTT_USER = "mqtt_user"
 CONF_MQTT_PASSWORD = "mqtt_password"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
+CONF_USE_HA_MQTT = "use_ha_mqtt"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 CONF_MQTT_PUBLISH_ALL,
                 self._get_option_default(CONF_MQTT_PUBLISH_ALL, False),
             )
+            merged.setdefault(CONF_USE_HA_MQTT, self._get_option_default(CONF_USE_HA_MQTT, False))
 
             if not errors:
                 try:
@@ -143,6 +145,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                             merged.get(CONF_MQTT_PASSWORD, ""),
                             merged[CONF_MQTT_TOPIC_PREFIX],
                             merged[CONF_MQTT_PUBLISH_ALL],
+                            merged.get(CONF_USE_HA_MQTT, False),
                         )
                 except Exception as e:
                     _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
@@ -162,6 +165,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     CONF_MQTT_PASSWORD,
                     CONF_MQTT_TOPIC_PREFIX,
                     CONF_MQTT_PUBLISH_ALL,
+                    CONF_USE_HA_MQTT,
                 ):
                     if key == CONF_MQTT_TOPIC_PREFIX:
                         updated_data[key] = merged[CONF_MQTT_TOPIC_PREFIX] or updated_data.get(key, "saj")
@@ -193,6 +197,7 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         mqtt_password_default = self._get_option_default(CONF_MQTT_PASSWORD, "")
         mqtt_prefix_default = self._get_topic_prefix_default()
         mqtt_publish_all_default = self._get_option_default(CONF_MQTT_PUBLISH_ALL, False)
+        use_ha_mqtt_default = self._get_option_default(CONF_USE_HA_MQTT, False)
         return vol.Schema({
             vol.Required(CONF_HOST, default=host_default): str,
             vol.Required(CONF_PORT, default=port_default): int,
@@ -209,4 +214,5 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
             vol.Optional(CONF_MQTT_TOPIC_PREFIX, default=mqtt_prefix_default): str,
             vol.Optional(CONF_MQTT_PUBLISH_ALL, default=mqtt_publish_all_default): bool,
+            vol.Optional(CONF_USE_HA_MQTT, default=use_ha_mqtt_default, description={"name": "Home Assistant MQTT nutzen (Host ignorieren)"}): bool,
         })

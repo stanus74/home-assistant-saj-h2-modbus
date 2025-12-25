@@ -33,6 +33,7 @@ ADVANCED_LOGGING = False
 CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
+CONF_USE_HA_MQTT = "use_ha_mqtt"
 
 FAST_POLL_SENSORS = {
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
@@ -76,6 +77,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         mqtt_password = config_entry.options.get("mqtt_password", config_entry.data.get("mqtt_password", ""))
         mqtt_topic_prefix = config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"))
         mqtt_publish_all = config_entry.options.get(CONF_MQTT_PUBLISH_ALL, config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False))
+        use_ha_mqtt = config_entry.options.get(CONF_USE_HA_MQTT, config_entry.data.get(CONF_USE_HA_MQTT, False))
 
         _LOGGER.info(
             "SAJ Hub Initialized. Host: %s, Fast: %s, MQTT Prefix: '%s', MQTT Host: '%s'", 
@@ -92,7 +94,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             mqtt_password, 
             mqtt_topic_prefix, 
             mqtt_publish_all, 
-            self.ultra_fast_enabled
+            self.ultra_fast_enabled,
+            use_ha_mqtt,
         )
         
         # Log which strategy was picked
@@ -118,6 +121,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_discharging_state = None
         self._pending_passive_mode_state = None
         self._setting_handler = ChargeSettingHandler(self)
+        self.use_ha_mqtt = use_ha_mqtt
         
         self._init_setters()
 
@@ -314,11 +318,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         mqtt_password: str = "",
         mqtt_topic_prefix: Optional[str] = None,
         mqtt_publish_all: bool = False,
+        use_ha_mqtt: bool = False,
     ) -> None:
         """Update connection settings. Full signature restored to support positional arguments."""
         if self.updating_settings: return
         self.updating_settings = True
         try:
+            prev_strategy = self.mqtt.strategy
             # Update Services
             self.connection.update_config(host, port)
             
@@ -335,15 +341,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 mqtt_password,
                 mqtt_topic_prefix, 
                 mqtt_publish_all,
-                ultra_fast_enabled
+                ultra_fast_enabled,
+                use_ha_mqtt,
             )
-            
-            _LOGGER.info("SAJ MQTT Strategy updated to: %s", self.mqtt.strategy)
+            if self.mqtt.strategy != prev_strategy:
+                _LOGGER.info("SAJ MQTT Strategy updated to: %s", self.mqtt.strategy)
+            else:
+                _LOGGER.debug("SAJ MQTT Strategy unchanged: %s", self.mqtt.strategy)
             
             # Update Hub State
             self.update_interval = timedelta(seconds=scan_interval)
             self.fast_enabled = fast_enabled or ultra_fast_enabled
             self.ultra_fast_enabled = ultra_fast_enabled
+            self.use_ha_mqtt = use_ha_mqtt
 
             # Restart Fast Loop
             if self._cancel_fast_update:

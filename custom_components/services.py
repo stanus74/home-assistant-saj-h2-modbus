@@ -96,9 +96,9 @@ class ModbusConnectionManager:
             self._host = host
             self._port = port
             set_modbus_config(host, port, self.hass)
-            # Force reconnection on next usage
+            # Close active client so the next call re-connects with new settings
             if self._client:
-                pass
+                self.hass.async_create_task(self.close())
 
 
 class MqttCircuitBreaker:
@@ -144,7 +144,7 @@ class MqttPublisher:
     STRATEGY_PAHO = "PAHO"
     STRATEGY_NONE = "NONE"
 
-    def __init__(self, hass: HomeAssistant, host: str, port: int, user: str, password: str, topic_prefix: str, publish_all: bool, ultra_fast_enabled: bool):
+    def __init__(self, hass: HomeAssistant, host: str, port: int, user: str, password: str, topic_prefix: str, publish_all: bool, ultra_fast_enabled: bool, use_ha_mqtt: bool = False):
         self.hass = hass
         self._circuit_breaker = MqttCircuitBreaker(
             failure_threshold=3 if ultra_fast_enabled else 5,
@@ -162,12 +162,14 @@ class MqttPublisher:
         self.password = password
         self.publish_all = publish_all
         self.topic_prefix = (topic_prefix or "saj").strip().rstrip("/")
+        self.use_ha_mqtt = use_ha_mqtt
         
         self.strategy = self.STRATEGY_NONE
 
         # Internal Client
         self._paho_client = None
         self._paho_started = False
+        self._last_strategy_log = 0.0
         
         # Log throttling
         self._last_no_connection_log = 0.0
@@ -180,26 +182,48 @@ class MqttPublisher:
             self._init_paho_client()
 
     def _determine_strategy(self):
-        """Decide once which MQTT strategy to use."""
+        """Decide once which MQTT strategy to use with minimal logging."""
         # Clean up host input
         clean_host = (self.host or "").strip().lower()
-        
+
+        # Forced HA MQTT path overrides host setting
+        if self.use_ha_mqtt:
+            if "mqtt" in self.hass.config.components:
+                self.host = ""
+                new_strategy = self.STRATEGY_HA
+                self._log_strategy(new_strategy, "MQTT Strategy Selected: Forced Home Assistant MQTT (use_ha_mqtt enabled)", "MQTT Strategy remains HA (use_ha_mqtt enabled)")
+                self.strategy = new_strategy
+                return
+            _LOGGER.warning("MQTT Strategy fallback: use_ha_mqtt aktiviert, aber HA MQTT Integration nicht geladen")
+            # Host leeren, damit wir nicht zurück auf Paho fallen
+            self.host = ""
+            clean_host = ""
+
         # 1. Check for manual disable or empty
         if not clean_host or clean_host in ["disable", "disabled", "off", "none", "false"]:
             # If manually disabled, fall through to HA check or None
-            self.host = "" # Ensure it's treated as empty
+            self.host = ""  # Ensure it's treated as empty
+            clean_host = ""
         
         # 2. Priority: Manual Configuration (Paho) - Only if we have a valid-looking host
         if self.host:
-            self.strategy = self.STRATEGY_PAHO
-            _LOGGER.info("MQTT Strategy Selected: Internal Paho Client (Custom Host configured: %s:%s)", self.host, self.port)
-            return
+            if not PAHO_AVAILABLE:
+                _LOGGER.warning(
+                    "MQTT Strategy fallback: Host configured (%s) but paho-mqtt ist nicht installiert. "
+                    "Falle zurück auf HA-MQTT (falls vorhanden) oder deaktiviert.",
+                    self.host,
+                )
+            else:
+                new_strategy = self.STRATEGY_PAHO
+                self._log_strategy(new_strategy, f"MQTT Strategy Selected: Internal Paho Client (Custom Host configured: {self.host}:{self.port})", f"MQTT Strategy remains Paho (Host: {self.host}:{self.port})")
+                self.strategy = new_strategy
+                return
 
         # 3. Priority: Home Assistant Integration
         if "mqtt" in self.hass.config.components:
-            self.strategy = self.STRATEGY_HA
-            _LOGGER.info("MQTT Strategy Selected: Home Assistant Native Integration")
-            
+            new_strategy = self.STRATEGY_HA
+            self._log_strategy(new_strategy, "MQTT Strategy Selected: Home Assistant Native Integration", "MQTT Strategy remains HA (auto-detected)")
+            self.strategy = new_strategy
             # Warn if user provided credentials in SAJ config, as they are ignored in HA strategy
             if self.user or self.password:
                 _LOGGER.warning(
@@ -209,8 +233,21 @@ class MqttPublisher:
             return
 
         # 4. No MQTT
-        self.strategy = self.STRATEGY_NONE
-        _LOGGER.info("MQTT Strategy Selected: Disabled (No config, no HA MQTT found)")
+        new_strategy = self.STRATEGY_NONE
+        self._log_strategy(new_strategy, "MQTT Strategy Selected: Disabled (No config, no HA MQTT found)", "MQTT Strategy remains disabled")
+        self.strategy = new_strategy
+
+    def _log_strategy(self, new_strategy: str, info_msg: str, debug_msg: str):
+        now = time.monotonic()
+        if new_strategy != self.strategy:
+            # Only escalate to INFO if last strategy log is older than 2s; otherwise DEBUG to avoid bursts
+            if now - self._last_strategy_log > 2:
+                _LOGGER.info(info_msg)
+            else:
+                _LOGGER.debug(info_msg)
+            self._last_strategy_log = now
+        else:
+            _LOGGER.debug(debug_msg)
 
     def _init_paho_client(self):
         """Initialize Paho client if configured."""
@@ -248,41 +285,56 @@ class MqttPublisher:
         if rc != 0:
             _LOGGER.warning("Paho MQTT: Disconnected unexpectedly (rc=%s)", rc)
 
-    def update_config(self, host, port, user, password, topic_prefix, publish_all, ultra_fast_enabled):
-        """Updates MQTT configuration and re-inits client if needed."""
+    def update_config(self, host, port, user, password, topic_prefix, publish_all, ultra_fast_enabled, use_ha_mqtt=False):
+        """Updates MQTT configuration and re-inits client if needed (logs only on change)."""
         try:
             new_port = int(port)
         except (ValueError, TypeError):
             new_port = 1883
 
+        # If HA MQTT is forced, ignore provided host to prevent Paho fallback
+        incoming_host = "" if use_ha_mqtt else host
+
         # Check if critical connection params changed
-        connection_changed = (host != self.host or new_port != self.port or user != self.user or password != self.password)
+        connection_changed = (
+            incoming_host != self.host
+            or new_port != self.port
+            or user != self.user
+            or password != self.password
+            or topic_prefix != self.topic_prefix
+            or publish_all != self.publish_all
+            or use_ha_mqtt != getattr(self, "use_ha_mqtt", False)
+        )
         
-        self.host = host
+        self.host = incoming_host
         self.port = new_port
         self.user = user
         self.password = password
         self.topic_prefix = (topic_prefix or "saj").strip().rstrip("/")
         self.publish_all = publish_all
-        
-        _LOGGER.info("MQTT Config updated. Prefix: '%s'", self.topic_prefix)
+        self.use_ha_mqtt = use_ha_mqtt
+
+        if connection_changed:
+            _LOGGER.debug("MQTT Config updated. Prefix: '%s'", self.topic_prefix)
         
         # Update CB
         self._circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
         self._circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
 
         # Re-evaluate strategy
-        old_strategy = self.strategy
+        prev_strategy = self.strategy
         self._determine_strategy()
+        strategy_changed = self.strategy != prev_strategy
 
         # Handle Strategy Switch or Config Change
         if self.strategy == self.STRATEGY_PAHO:
-            if connection_changed or not self._paho_client:
+            if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
                 self._init_paho_client()
         elif self.strategy != self.STRATEGY_PAHO:
             # If we switched away from Paho, stop it
-            self.stop()
+            if prev_strategy == self.STRATEGY_PAHO:
+                self.stop()
 
     async def publish_data(self, data: Dict[str, Any], force: bool = False) -> None:
         """Publishes dictionary data to MQTT based on selected strategy."""

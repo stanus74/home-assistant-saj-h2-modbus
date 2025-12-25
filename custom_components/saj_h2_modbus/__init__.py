@@ -78,6 +78,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+    else:
+        _LOGGER.warning("Unload platforms failed for entry %s; Hub remains registered in hass.data", entry.entry_id)
     return unload_ok
 
 
@@ -95,6 +97,9 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
             mqtt_port=_get_config_value(entry, "mqtt_port", 1883),
             mqtt_user=_get_config_value(entry, "mqtt_user", ""),
             mqtt_password=_get_config_value(entry, "mqtt_password", ""),
+            mqtt_topic_prefix=_get_config_value(entry, "mqtt_topic_prefix", "saj"),
+            mqtt_publish_all=_get_config_value(entry, "mqtt_publish_all", False),
+            use_ha_mqtt=_get_config_value(entry, "use_ha_mqtt", False),
         )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
