@@ -66,9 +66,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
 
         self.fast_enabled = config_entry.options.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
-        self.ultra_fast_enabled = config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)
-        if self.ultra_fast_enabled:
-            self.fast_enabled = True
+        self.ultra_fast_enabled = config_entry.options.get(
+            CONF_ULTRA_FAST_ENABLED, False
+        )
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
         mqtt_host = config_entry.options.get("mqtt_host", config_entry.data.get("mqtt_host", ""))
@@ -363,7 +363,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
             # Update Hub State
             self.update_interval = timedelta(seconds=scan_interval)
-            self.fast_enabled = fast_enabled or ultra_fast_enabled
+            self.fast_enabled = fast_enabled
             self.ultra_fast_enabled = ultra_fast_enabled
             self.use_ha_mqtt = use_ha_mqtt
 

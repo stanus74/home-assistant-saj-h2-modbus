@@ -110,11 +110,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             if merged[CONF_SCAN_INTERVAL] < 60:
                 errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
 
-            merged.setdefault(CONF_FAST_ENABLED, self._get_option_default(CONF_FAST_ENABLED, False))
-            merged.setdefault(CONF_ULTRA_FAST_ENABLED, self._get_option_default(CONF_ULTRA_FAST_ENABLED, False))
-            # Enforce fast poll when ultra-fast is active
-            if merged.get(CONF_ULTRA_FAST_ENABLED):
-                merged[CONF_FAST_ENABLED] = True
             merged.setdefault(CONF_MQTT_HOST, self._get_option_default(CONF_MQTT_HOST, ""))
             merged.setdefault(CONF_MQTT_PORT, self._get_option_default(CONF_MQTT_PORT, 1883))
             merged.setdefault(CONF_MQTT_USER, self._get_option_default(CONF_MQTT_USER, ""))
@@ -173,10 +168,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 ):
                     if key == CONF_MQTT_TOPIC_PREFIX:
                         updated_data[key] = merged[CONF_MQTT_TOPIC_PREFIX] or updated_data.get(key, "saj")
-                    elif key == CONF_FAST_ENABLED and merged.get(CONF_ULTRA_FAST_ENABLED):
-                        updated_data[key] = True
-                    else:
-                        updated_data[key] = merged.get(key, updated_data.get(key))
+                    elif key in merged:
+                        updated_data[key] = merged[key]
                 self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
                 return self.async_create_entry(title="", data=merged)
 
