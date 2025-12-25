@@ -583,8 +583,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
                     if self._client:
                         try:
-                            # Use standard synchronous close
-                            self._client.close()
+                            # Close the client in an executor to avoid blocking the event loop
+                            await self.hass.async_add_executor_job(self._client.close)
                         except Exception as e:
                             _LOGGER.warning(f"Error while closing old Modbus client: {e}")
                     # Reset client to None so it gets recreated by connect_if_needed with new settings
@@ -651,8 +651,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._reconnecting = True
                 if self._client:
                     try:
-                        # Use standard synchronous close
-                        self._client.close()
+                        # Close the client in an executor to avoid blocking the event loop
+                        await self.hass.async_add_executor_job(self._client.close)
                     except Exception as e:
                         _LOGGER.warning("Error while closing old Modbus client: %s", e)
                 
@@ -809,7 +809,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             if group_idx in CRITICAL_READER_GROUPS:
                 # Sequential execution for critical groups to prevent race conditions
                 # and ensure a consistent data snapshot from the device.
-                _LOGGER.debug("[RACE_CONDITION_FIX] Executing critical reader group %d sequentially", group_idx)
+                #_LOGGER.debug("[RACE_CONDITION_FIX] Executing critical reader group %d sequentially", group_idx)
                 results = []
                 for method in group:
                     try:
@@ -819,7 +819,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         results.append(e)
             else:
                 # Parallel execution for non-critical groups to maintain performance.
-                _LOGGER.debug("[RACE_CONDITION_FIX] Executing non-critical reader group %d in parallel", group_idx)
+                #_LOGGER.debug("[RACE_CONDITION_FIX] Executing non-critical reader group %d in parallel", group_idx)
                 tasks = [method(self._client, self._read_lock) for method in group]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
             
@@ -930,9 +930,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if client_to_close:
             self._client = None  # Verweis sofort entfernen
             try:
-                # Use standard synchronous close
-                client_to_close.close()
-                _LOGGER.debug("Modbus client connection closed")
+                # Close the client in an executor to avoid blocking the event loop
+                await self.hass.async_add_executor_job(client_to_close.close)
+                _LOGGER.debug("Modbus client connection closed safely")
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
         else:
