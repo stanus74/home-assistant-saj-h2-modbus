@@ -109,7 +109,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Fast Poll State
         self._fast_unsub = None
         self._cancel_fast_update = None
+        self._cancel_ultra_fast_update = None
         self._pending_fast_start_cancel: Optional[Callable] = None
+        self._pending_ultra_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
         self._fast_debug_log_next = 0.0
 
@@ -252,26 +254,40 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if not self.fast_enabled or self._cancel_fast_update:
             return
 
-        interval = 1 if self.ultra_fast_enabled else 10
         mqtt_in_config = "mqtt" in self.hass.config.components
-        
+
         # Smart Delay Logic
         is_running = self.hass.state == CoreState.running if hasattr(CoreState, "running") else False
         startup_delay = 1 if is_running else (30 if mqtt_in_config else 1)
 
         @callback
-        def _start_loop(_):
-            self._pending_fast_start_cancel = None
-            if self._cancel_fast_update: return
-            
+        def _start_loop(interval: int, cancel_attr: str, ultra: bool = False):
+            if cancel_attr == "_cancel_fast_update":
+                self._pending_fast_start_cancel = None
+            else:
+                self._pending_ultra_fast_start_cancel = None
+
+            if getattr(self, cancel_attr):
+                return
+
             _LOGGER.info(f"Starting fast update loop ({interval}s)")
-            self._cancel_fast_update = async_track_time_interval(
-                self.hass, self._async_update_fast, timedelta(seconds=interval)
+            async def runner(now):
+                await self._async_update_fast(now, ultra=ultra)
+
+            setattr(self, cancel_attr, async_track_time_interval(self.hass, runner, timedelta(seconds=interval)))
+
+        # Schedule 10s loop always when fast_enabled
+        self._pending_fast_start_cancel = async_call_later(
+            self.hass, startup_delay, lambda _: _start_loop(10, "_cancel_fast_update", False)
+        )
+
+        # Add 1s ultra-fast loop additionally when ultra_fast_enabled
+        if self.ultra_fast_enabled:
+            self._pending_ultra_fast_start_cancel = async_call_later(
+                self.hass, startup_delay, lambda _: _start_loop(1, "_cancel_ultra_fast_update", True)
             )
 
-        self._pending_fast_start_cancel = async_call_later(self.hass, startup_delay, _start_loop)
-
-    async def _async_update_fast(self, now=None) -> None:
+    async def _async_update_fast(self, now=None, ultra: bool = False) -> None:
         if not self.fast_enabled: return
         
         try:
@@ -284,8 +300,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     self.inverter_data.update(result)
                     await self.mqtt.publish_data(fast_data)
 
-                    # Update HA only in normal fast mode, skip in Ultra Fast to save DB
-                    if not self.ultra_fast_enabled:
+                    # Only the 10s loop should push to HA entities to avoid DB spam
+                    if not ultra:
                         for listener in self._fast_listeners:
                             listener()
 
@@ -344,10 +360,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 ultra_fast_enabled,
                 use_ha_mqtt,
             )
-            if self.mqtt.strategy != prev_strategy:
-                _LOGGER.info("SAJ MQTT Strategy updated to: %s", self.mqtt.strategy)
-            else:
-                _LOGGER.debug("SAJ MQTT Strategy unchanged: %s", self.mqtt.strategy)
             
             # Update Hub State
             self.update_interval = timedelta(seconds=scan_interval)
@@ -359,9 +371,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             if self._cancel_fast_update:
                 self._cancel_fast_update()
                 self._cancel_fast_update = None
+            if self._cancel_ultra_fast_update:
+                self._cancel_ultra_fast_update()
+                self._cancel_ultra_fast_update = None
             if self._pending_fast_start_cancel:
                 self._pending_fast_start_cancel()
                 self._pending_fast_start_cancel = None
+            if self._pending_ultra_fast_start_cancel:
+                self._pending_ultra_fast_start_cancel()
+                self._pending_ultra_fast_start_cancel = None
             
             if self.fast_enabled:
                 await self.start_fast_updates()
@@ -371,7 +389,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def async_unload_entry(self) -> None:
         if self._cancel_fast_update: self._cancel_fast_update()
+        if self._cancel_ultra_fast_update: self._cancel_ultra_fast_update()
         if self._pending_fast_start_cancel: self._pending_fast_start_cancel()
+        if self._pending_ultra_fast_start_cancel: self._pending_ultra_fast_start_cancel()
         
         self.mqtt.stop()
         await self.connection.close()

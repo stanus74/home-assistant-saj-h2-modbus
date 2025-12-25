@@ -128,6 +128,10 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             )
             merged.setdefault(CONF_USE_HA_MQTT, self._get_option_default(CONF_USE_HA_MQTT, False))
 
+            # If HA MQTT is forced, clear custom host to prevent Paho fallback
+            if merged.get(CONF_USE_HA_MQTT, False):
+                merged[CONF_MQTT_HOST] = ""
+
             if not errors:
                 try:
                     # Check if the integration is loaded before trying to update the hub
@@ -208,7 +212,11 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 default=ultra_fast_default,
                 description={"name": "Ultra Fast (1s over MQTT)"},
             ): bool,
-            vol.Optional(CONF_MQTT_HOST, default=mqtt_host_default): str,
+            vol.Optional(
+                CONF_MQTT_HOST,
+                default="" if use_ha_mqtt_default else mqtt_host_default,
+                description={"name": "MQTT Host (ignored when HA MQTT is active)"},
+            ): str,
             vol.Optional(CONF_MQTT_PORT, default=mqtt_port_default): int,
             vol.Optional(CONF_MQTT_USER, default=mqtt_user_default): str,
             vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
