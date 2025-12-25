@@ -3,93 +3,37 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional, Any, Dict, List, Callable, Union
+from typing import Optional, Any, Dict, List, Callable
 from datetime import timedelta
+
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.components import mqtt
-from homeassistant.exceptions import HomeAssistantError
-from .const import DOMAIN, CONF_FAST_ENABLED
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
-from pymodbus.client import ModbusTcpClient
 from homeassistant.config_entries import ConfigEntry
 
-# Try to import paho-mqtt for direct connection fallback
-try:
-    import paho.mqtt.client as mqtt_client
-    PAHO_AVAILABLE = True
-except ImportError:
-    PAHO_AVAILABLE = False
-
+from .const import DOMAIN, CONF_FAST_ENABLED
 from . import modbus_readers
 from .modbus_utils import (
     try_read_registers,
     try_write_registers,
     ReconnectionNeededError,
-    set_modbus_config,
-    ensure_client_connected,
-    connect_if_needed, 
 )
-
 from .charge_control import (
     ChargeSettingHandler,
     PENDING_FIELDS,
 )
+from .services import ModbusConnectionManager, MqttPublisher
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class MqttCircuitBreaker:
-    """Circuit breaker pattern for MQTT publishing to prevent hammering a failing service."""
-
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
-        self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.failure_count = 0
-        self.last_failure_time = 0.0
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-
-    async def call(self, func: Callable, *args, **kwargs) -> Any:
-        """Execute a function through the circuit breaker."""
-        now = time.monotonic()
-
-        if self.state == "OPEN":
-            if now - self.last_failure_time > self.timeout:
-                self.state = "HALF_OPEN"
-                _LOGGER.info("MQTT Circuit Breaker transitioning to HALF_OPEN")
-            else:
-                raise ConnectionError("MQTT Circuit Breaker is OPEN")
-
-        try:
-            result = await func(*args, **kwargs)
-            # Success
-            if self.state == "HALF_OPEN":
-                self.state = "CLOSED"
-                self.failure_count = 0
-                _LOGGER.info("MQTT Circuit Breaker transitioning to CLOSED")
-            return result
-        except Exception as e:
-            self.failure_count += 1
-            self.last_failure_time = now
-
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-                _LOGGER.warning(
-                    f"MQTT Circuit Breaker transitioning to OPEN after {self.failure_count} failures"
-                )
-            raise e
-
-
-# Enable defaults for debugging
+# Config Defaults
 FAST_POLL_DEFAULT = False
-# ULTRA_FAST_POLL removed, now dynamic via config
 ADVANCED_LOGGING = False
 CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
-# Define which sensor keys should be updated in fast polling (10s interval)
 FAST_POLL_SENSORS = {
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
     "inverterPower", "gridPower", "directionPV", "directionBattery",
@@ -98,9 +42,6 @@ FAST_POLL_SENSORS = {
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
 }
 
-
-# Define which reader groups require sequential execution to ensure data consistency
-# and avoid race conditions when reading interdependent registers.
 CRITICAL_READER_GROUPS = {1, 2}
 
 
@@ -108,16 +49,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._optimistic_push_enabled: bool = True
         self._optimistic_overlay: dict[str, Any] | None = None
- 
-        # Prioritize options, fallback to data
+        self._config_entry = config_entry
+
+        # Config extraction - Connection
         host = config_entry.options.get(CONF_HOST, config_entry.data.get(CONF_HOST))
         port = config_entry.options.get(CONF_PORT, config_entry.data.get(CONF_PORT, 502))
         scan_interval = config_entry.options.get(CONF_SCAN_INTERVAL, config_entry.data.get(CONF_SCAN_INTERVAL, 60))
- 
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] SAJModbusHub initialization started - Host: %s, Port: %s, Scan Interval: %ss", host, port, scan_interval)
-        _LOGGER.info("Initializing SAJModbusHub with scan_interval: %s seconds", scan_interval)
- 
+
         super().__init__(
             hass,
             _LOGGER,
@@ -125,364 +63,243 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             update_interval=timedelta(seconds=scan_interval),
             update_method=self._async_update_data,
         )
- 
-        _LOGGER.info(f"SAJModbusHub initialized with update_interval: {self.update_interval}")
-        self._host = host
-        self._port = port
-        self._config_entry = config_entry
- 
-        # MQTT Configuration
-        # Removed http:// prefix - MQTT requires plain IP or hostname
-        self.mqtt_host = config_entry.options.get("mqtt_host", "")
-        self.mqtt_port = config_entry.options.get("mqtt_port", 1883)
-        self.mqtt_user = config_entry.options.get("mqtt_user", "")
-        self.mqtt_password = config_entry.options.get("mqtt_password", "")
-        raw_prefix = (
-            config_entry.options.get(CONF_MQTT_TOPIC_PREFIX)
-            or config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "")
-        )
-        normalized_prefix = (raw_prefix or "").strip()
-        self.mqtt_topic_prefix = normalized_prefix.rstrip("/") if normalized_prefix else "saj"
-        self.mqtt_publish_all = config_entry.options.get(
-            CONF_MQTT_PUBLISH_ALL,
-            config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False),
-        )
-        
-        # Initialize fast/ultra-fast settings BEFORE circuit breaker
+
         self.fast_enabled = config_entry.options.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
         self.ultra_fast_enabled = config_entry.options.get(CONF_ULTRA_FAST_ENABLED, False)
-        
-        # Force fast_enabled if ultra_fast is enabled to ensure loop starts
         if self.ultra_fast_enabled:
             self.fast_enabled = True
-        
-        # Initialize Circuit Breaker for MQTT publishing
-        # Must be AFTER ultra_fast_enabled is set
-        self._mqtt_circuit_breaker = MqttCircuitBreaker(
-            failure_threshold=3 if self.ultra_fast_enabled else 5,
-            timeout=30 if self.ultra_fast_enabled else 60,
+
+        # Config extraction - MQTT (Fallback logic options -> data -> default)
+        mqtt_host = config_entry.options.get("mqtt_host", config_entry.data.get("mqtt_host", ""))
+        mqtt_port = config_entry.options.get("mqtt_port", config_entry.data.get("mqtt_port", 1883))
+        mqtt_user = config_entry.options.get("mqtt_user", config_entry.data.get("mqtt_user", ""))
+        mqtt_password = config_entry.options.get("mqtt_password", config_entry.data.get("mqtt_password", ""))
+        mqtt_topic_prefix = config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"))
+        mqtt_publish_all = config_entry.options.get(CONF_MQTT_PUBLISH_ALL, config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False))
+
+        _LOGGER.info(
+            "SAJ Hub Initialized. Host: %s, Fast: %s, MQTT Prefix: '%s', MQTT Host: '%s'", 
+            host, self.fast_enabled, mqtt_topic_prefix, mqtt_host
         )
 
-        # Initialize internal MQTT client as fallback
-        self._paho_client = None
-        self._paho_started = False
+        # --- SERVICES ---
+        self.connection = ModbusConnectionManager(hass, host, port)
+        self.mqtt = MqttPublisher(
+            hass, 
+            mqtt_host, 
+            mqtt_port, 
+            mqtt_user, 
+            mqtt_password, 
+            mqtt_topic_prefix, 
+            mqtt_publish_all, 
+            self.ultra_fast_enabled
+        )
         
-        if ADVANCED_LOGGING:
-            _LOGGER.info("MQTT Paho Client Available: %s", PAHO_AVAILABLE)
+        # Log which strategy was picked
+        _LOGGER.info("SAJ MQTT Strategy initialized: %s", self.mqtt.strategy)
 
-        if PAHO_AVAILABLE and self.mqtt_host:
-            try:
-                # Use basic init to be compatible with v1 and v2
-                self._paho_client = mqtt_client.Client()
-                if self.mqtt_user:
-                    self._paho_client.username_pw_set(self.mqtt_user, self.mqtt_password)
-            except Exception as e:
-                _LOGGER.error("Failed to initialize internal MQTT client: %s", e)
-
-        set_modbus_config(self._host, self._port, hass)
-        self._read_lock = asyncio.Lock()
+        # State & Locks
+        self._read_lock = asyncio.Lock() # Lock for read operations specifically
         self.inverter_data: Dict[str, Any] = {}
-        self._client: Optional[ModbusTcpClient] = None
-        self._connection_lock = asyncio.Lock()
         self.updating_settings = False
-
-        self._fast_coordinator = None
+        
+        # Fast Poll State
         self._fast_unsub = None
         self._cancel_fast_update = None
         self._pending_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
         self._fast_debug_log_next = 0.0
- 
-        self._scan_interval = scan_interval
-        self._reconnecting = False
-        self._max_retries = 2
-        self._retry_delay = 1
-        self._operation_timeout = 30
-        self._warned_missing_states: bool = False
-        self._inverter_static_data: Optional[Dict[str, Any]] = None
 
+        self._inverter_static_data: Optional[Dict[str, Any]] = None
+        self._warned_missing_states: bool = False
+
+        # Charge Control
         self._pending_charging_state = None
         self._pending_discharging_state = None
         self._pending_passive_mode_state = None
         self._setting_handler = ChargeSettingHandler(self)
         
-        # Generate setters that delegate to the handler
+        self._init_setters()
+
+    def _init_setters(self):
+        """Initializes dynamic setters."""
         for name, attr_path in PENDING_FIELDS:
-            # Create a closure to capture attr_path
             def make_setter(path):
-                # Must be async because entities await this method
                 async def setter(value):
                     self._setting_handler.set_pending(path, value)
                 return setter
-            
             setattr(self, f"set_{name}", make_setter(attr_path))
 
-        # Define explicit setters for power states
-        async def _set_charging_state(value: bool) -> None:
-            self._pending_charging_state = value
-            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
-            self._setting_handler.set_charging_state(value)
-            _LOGGER.info("Set pending charging state to: %s", value)
-            self.hass.async_create_task(self.process_pending_now())
+        # Explicit setters for power states
+        self.set_charging = self._set_charging_state
+        self.set_discharging = self._set_discharging_state
+        self.set_passive_mode = self._set_passive_mode
 
-        async def _set_discharging_state(value: bool) -> None:
-            self._pending_discharging_state = value
-            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
-            self._setting_handler.set_discharging_state(value)
-            _LOGGER.info("Set pending discharging state to: %s", value)
-            self.hass.async_create_task(self.process_pending_now())
+    async def _set_charging_state(self, value: bool) -> None:
+        self._pending_charging_state = value
+        self.async_set_updated_data(self.inverter_data)
+        self._setting_handler.set_charging_state(value)
+        self.hass.async_create_task(self.process_pending_now())
 
-        async def _set_passive_mode(value: Optional[int]) -> None:
-            state = None if value is None else int(value)
-            self._pending_passive_mode_state = state
-            self.async_set_updated_data(self.inverter_data) # Trigger UI update immediately
-            self._setting_handler.set_passive_mode(state)
-            _LOGGER.info("Set pending passive mode state to: %s", state)
-            self.hass.async_create_task(self.process_pending_now())
+    async def _set_discharging_state(self, value: bool) -> None:
+        self._pending_discharging_state = value
+        self.async_set_updated_data(self.inverter_data)
+        self._setting_handler.set_discharging_state(value)
+        self.hass.async_create_task(self.process_pending_now())
 
-        self.set_charging = _set_charging_state
-        self.set_discharging = _set_discharging_state
-        self.set_passive_mode = _set_passive_mode
-
-    async def start_main_coordinator(self) -> None:
-        """Start the main coordinator scheduling."""
-        _LOGGER.info("Starting main coordinator scheduling...")
-        # The DataUpdateCoordinator handles the scheduling, so we just log here.
-        # This method is kept for compatibility but does nothing.
-        pass
+    async def _set_passive_mode(self, value: Optional[int]) -> None:
+        self._pending_passive_mode_state = value
+        self.async_set_updated_data(self.inverter_data)
+        self._setting_handler.set_passive_mode(value)
+        self.hass.async_create_task(self.process_pending_now())
 
     async def process_pending_now(self) -> None:
-        """Immediately process pending settings without waiting for next update cycle."""
-        _LOGGER.debug("Immediately processing pending settings...")
+        """Immediately process pending settings."""
         try:
-            await self._ensure_connected_client()
-            # Delegated to handler
+            await self.connection.get_client()
             await self._setting_handler.process_pending()
-            _LOGGER.debug("Immediate pending processing completed")
         except Exception as e:
             _LOGGER.error("Immediate pending processing failed: %s", e)
 
-    async def _ensure_connected_client(self) -> ModbusTcpClient:
-        """Ensure client is connected under connection lock."""
-        if ADVANCED_LOGGING:
-            _LOGGER.debug("[ADVANCED] _ensure_connected_client called - Current client state: %s", self._client)
+    # --- COORDINATOR METHODS ---
+
+    async def start_main_coordinator(self) -> None:
+        """Legacy compatibility."""
+        _LOGGER.debug("start_main_coordinator called")
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        """Regular poll cycle (slow)."""
+        try:
+            client = await self.connection.get_client() # Ensure connected
+
+            if self._optimistic_push_enabled and self._setting_handler.has_pending():
+                self._apply_optimistic_overlay()
+                if self._optimistic_overlay:
+                    self.async_set_updated_data(self._optimistic_overlay)
+
+            await self._setting_handler.process_pending()
+
+            cache = await self._run_reader_methods(client)
+            self._optimistic_overlay = None
+            self.inverter_data = cache
+
+            if self.mqtt.publish_all and self.inverter_data:
+                await self.mqtt.publish_data(self.inverter_data)
+            
+            return self.inverter_data
+        except Exception as err:
+            _LOGGER.error("Update cycle failed: %s", err)
+            self._optimistic_overlay = None
+            raise
+
+    async def _run_reader_methods(self, client) -> Dict[str, Any]:
+        """Executes all readers using the provided client."""
+        new_cache: Dict[str, Any] = {}
         
-        async with self._connection_lock:
-            if ADVANCED_LOGGING:
-                _LOGGER.debug("Connection lock acquired for %s:%s", self._host, self._port)
+        # Load Static Data once
+        if self._inverter_static_data is None:
+            try:
+                self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
+                    client, self._read_lock
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to load static data: %s", e)
+                self._inverter_static_data = {}
+        
+        if self._inverter_static_data:
+            new_cache.update(self._inverter_static_data)
 
-            self._client = await connect_if_needed(self._client, self._host, self._port)
+        # Reader groups (Same definition as original)
+        reader_groups = [
+            [modbus_readers.read_modbus_realtime_data],
+            [modbus_readers.read_additional_modbus_data_1_part_1, modbus_readers.read_additional_modbus_data_1_part_2],
+            [modbus_readers.read_additional_modbus_data_2_part_1, modbus_readers.read_additional_modbus_data_2_part_2],
+            [modbus_readers.read_additional_modbus_data_3, modbus_readers.read_additional_modbus_data_3_2, modbus_readers.read_additional_modbus_data_4],
+            [modbus_readers.read_battery_data, modbus_readers.read_inverter_phase_data, modbus_readers.read_offgrid_output_data],
+            [modbus_readers.read_side_net_data, modbus_readers.read_passive_battery_data, modbus_readers.read_meter_a_data],
+            [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
+        ]
 
-            if ADVANCED_LOGGING:
-                _LOGGER.debug("[ADVANCED] connect_if_needed returned client: %s, connected: %s", self._client, self._client.connected if self._client else 'N/A')
+        for group_idx, group in enumerate(reader_groups, 1):
+            if group_idx in CRITICAL_READER_GROUPS:
+                # Sequential
+                for method in group:
+                    try:
+                        res = await method(client, self._read_lock)
+                        if isinstance(res, dict): new_cache.update(res)
+                    except Exception as e:
+                         _LOGGER.warning("Reader error: %s", e)
+            else:
+                # Parallel
+                tasks = [method(client, self._read_lock) for method in group]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for res in results:
+                    if isinstance(res, dict): new_cache.update(res)
+                    elif isinstance(res, ReconnectionNeededError):
+                         await self.connection.reconnect()
+                    elif isinstance(res, Exception):
+                         _LOGGER.warning("Reader error: %s", res)
 
-            return self._client
+        return new_cache
+
+    # --- FAST POLLING ---
 
     async def start_fast_updates(self) -> None:
-        """Start fast updates using async_track_time_interval."""
-        if not self.fast_enabled:
-            _LOGGER.warning("Fast updates disabled via hub setting (fast_enabled=False); skipping start.")
-            return
-        if self._cancel_fast_update is not None:
-            _LOGGER.debug("Fast updates already running")
-            return
-        if self._pending_fast_start_cancel is not None:
-            _LOGGER.debug("Fast update start already scheduled; skipping duplicate schedule")
+        if not self.fast_enabled or self._cancel_fast_update:
             return
 
         interval = 1 if self.ultra_fast_enabled else 10
-        
-        # Check if MQTT integration is configured in Home Assistant
         mqtt_in_config = "mqtt" in self.hass.config.components
         
-        # Determine startup delay:
-        # - If HA is NOT running yet (starting up): Wait 30s to let MQTT load
-        # - If HA IS running (config change): Start almost immediately (1s)
-        
-        is_running = False
-        # Handle CoreState enum changes (RUNNING vs running) to be compatible with different HA versions
-        if hasattr(CoreState, "running") and self.hass.state == CoreState.running:
-            is_running = True
-        elif hasattr(CoreState, "RUNNING") and self.hass.state == CoreState.RUNNING:
-            is_running = True
-            
-        if is_running:
-            startup_delay = 1
-        else:
-            startup_delay = 30 if mqtt_in_config else 1
-        
-        _LOGGER.info(
-            "Scheduling fast updates start (interval=%ss, Ultra Fast=%s). MQTT in HA config: %s. Delay: %ss", 
-            interval, self.ultra_fast_enabled, mqtt_in_config, startup_delay
-        )
-        
+        # Smart Delay Logic
+        is_running = self.hass.state == CoreState.running if hasattr(CoreState, "running") else False
+        startup_delay = 1 if is_running else (30 if mqtt_in_config else 1)
+
         @callback
         def _start_loop(_):
-            # clear pending marker
             self._pending_fast_start_cancel = None
-            if self._cancel_fast_update is not None:
-                return  # Already started
-
-            _LOGGER.info("Starting fast update loop now")
-            self._cancel_fast_update = async_track_time_interval(
-                self.hass,
-                self._async_update_fast,
-                timedelta(seconds=interval)
-            )
+            if self._cancel_fast_update: return
             
+            _LOGGER.info(f"Starting fast update loop ({interval}s)")
+            self._cancel_fast_update = async_track_time_interval(
+                self.hass, self._async_update_fast, timedelta(seconds=interval)
+            )
+
         self._pending_fast_start_cancel = async_call_later(self.hass, startup_delay, _start_loop)
 
     async def _async_update_fast(self, now=None) -> None:
-        """Fast update function called by async_track_time_interval."""
-        if not self.fast_enabled:
-            return
-            
-        # Debug log to confirm loop is running
-        if self._should_log_fast_debug():
-            _LOGGER.debug("Fast update loop triggered")
-
-        if self._client is None or not self._client.connected:
-            try:
-                await self._ensure_connected_client()
-            except Exception as e:
-                _LOGGER.warning("Fast update: Failed to ensure connection: %s", e)
-                return
+        if not self.fast_enabled: return
         
         try:
-            # Execute reader for fast poll sensors
-            # All requested power sensors are in additional_data_1_part_2
-            result = await modbus_readers.read_additional_modbus_data_1_part_2(self._client, self._read_lock)
+            client = await self.connection.get_client()
+            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, self._read_lock)
             
             if result:
-                # Filter result to only include fast poll sensors
                 fast_data = {k: v for k, v in result.items() if k in FAST_POLL_SENSORS}
-                
                 if fast_data:
-                    # Update internal cache with all data (even non-fast ones from the block)
                     self.inverter_data.update(result)
-                    
-                    # Publish to MQTT
-                    self._publish_fast_data_to_mqtt(fast_data)
-                    
-                    # Only notify fast listeners about fast sensor changes if NOT in ultra fast mode
-                    # In ultra fast mode (1s), we only push to MQTT to avoid overloading HA state machine
-                    # NOTE: The regular coordinator update (every 60s) will still update these sensors in HA.
-                    if not self.ultra_fast_enabled:
-                        if self._fast_listeners:
-                            for listener in self._fast_listeners:
-                                listener()
-                    elif self._should_log_fast_debug():
-                        _LOGGER.debug("Skipping HA entity updates in Ultra Fast mode to save DB")
-                    
-                    if self._should_log_fast_debug():
-                        _LOGGER.debug(
-                            f"Fast update completed: {len(fast_data)} sensors updated "
-                            f"(filtered to fast sensors only)"
-                        )
-                else:
-                    if self._should_log_fast_debug():
-                        _LOGGER.debug("Fast update: No fast-poll sensors in result")
-            else:
-                if self._should_log_fast_debug():
-                    _LOGGER.debug("Fast update: Reader returned no data")
+                    await self.mqtt.publish_data(fast_data)
 
-        except ReconnectionNeededError as e:
-            _LOGGER.warning("Fast update requires reconnection: %s", e)
-            await self.reconnect_client()
+                    # Update HA only in normal fast mode, skip in Ultra Fast to save DB
+                    if not self.ultra_fast_enabled:
+                        for listener in self._fast_listeners:
+                            listener()
+
+        except ReconnectionNeededError:
+            await self.connection.reconnect()
         except Exception as e:
             _LOGGER.warning("Fast update failed: %s", e)
 
-    def _publish_fast_data_to_mqtt(self, data: Dict[str, Any]) -> None:
-        """Publish fast poll data to MQTT."""
-        if not data:
-            return
-        def normalize_sensor_key(raw_key: str) -> str:
-            parts = [segment for segment in raw_key.split("/") if segment]
-            for segment in reversed(parts):
-                if segment.lower() not in {"saj", "mqtt"}:
-                    return segment
-            return parts[-1] if parts else raw_key
-        base_topic = self._get_base_topic()
-        messages: List[tuple[str, str]] = []
-        for key, value in data.items():
-            sensor_key = normalize_sensor_key(key) or key.replace("/", "_")
-            messages.append((sensor_key, str(value)))
-        if not messages:
-            return
-
-        # Try publishing via HA MQTT integration first
-        try:
-            mqtt_available = "mqtt" in self.hass.config.components and mqtt.is_connected(self.hass)
-        except (AttributeError, KeyError, Exception):
-            mqtt_available = False
-        
-        if mqtt_available:
-            if self._paho_client and self._paho_started:
-                self._paho_client.loop_stop()
-                self._paho_client.disconnect()
-                self._paho_started = False
-            for sensor_key, payload in messages:
-                topic = f"{base_topic}/{sensor_key}"
-                self.hass.async_create_task(
-                    self._async_publish_via_ha(topic, payload)
-                )
-            return
-
-        if PAHO_AVAILABLE and (self._paho_client or self.mqtt_host):
-            if self._paho_client is None and self.mqtt_host:
-                try:
-                    self._paho_client = mqtt_client.Client()
-                    if self.mqtt_user:
-                        self._paho_client.username_pw_set(self.mqtt_user, self.mqtt_password)
-                except Exception as err:
-                    _LOGGER.error("Failed to initialize internal MQTT client: %s", err)
-                    return
-            if self._paho_client:
-                try:
-                    if not self._paho_started:
-                        self._paho_client.connect_async(self.mqtt_host, self.mqtt_port)
-                        self._paho_client.loop_start()
-                        self._paho_started = True
-                    for sensor_key, payload in messages:
-                        self._paho_client.publish(f"{base_topic}/{sensor_key}", payload)
-                    return
-                except Exception as err:
-                    _LOGGER.error("Internal MQTT publish failed: %s", err)
-                    _LOGGER.warning("Internal MQTT client failed, will retry via circuit breaker")
-                    return
-
-        if self.mqtt_host:
-            if not PAHO_AVAILABLE:
-                _LOGGER.warning(
-                    "MQTT service unavailable and paho-mqtt not installed; cannot publish MQTT data."
-                )
-            else:
-                _LOGGER.warning(
-                    "MQTT service unavailable and no internal client configured. Check MQTT settings."
-                )
-        else:
-            _LOGGER.debug("MQTT not configured and HA MQTT unavailable; skipping MQTT publish")
-
-    async def _async_publish_via_ha(self, topic: str, payload: str) -> None:
-        """Publish a single payload via Home Assistant MQTT and handle disabled state."""
-        try:
-            # Use the circuit breaker to wrap the actual publish call
-            await self._mqtt_circuit_breaker.call(mqtt.async_publish, self.hass, topic, payload)
-        except Exception as err:
-            # The circuit breaker will handle the state transition and logging
-            _LOGGER.warning("HA MQTT publish failed: %s", err)
-
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
-        """Register a callback for fast-update notifications."""
         self._fast_listeners.append(update_callback)
-
         @callback
         def remove_listener() -> None:
             if update_callback in self._fast_listeners:
                 self._fast_listeners.remove(update_callback)
-
         return remove_listener
+
+    # --- CONFIG & LIFECYCLE ---
 
     async def update_connection_settings(
         self,
@@ -498,475 +315,73 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         mqtt_topic_prefix: Optional[str] = None,
         mqtt_publish_all: bool = False,
     ) -> None:
-        """Update connection settings from config entry options."""
-        if self.updating_settings:
-            if ADVANCED_LOGGING:
-                _LOGGER.debug("[ADVANCED] Settings update already in progress, skipping duplicate call")
-            return
-            
-        async with self._connection_lock:
-            self.updating_settings = True
-            try:
-                connection_changed = (host != self._host) or (port != self._port)
-                self._host = host
-                self._port = port
-                set_modbus_config(self._host, self._port, self.hass)
-                self._scan_interval = scan_interval
-                self.update_interval = timedelta(seconds=scan_interval)
-                
-                # Update fast_enabled and ultra_fast_enabled
-                self.ultra_fast_enabled = ultra_fast_enabled
-                # Force fast_enabled if ultra_fast is enabled
-                self.fast_enabled = fast_enabled or ultra_fast_enabled
-                
-                # Adjust circuit breaker thresholds based on ultra_fast mode
-                self._mqtt_circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
-                self._mqtt_circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
-
-                # Update MQTT settings
-                mqtt_changed = (
-                    mqtt_host != self.mqtt_host or 
-                    mqtt_port != self.mqtt_port or 
-                    mqtt_user != self.mqtt_user or 
-                    mqtt_password != self.mqtt_password
-                )
-                self.mqtt_host = mqtt_host
-                self.mqtt_port = mqtt_port
-                self.mqtt_user = mqtt_user
-                self.mqtt_password = mqtt_password
-
-                last_prefix = (self.mqtt_topic_prefix or "").strip()
-                if not last_prefix:
-                    entry_prefix = (
-                        (self._config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, "") or "")
-                        or (self._config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "") or "")
-                    )
-                    last_prefix = entry_prefix.strip() or "saj"
-                incoming_prefix = mqtt_topic_prefix if mqtt_topic_prefix is not None else last_prefix
-                if not isinstance(incoming_prefix, str):
-                    incoming_prefix = str(incoming_prefix)
-                incoming_prefix = incoming_prefix.strip()
-                if not incoming_prefix:
-                    incoming_prefix = last_prefix
-                new_prefix = incoming_prefix.rstrip("/")
-                prefix_changed = new_prefix != self.mqtt_topic_prefix
-                self.mqtt_topic_prefix = new_prefix
-                if prefix_changed:
-                    _LOGGER.info("MQTT topic prefix updated to %s", self.mqtt_topic_prefix)
-                publish_all_changed = mqtt_publish_all != self.mqtt_publish_all
-                self.mqtt_publish_all = mqtt_publish_all
-                if publish_all_changed:
-                    _LOGGER.info("MQTT full publish toggled to %s", self.mqtt_publish_all)
-
-                if mqtt_changed:
-                    _LOGGER.info("MQTT settings changed, re-initializing client...")
-                    
-                    # Stop existing client if running
-                    if self._paho_client:
-                        if self._paho_started:
-                            self._paho_client.loop_stop()
-                            self._paho_client.disconnect()
-                            self._paho_started = False
-                        self._paho_client = None
-
-                    # Re-init client with new credentials if needed
-                    if PAHO_AVAILABLE and self.mqtt_host:
-                        try:
-                            self._paho_client = mqtt_client.Client()
-                            if self.mqtt_user:
-                                self._paho_client.username_pw_set(self.mqtt_user, self.mqtt_password)
-                            _LOGGER.info("Internal MQTT client re-initialized")
-                        except Exception as e:
-                            _LOGGER.error("Failed to re-initialize internal MQTT client: %s", e)
-
-                if connection_changed:
-                    _LOGGER.info(f"Connection settings changed to {host}:{port}, reconnecting...")
-                    if self._client:
-                        try:
-                            # Close the client in an executor to avoid blocking the event loop
-                            await self.hass.async_add_executor_job(self._client.close)
-                        except Exception as e:
-                            _LOGGER.warning(f"Error while closing old Modbus client: {e}")
-                    # Reset client to None so it gets recreated by connect_if_needed with new settings
-                    self._client = None
-                else:
-                    _LOGGER.info(f"Updated scan interval to {scan_interval} seconds")
-
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug(
-                        "Updated configuration - Host: %s, Port: %d, Scan Interval: %d, Fast Enabled: %s, Ultra Fast: %s",
-                        self._host,
-                        self._port,
-                        scan_interval,
-                        fast_enabled,
-                        self.ultra_fast_enabled
-                    )
-            except Exception as e:
-                _LOGGER.error("Failed to update connection settings: %s", e)
-                raise
-            finally:
-                self.updating_settings = False
-        
-        # Restart fast updates if enabled, or stop if disabled
-        if self.fast_enabled:
-            await self.restart_fast_updates()
-        elif self._cancel_fast_update is not None:
-            self._cancel_fast_update()
-            self._cancel_fast_update = None
-            _LOGGER.info("Fast updates stopped")
-
-    async def restart_fast_updates(self) -> None:
-        """Restart the fast update interval with current config."""
-        if not self.fast_enabled:
-            return
-        # Cancel any pending start
-        if self._pending_fast_start_cancel is not None:
-            self._pending_fast_start_cancel()
-            self._pending_fast_start_cancel = None
-            _LOGGER.debug("Cancelled pending fast start")
-        # Stop existing fast updates
-        if self._cancel_fast_update is not None:
-            self._cancel_fast_update()
-            self._cancel_fast_update = None
-            _LOGGER.debug("Stopped old fast updates")
-        await self.start_fast_updates()
-
-    async def reconnect_client(self) -> bool:
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] reconnect_client called - Current reconnecting state: %s", self._reconnecting)
-
-        if self._reconnecting:
-            _LOGGER.debug("Reconnection already in progress, waiting...")
-            return False
-
-        async with self._connection_lock:
-            if self._reconnecting:
-                _LOGGER.debug("Reconnection already in progress (double-check), waiting...")
-                return False
-
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Reconnecting Modbus client...")
-
-            try:
-                self._reconnecting = True
-                if self._client:
-                    try:
-                        # Close the client in an executor to avoid blocking the event loop
-                        await self.hass.async_add_executor_job(self._client.close)
-                    except Exception as e:
-                        _LOGGER.warning("Error while closing old Modbus client: %s", e)
-                
-                # Set to None to force recreation in connect_if_needed
-                self._client = None
-                self._client = await connect_if_needed(self._client, self._host, self._port)
-
-                if ADVANCED_LOGGING:
-                    _LOGGER.info("[ADVANCED] Reconnection successful.")
-
-                return True
-            except Exception as e:
-                _LOGGER.error("Reconnection failed: %s", e)
-                return False
-            finally:
-                self._reconnecting = False
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        """Regular poll cycle with fixed interval."""
-        start = time.monotonic()
-        
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] Main coordinator update cycle started - Fixed interval: %ss", self._scan_interval)
-        
-        _LOGGER.info("Starting main coordinator update cycle")
+        """Update connection settings. Full signature restored to support positional arguments."""
+        if self.updating_settings: return
+        self.updating_settings = True
         try:
-            # Ensure client is connected before processing
-            await self._ensure_connected_client()
-
-            if self._optimistic_push_enabled and self._has_pending():
-                _LOGGER.debug("Found pending settings, applying optimistic overlay")
-                self._apply_optimistic_overlay()
-                if self._optimistic_overlay:
-                    self.async_set_updated_data(self._optimistic_overlay)
-
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Processing pending settings...")
+            # Update Services
+            self.connection.update_config(host, port)
             
-            # Delegated to handler
-            await self._setting_handler.process_pending()
-
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Running reader methods...")
+            # FAILSAFE: If prefix argument is None (because __init__.py didn't pass it),
+            # retrieve it from the ConfigEntry options/data directly.
+            if mqtt_topic_prefix is None:
+                mqtt_topic_prefix = self._config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, self._config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"))
             
-            # This reads ALL data, including the fast sensors (Group 2)
-            # This ensures that even if Ultra Fast mode skips HA updates in the fast loop,
-            # the sensors are still updated in HA every 60s (or configured scan_interval).
-            cache = await self._run_reader_methods()
-            self._optimistic_overlay = None
-            self.inverter_data = cache
-
-            if self.mqtt_publish_all and self.inverter_data:
-                self._publish_fast_data_to_mqtt(self.inverter_data)
-            
-            return self.inverter_data
-        except Exception as err:
-            _LOGGER.error("Update cycle failed: %s", err)
-            self._optimistic_overlay = None
-            raise
-        finally:
-            elapsed = round(time.monotonic() - start, 3)
-            if ADVANCED_LOGGING:
-                _LOGGER.info("[ADVANCED] Total update cycle time: %ss", elapsed)
-
-    async def _run_reader_methods(self) -> Dict[str, Any]:
-        """Parallel execution of readers in logical groups; builds cache."""
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] _run_reader_methods started - Client connected: %s", self._client.connected if self._client else 'No client')
-        
-        new_cache: Dict[str, Any] = {}
-      
-        
-        # Load static inverter data only once (on first call)
-        if self._inverter_static_data is None:
-            try:
-                _LOGGER.info("Loading static inverter data (first time only)...")
-                self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
-                    self._client, self._read_lock
-                )
-                if self._inverter_static_data:
-                    _LOGGER.info(
-                        "Static inverter data loaded successfully",
-                        self._inverter_static_data.get("sn", "Unknown"),
-                        self._inverter_static_data.get("devtype", "Unknown")
-                    )
-                else:
-                    _LOGGER.warning("Static inverter data returned empty")
-            except Exception as e:
-                _LOGGER.error("Failed to load static inverter data: %s", e)
-                self._inverter_static_data = {}
-        
-        # Always include static data in cache
-        if self._inverter_static_data:
-            new_cache.update(self._inverter_static_data)
-        
-        # Group readers by logical dependencies - readers in same group run in parallel
-        reader_groups = [
-            # Group 1: Critical real-time data
-            [modbus_readers.read_modbus_realtime_data],
-            
-            # Group 2: Additional data part 1 (can run in parallel)
-            [
-                modbus_readers.read_additional_modbus_data_1_part_1,
-                modbus_readers.read_additional_modbus_data_1_part_2,
-            ],
-            
-            # Group 3: Additional data part 2 (can run in parallel)
-            [
-                modbus_readers.read_additional_modbus_data_2_part_1,
-                modbus_readers.read_additional_modbus_data_2_part_2,
-            ],
-            
-            # Group 4: Additional data part 3 & 4 (can run in parallel)
-            [
-                modbus_readers.read_additional_modbus_data_3,
-                modbus_readers.read_additional_modbus_data_3_2,
-                modbus_readers.read_additional_modbus_data_4,
-            ],
-            
-            # Group 5: Device-specific data (can run in parallel)
-            [
-                modbus_readers.read_battery_data,
-                modbus_readers.read_inverter_phase_data,
-                modbus_readers.read_offgrid_output_data,
-            ],
-            
-            # Group 6: Network and passive data (can run in parallel)
-            [
-                modbus_readers.read_side_net_data,
-                modbus_readers.read_passive_battery_data,
-                modbus_readers.read_meter_a_data,
-            ],
-            
-            # Group 7: Charge/Discharge settings (can run in parallel)
-            [
-                modbus_readers.read_charge_data,
-                modbus_readers.read_discharge_data,
-            ],
-        ]
-
-        # Race Condition Prevention removed as per user request for simplicity.
-        # Locks are no longer checked.
-
-        total_readers = sum(len(group) for group in reader_groups)
-        successful_count = 0
-        
-        if ADVANCED_LOGGING:
-            _LOGGER.info("[ADVANCED] Executing %d readers in %d groups", total_readers, len(reader_groups))
-        
-        # Execute each group in sequence, but readers within group run in parallel
-        for group_idx, group in enumerate(reader_groups, 1):
-            group_start = time.monotonic()
-            
-            if group_idx in CRITICAL_READER_GROUPS:
-                # Sequential execution for critical groups to prevent race conditions
-                # and ensure a consistent data snapshot from the device.
-                #_LOGGER.debug("[RACE_CONDITION_FIX] Executing critical reader group %d sequentially", group_idx)
-                results = []
-                for method in group:
-                    try:
-                        result = await method(self._client, self._read_lock)
-                        results.append(result)
-                    except Exception as e:
-                        results.append(e)
-            else:
-                # Parallel execution for non-critical groups to maintain performance.
-                #_LOGGER.debug("[RACE_CONDITION_FIX] Executing non-critical reader group %d in parallel", group_idx)
-                tasks = [method(self._client, self._read_lock) for method in group]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            group_duration = time.monotonic() - group_start
-            
-            if ADVANCED_LOGGING:
-                _LOGGER.debug(f"[ADVANCED] Group {group_idx}/{len(reader_groups)} completed in {group_duration:.2f}s "
-                              f"({'sequential' if group_idx in CRITICAL_READER_GROUPS else 'parallel'} execution)")
-            
-            # Process results from this group
-            for method, result in zip(group, results):
-                method_name = method.__name__
-                
-                if isinstance(result, (ReconnectionNeededError, ConnectionError)):
-                    _LOGGER.warning("%s required reconnection: %s", method_name, result)
-                    try:
-                        await self.reconnect_client()
-                        # Retry once after reconnection
-                        retry_result = await method(self._client, self._read_lock)
-                        if retry_result:
-                            new_cache.update(retry_result)
-                            successful_count += 1
-                    except Exception as retry_error:
-                        _LOGGER.warning("Retry failed for %s: %s", method_name, retry_error)
-                
-                elif isinstance(result, Exception):
-                    _LOGGER.warning("Reader %s failed: %s", method_name, result)
-                
-                elif isinstance(result, dict) and result:
-                    # Lock checks removed
-                    new_cache.update(result)
-                    successful_count += 1
-        
-        if ADVANCED_LOGGING:
-            _LOGGER.info(
-                f"[ADVANCED] All reader groups completed: {successful_count}/{total_readers} successful"
+            # Update MQTT: pass explicit values from args (or recovered value)
+            self.mqtt.update_config(
+                mqtt_host, 
+                mqtt_port,
+                mqtt_user, 
+                mqtt_password,
+                mqtt_topic_prefix, 
+                mqtt_publish_all,
+                ultra_fast_enabled
             )
-        
-        # Lock cleanup and preservation removed
-        
-        return new_cache
+            
+            _LOGGER.info("SAJ MQTT Strategy updated to: %s", self.mqtt.strategy)
+            
+            # Update Hub State
+            self.update_interval = timedelta(seconds=scan_interval)
+            self.fast_enabled = fast_enabled or ultra_fast_enabled
+            self.ultra_fast_enabled = ultra_fast_enabled
 
-    async def _get_power_state(self, state_key: str, state_type: str) -> Optional[bool]:
-        """Reads raw status + AppMode from cache and returns a bool."""
-        try:
-            state_value = self.inverter_data.get(state_key)
-            app_mode_value = self.inverter_data.get("AppMode")
+            # Restart Fast Loop
+            if self._cancel_fast_update:
+                self._cancel_fast_update()
+                self._cancel_fast_update = None
+            if self._pending_fast_start_cancel:
+                self._pending_fast_start_cancel()
+                self._pending_fast_start_cancel = None
+            
+            if self.fast_enabled:
+                await self.start_fast_updates()
 
-            if state_value is None or app_mode_value is None:
-                if not self._warned_missing_states:
-                    _LOGGER.warning(f"{state_type} state or AppMode not available in cached data")
-                    self._warned_missing_states = True
-                else:
-                    _LOGGER.debug("%s state still not available; skip derived handling", state_type)
-                return None
-
-            if self._warned_missing_states:
-                self._warned_missing_states = False
-
-            return bool(state_value > 0 and app_mode_value == 1)
-        except Exception as e:
-            _LOGGER.error(f"Error checking {state_type} state: {e}")
-            return None
-
-    async def get_charging_state(self) -> Optional[bool]:
-        return await self._get_power_state("charging_enabled", "Charging")
-
-    async def get_discharging_state(self) -> Optional[bool]:
-        return await self._get_power_state("discharging_enabled", "Discharging")
-
-    async def _read_registers(self, address: int, count: int = 1) -> List[int]:
-        return await try_read_registers(
-            self._client,
-            self._read_lock,
-            1,
-            address,
-            count,
-        )
-
-    async def _write_register(self, address: int, value: int) -> bool:
-        return await try_write_registers(
-            self._client,
-            self._read_lock,
-            1,
-            address,
-            value,
-        )
+        finally:
+            self.updating_settings = False
 
     async def async_unload_entry(self) -> None:
-        """Cleanup tasks when the config entry is removed."""
-        # Cancel fast updates
-        if self._cancel_fast_update is not None:
-            self._cancel_fast_update()
-            self._cancel_fast_update = None
-            _LOGGER.debug("Fast update interval cancelled")
+        if self._cancel_fast_update: self._cancel_fast_update()
+        if self._pending_fast_start_cancel: self._pending_fast_start_cancel()
         
-        # Stop internal MQTT client if running
-        if self._paho_client and self._paho_started:
-            self._paho_client.loop_stop()
-            self._paho_client.disconnect()
-            self._paho_started = False
-        
-        # Clear fast listeners
+        self.mqtt.stop()
+        await self.connection.close()
         self._fast_listeners.clear()
 
-        # Sicherstellen, dass der Client immer geschlossen wird
-        client_to_close = self._client
-        if client_to_close:
-            self._client = None  # Verweis sofort entfernen
-            try:
-                # Close the client in an executor to avoid blocking the event loop
-                await self.hass.async_add_executor_job(client_to_close.close)
-                _LOGGER.debug("Modbus client connection closed safely")
-            except Exception as e:
-                _LOGGER.warning("Error closing Modbus client: %s", e)
-        else:
-            _LOGGER.debug("Modbus client was already None, no need to close.")
-        
-        _LOGGER.debug("Modbus client cleaned up")
-
-    # --- Helper functions ---
-    def _has_pending(self) -> bool:
-        """Delegated to handler."""
-        return self._setting_handler.has_pending()
+    # --- HELPERS ---
     
-    def _invalidate_pending_cache(self) -> None:
-        """Delegated to handler."""
-        self._setting_handler.invalidate_cache()
-
     def _apply_optimistic_overlay(self) -> None:
-        """Delegated to handler."""
         try:
             overlay = self._setting_handler.get_optimistic_overlay(self.inverter_data)
-            if overlay:
-                self._optimistic_overlay = overlay
-        except Exception as e:
-            _LOGGER.debug("Optimistic overlay skipped: %s", e)
+            if overlay: self._optimistic_overlay = overlay
+        except Exception: pass
 
-    def _get_base_topic(self) -> str:
-        base = (self.mqtt_topic_prefix or "").rstrip("/")
-        return base or "saj"
+    async def _write_register(self, address: int, value: int) -> bool:
+        """Helper for charge_control.py to write via connection service."""
+        client = await self.connection.get_client()
+        return await try_write_registers(
+            client, self._read_lock, 1, address, value
+        )
 
-    def _should_log_fast_debug(self) -> bool:
-        if not ADVANCED_LOGGING:
-            return False
-        now = time.monotonic()
-        if now < self._fast_debug_log_next:
-            return False
-        self._fast_debug_log_next = now + 5.0
-        return True
+    @property
+    def _client(self):
+        return self.connection._client
