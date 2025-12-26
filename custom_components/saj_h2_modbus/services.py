@@ -163,7 +163,6 @@ class MqttPublisher:
         self.publish_all = publish_all
         self.topic_prefix = (topic_prefix or "saj").strip().rstrip("/")
         self.use_ha_mqtt = use_ha_mqtt
-        self._ha_forced_once = use_ha_mqtt  # Tracks current HA-forced state
         
         self.strategy = self.STRATEGY_NONE
 
@@ -293,12 +292,8 @@ class MqttPublisher:
         except (ValueError, TypeError):
             new_port = 1883
 
-        # Respect current flag: if user disables HA MQTT, allow switching back to Paho
-        ha_forced_now = use_ha_mqtt
-        self._ha_forced_once = ha_forced_now
-
         # If HA MQTT is forced, ignore provided host to prevent Paho fallback
-        incoming_host = "" if ha_forced_now else host
+        incoming_host = "" if use_ha_mqtt else host
 
         # Check if critical connection params changed
         connection_changed = (
@@ -308,7 +303,7 @@ class MqttPublisher:
             or password != self.password
             or topic_prefix != self.topic_prefix
             or publish_all != self.publish_all
-            or ha_forced_now != getattr(self, "use_ha_mqtt", False)
+            or use_ha_mqtt != self.use_ha_mqtt
         )
         
         self.host = incoming_host
@@ -317,7 +312,7 @@ class MqttPublisher:
         self.password = password
         self.topic_prefix = (topic_prefix or "saj").strip().rstrip("/")
         self.publish_all = publish_all
-        self.use_ha_mqtt = ha_forced_now
+        self.use_ha_mqtt = use_ha_mqtt
 
         if connection_changed:
             _LOGGER.debug("MQTT Config updated. Prefix: '%s'", self.topic_prefix)
@@ -336,7 +331,7 @@ class MqttPublisher:
             if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
                 self._init_paho_client()
-        elif self.strategy != self.STRATEGY_PAHO:
+        else:
             # If we switched away from Paho, stop it
             if prev_strategy == self.STRATEGY_PAHO:
                 self.stop()
