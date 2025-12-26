@@ -72,14 +72,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
         
         self.fast_enabled = config_entry.options.get(
-            CONF_FAST_ENABLED, 
+            CONF_FAST_ENABLED,
             config_entry.data.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
         )
-        
-        # SANITY CHECK: Wenn Ultra aktiv ist, MUSS Fast aktiv sein, damit der Loop startet.
-        # (Falls der User es versehentlich ausgelassen hat oder Config inkonsistent ist)
-        if self.ultra_fast_enabled:
-            self.fast_enabled = True
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
         mqtt_host = config_entry.options.get("mqtt_host", config_entry.data.get("mqtt_host", ""))
@@ -386,10 +381,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Update Hub State
             self.update_interval = timedelta(seconds=scan_interval)
             
-            # Sanity Check: Ultra requires Fast to be True internally to ensure loops start correctly
-            if ultra_fast_enabled:
-                fast_enabled = True
-                
             self.fast_enabled = fast_enabled
             self.ultra_fast_enabled = ultra_fast_enabled
             self.use_ha_mqtt = use_ha_mqtt

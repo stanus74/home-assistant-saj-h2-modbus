@@ -26,7 +26,8 @@
           "fast_enabled": "Realtime Sensoren (10s Abfrage)",
           "mqtt_topic_prefix": "MQTT-Themenpräfix (z. B. saj/h2)",
           "mqtt_publish_all": "Alle Sensoren im Hauptintervall veröffentlichen",
-          "ultra_fast_enabled": "Ultra-Schnell (1s über MQTT)"
+          "ultra_fast_enabled": "Ultra-Schnell (1s über MQTT)",
+          "use_ha_mqtt": "Home Assistant MQTT nutzen (ignoriert Host/Port Einstellungen)"
         }
       }
     }

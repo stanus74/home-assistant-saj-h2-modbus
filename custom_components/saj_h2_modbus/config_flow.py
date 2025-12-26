@@ -215,5 +215,5 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
             vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
             vol.Optional(CONF_MQTT_TOPIC_PREFIX, default=mqtt_prefix_default): str,
             vol.Optional(CONF_MQTT_PUBLISH_ALL, default=mqtt_publish_all_default): bool,
-            vol.Optional(CONF_USE_HA_MQTT, default=use_ha_mqtt_default, description={"name": "Home Assistant MQTT nutzen (Host ignorieren)"}): bool,
+            vol.Optional(CONF_USE_HA_MQTT, default=use_ha_mqtt_default, description={"name": "Home Assistant MQTT nutzen (ignoriert Host/Port Einstellungen)"}): bool,
         })
