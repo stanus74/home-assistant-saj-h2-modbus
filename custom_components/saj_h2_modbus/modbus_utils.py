@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import logging
+import time
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
@@ -92,6 +93,100 @@ async def _connect_client(
     
     
     return client
+
+
+# ============================================================================
+# CONNECTION POOLING OPTIMIZATION
+# ============================================================================
+
+class ConnectionCache:
+    """
+    Caches Modbus client connections to reduce connection overhead.
+    
+    PERFORMANCE OPTIMIZATION: Reduces redundant connection checks and
+    reconnection attempts by caching the client for a configurable TTL.
+    """
+    
+    def __init__(self, cache_ttl: float = 60.0):
+        """
+        Initialize connection cache.
+        
+        Args:
+            cache_ttl: Time to live for cached connections in seconds
+        """
+        self._cached_client: Optional[ModbusTcpClient] = None
+        self._cache_expiry: float = 0.0
+        self._cache_ttl: float = cache_ttl
+        self._last_health_check: float = 0.0
+        self._health_check_interval: float = 30.0  # Check health every 30s
+        self._connection_healthy: bool = True
+    
+    def get_cached_client(self) -> Optional[ModbusTcpClient]:
+        """
+        Get cached client if still valid.
+        
+        PERFORMANCE OPTIMIZATION: Returns cached client without lock acquisition
+        if it's still valid and healthy.
+        
+        Returns:
+            Cached client if valid, None otherwise
+        """
+        now = time.monotonic()
+        
+        # Check if cache is still valid
+        if self._cached_client is not None and now < self._cache_expiry:
+            # Check if connection is healthy
+            if self._is_connection_healthy(now):
+                return self._cached_client
+            else:
+                # Connection not healthy, invalidate cache
+                self._cached_client = None
+                return None
+        
+        return None
+    
+    def set_cached_client(self, client: ModbusTcpClient) -> None:
+        """
+        Set cached client with TTL.
+        
+        Args:
+            client: The client to cache
+        """
+        self._cached_client = client
+        self._cache_expiry = time.monotonic() + self._cache_ttl
+        self._connection_healthy = True
+        self._last_health_check = time.monotonic()
+    
+    def invalidate(self) -> None:
+        """Invalidate the cached connection."""
+        self._cached_client = None
+        self._cache_expiry = 0.0
+    
+    def _is_connection_healthy(self, now: float) -> bool:
+        """
+        Check if connection is healthy without full reconnect.
+        
+        PERFORMANCE OPTIMIZATION: Only checks connection health periodically
+        to reduce overhead.
+        
+        Args:
+            now: Current monotonic time
+            
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        # Only check health periodically
+        if now - self._last_health_check < self._health_check_interval:
+            return self._connection_healthy
+        
+        self._last_health_check = now
+        
+        if self._cached_client and self._cached_client.connected:
+            self._connection_healthy = True
+            return True
+        
+        self._connection_healthy = False
+        return False
 
 
 # Backward compatibility wrappers - these maintain the original function signatures

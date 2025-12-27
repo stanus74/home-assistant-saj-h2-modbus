@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
@@ -54,6 +54,33 @@ FAST_POLL_SENSORS = {
 }
 
 CRITICAL_READER_GROUPS = {1, 2}
+
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION: Data Caching with TTL
+# ============================================================================
+
+class CachedValue:
+    """Cached value with TTL (Time To Live) for performance optimization."""
+    
+    def __init__(self, value: Any, ttl: float = 5.0):
+        """
+        Initialize cached value.
+        
+        Args:
+            value: The value to cache
+            ttl: Time to live in seconds before cache expires
+        """
+        self.value = value
+        self.expiry = datetime.now() + timedelta(seconds=ttl)
+    
+    def is_valid(self) -> bool:
+        """Check if cached value is still valid (not expired)."""
+        return datetime.now() < self.expiry
+    
+    def get(self) -> Optional[Any]:
+        """Get value if valid, None otherwise."""
+        return self.value if self.is_valid() else None
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -111,9 +138,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         _LOGGER.info("SAJ MQTT Strategy initialized: %s", self.mqtt.strategy)
 
         # State & Locks
-        self._read_lock = asyncio.Lock() # Lock for read operations specifically
+        # PERFORMANCE OPTIMIZATION: Separate locks for different polling intervals
+        # This reduces lock contention between ultra fast (1s), fast (10s), and slow (60s) loops
+        self._ultra_fast_lock = asyncio.Lock()  # For 1s ultra fast polling
+        self._fast_lock = asyncio.Lock()        # For 10s fast polling
+        self._slow_lock = asyncio.Lock()        # For 60s slow polling
+        # Keep _read_lock for backward compatibility (points to slow lock)
+        self._read_lock = self._slow_lock
+        
         self.inverter_data: Dict[str, Any] = {}
         self.updating_settings = False
+        
+        # PERFORMANCE OPTIMIZATION: Data caching with TTL
+        # Cache values to reduce unnecessary Modbus reads and processing
+        self._value_cache: Dict[str, CachedValue] = {}
+        self._cache_ttl_ultra_fast = 1.0   # 1s TTL for ultra fast mode
+        self._cache_ttl_fast = 10.0        # 10s TTL for fast mode
+        self._cache_ttl_slow = 60.0        # 60s TTL for slow mode
+        
+        # PERFORMANCE OPTIMIZATION: Delta MQTT updates
+        # Track last published values to only publish changes
+        self._last_published_values: Dict[str, Any] = {}
         
         # Fast Poll State
         self._fast_unsub = None
@@ -220,6 +265,58 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.warning("Reader error: %s", result)
         return False
 
+    def _get_cached_value(self, key: str) -> Optional[Any]:
+        """
+        Get cached value if still valid.
+        
+        PERFORMANCE OPTIMIZATION: Reduces unnecessary data processing by
+        returning cached values that haven't expired.
+        
+        Args:
+            key: The cache key to look up
+            
+        Returns:
+            The cached value if valid, None otherwise
+        """
+        cached = self._value_cache.get(key)
+        if cached and cached.is_valid():
+            return cached.get()
+        return None
+    
+    def _set_cached_value(self, key: str, value: Any, ttl: float) -> None:
+        """
+        Set cached value with TTL.
+        
+        PERFORMANCE OPTIMIZATION: Caches values to reduce Modbus reads.
+        
+        Args:
+            key: The cache key
+            value: The value to cache
+            ttl: Time to live in seconds
+        """
+        self._value_cache[key] = CachedValue(value, ttl)
+    
+    def _calculate_delta_updates(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate delta updates - only return values that changed.
+        
+        PERFORMANCE OPTIMIZATION: Reduces MQTT message volume by only
+        publishing values that actually changed.
+        
+        Args:
+            data: New data dictionary
+            
+        Returns:
+            Dictionary containing only changed values
+        """
+        delta_data = {}
+        for key, value in data.items():
+            last_value = self._last_published_values.get(key)
+            if last_value != value:
+                delta_data[key] = value
+                self._last_published_values[key] = value
+        return delta_data
+    
     async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
         """Executes all readers using the provided client."""
         new_cache: Dict[str, Any] = {}
@@ -228,7 +325,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if self._inverter_static_data is None:
             try:
                 self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
-                    client, self._read_lock
+                    client, self._slow_lock  # Use slow lock for static data
                 )
             except Exception as e:
                 _LOGGER.error("Failed to load static data: %s", e)
@@ -250,16 +347,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         for group_idx, group in enumerate(reader_groups, 1):
             if group_idx in CRITICAL_READER_GROUPS:
-                # Sequential
+                # Sequential - use slow lock for critical groups
                 for method in group:
                     try:
-                        res = await method(client, self._read_lock)
+                        res = await method(client, self._slow_lock)
                         if isinstance(res, dict): new_cache.update(res)
                     except Exception as e:
                          _LOGGER.warning("Reader error: %s", e)
             else:
-                # Parallel
-                tasks = [method(client, self._read_lock) for method in group]
+                # Parallel - use slow lock for non-critical groups
+                tasks = [method(client, self._slow_lock) for method in group]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for res in results:
                     if isinstance(res, dict): new_cache.update(res)
@@ -326,25 +423,43 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._schedule_update_loop(ULTRA_FAST_UPDATE_INTERVAL, "_cancel_ultra_fast_update", True)
 
     async def _async_update_fast(self, now=None, ultra: bool = False) -> None:
-        """Perform fast update of sensor data."""
-        """Perform fast update of sensor data."""
+        """
+        Perform fast update of sensor data with performance optimizations.
+        
+        PERFORMANCE OPTIMIZATIONS:
+        1. Separate locks for ultra fast vs fast modes - reduces lock contention
+        2. Data caching with TTL - reduces unnecessary Modbus reads
+        3. Delta MQTT updates - only publishes changed values
+        """
         if not self.fast_enabled and not ultra:
             return
         
         try:
             client = await self.connection.get_client()
-            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, self._read_lock)
+            
+            # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode
+            # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
+            lock = self._ultra_fast_lock if ultra else self._fast_lock
+            
+            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
             
             if result:
                 fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+                
                 if fast_data:
-                    self.inverter_data.update(result)
-                    await self.mqtt.publish_data(fast_data)
+                    # Update inverter data with all fast data
+                    self.inverter_data.update(fast_data)
+                    
+                    # PERFORMANCE OPTIMIZATION: Delta MQTT updates
+                    # Only publish values that actually changed (compared to last published values)
+                    delta_data = self._calculate_delta_updates(fast_data)
+                    if delta_data:
+                        await self.mqtt.publish_data(delta_data)
 
-                    # Only the 10s loop should push to HA entities to avoid DB spam
-                    if not ultra:
-                        for listener in self._fast_listeners:
-                            listener()
+                        # Only the 10s loop should push to HA entities to avoid DB spam
+                        if not ultra:
+                            for listener in self._fast_listeners:
+                                listener()
 
         except ReconnectionNeededError:
             await self.connection.reconnect()
@@ -452,15 +567,23 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Failed to apply optimistic overlay: %s", e)
 
     async def _write_register(self, address: int, value: int) -> bool:
-        """Helper for charge_control.py to write via connection service."""
+        """
+        Helper for charge_control.py to write via connection service.
+        
+        Uses slow lock for write operations to ensure consistency.
+        """
         client = await self.connection.get_client()
         return await try_write_registers(
-            client, self._read_lock, 1, address, value
+            client, self._slow_lock, 1, address, value
         )
 
     async def _read_registers(self, address: int, count: int) -> List[int]:
-        """Helper for charge_control.py to read via connection service."""
+        """
+        Helper for charge_control.py to read via connection service.
+        
+        Uses slow lock for read operations to ensure consistency.
+        """
         client = await self.connection.get_client()
         return await try_read_registers(
-            client, self._read_lock, 1, address, count
+            client, self._slow_lock, 1, address, count
         )

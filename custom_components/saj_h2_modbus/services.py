@@ -17,7 +17,8 @@ except ImportError:
 from .modbus_utils import (
     connect_if_needed,
     set_modbus_config,
-    ReconnectionNeededError
+    ReconnectionNeededError,
+    ConnectionCache
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,7 +28,12 @@ CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
 class ModbusConnectionManager:
-    """Manages the Modbus TCP connection, locking, and reconnection logic."""
+    """
+    Manages the Modbus TCP connection, locking, and reconnection logic.
+    
+    PERFORMANCE OPTIMIZATION: Uses connection caching to reduce redundant
+    connection checks and lock acquisitions.
+    """
 
     def __init__(self, hass: HomeAssistant, host: str, port: int):
         self.hass = hass
@@ -36,6 +42,10 @@ class ModbusConnectionManager:
         self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self._reconnecting = False
+        
+        # PERFORMANCE OPTIMIZATION: Connection cache to reduce overhead
+        # Cache client for 60 seconds to avoid repeated connection checks
+        self._connection_cache = ConnectionCache(cache_ttl=60.0)
         
         # Initial setup of global config for utils
         set_modbus_config(host, port, hass)
@@ -53,13 +63,39 @@ class ModbusConnectionManager:
         return self._client is not None and self._client.connected
 
     async def get_client(self) -> ModbusTcpClient:
-        """Returns a connected client, establishing connection if needed."""
+        """
+        Returns a connected client, establishing connection if needed.
+        
+        PERFORMANCE OPTIMIZATION: Uses connection cache to reduce redundant
+        connection checks. Only acquires lock when cache is invalid.
+        """
+        # PERFORMANCE OPTIMIZATION: Try to get cached client without lock first
+        cached_client = self._connection_cache.get_cached_client()
+        if cached_client is not None:
+            return cached_client
+        
+        # Cache miss - need to establish connection
         async with self._connection_lock:
+            # Double-check after acquiring lock (another task might have connected)
+            cached_client = self._connection_cache.get_cached_client()
+            if cached_client is not None:
+                return cached_client
+            
+            # Establish new connection
             self._client = await connect_if_needed(self._client, self._host, self._port)
+            
+            # PERFORMANCE OPTIMIZATION: Cache the connected client
+            self._connection_cache.set_cached_client(self._client)
+            
             return self._client
 
     async def reconnect(self) -> bool:
-        """Forces a reconnection."""
+        """
+        Forces a reconnection.
+        
+        PERFORMANCE OPTIMIZATION: Invalidates cache on reconnect to ensure
+        fresh connection is used.
+        """
         if self._reconnecting:
             return False
 
@@ -69,8 +105,15 @@ class ModbusConnectionManager:
             
             self._reconnecting = True
             try:
+                # PERFORMANCE OPTIMIZATION: Invalidate cache before reconnect
+                self._connection_cache.invalidate()
+                
                 await self.close()
                 self._client = await connect_if_needed(None, self._host, self._port)
+                
+                # PERFORMANCE OPTIMIZATION: Cache the new connection
+                self._connection_cache.set_cached_client(self._client)
+                
                 return True
             except Exception as e:
                 _LOGGER.error("Reconnection failed: %s", e)
@@ -79,9 +122,16 @@ class ModbusConnectionManager:
                 self._reconnecting = False
 
     async def close(self) -> None:
-        """Safely closes the connection in an executor."""
+        """
+        Safely closes the connection in an executor.
+        
+        PERFORMANCE OPTIMIZATION: Invalidates cache when closing connection.
+        """
         if self._client:
             try:
+                # PERFORMANCE OPTIMIZATION: Invalidate cache on close
+                self._connection_cache.invalidate()
+                
                 client_to_close = self._client
                 self._client = None
                 await self.hass.async_add_executor_job(client_to_close.close)
@@ -90,12 +140,21 @@ class ModbusConnectionManager:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
 
     def update_config(self, host: str, port: int):
-        """Updates connection parameters."""
+        """
+        Updates connection parameters.
+        
+        PERFORMANCE OPTIMIZATION: Invalidates cache when config changes to
+        ensure new connection settings are used.
+        """
         if host != self._host or port != self._port:
             _LOGGER.info("Updating Modbus config: %s:%s -> %s:%s", self._host, self._port, host, port)
             self._host = host
             self._port = port
             set_modbus_config(host, port, self.hass)
+            
+            # PERFORMANCE OPTIMIZATION: Invalidate cache on config change
+            self._connection_cache.invalidate()
+            
             # Close active client so the next call re-connects with new settings
             if self._client:
                 self.hass.async_create_task(self.close())
