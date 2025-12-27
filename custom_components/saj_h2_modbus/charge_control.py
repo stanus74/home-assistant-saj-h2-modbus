@@ -4,14 +4,24 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Any, List, Dict, Tuple, Callable
+from typing import Optional, Any, List, Dict, Tuple, Callable, TYPE_CHECKING
 
 from .const import DOMAIN
+
+if TYPE_CHECKING:
+    from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
-ADVANCED_LOGGING = False
+
+# App Mode Constants
+APP_MODE_SELF_CONSUMPTION = 0
+APP_MODE_FORCE_CHARGE_DISCHARGE = 1
+APP_MODE_PASSIVE = 3
+
+# Default Power Percent
+DEFAULT_POWER_PERCENT = 10
 
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
@@ -107,10 +117,11 @@ class Command:
 class ChargeSettingHandler:
     """Handler for all Charge/Discharge-Settings using a Command Queue."""
 
-    def __init__(self, hub) -> None:
+    def __init__(self, hub: "SAJModbusHub") -> None:
         self.hub = hub
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self._is_processing = False
+        self._processing_lock = asyncio.Lock()
 
         # Locks & Caches
         self._app_mode_before_passive: Optional[int] = None
@@ -134,14 +145,15 @@ class ChargeSettingHandler:
 
     # ========== QUEUE MANAGEMENT ==========
 
-    async def queue_command(self, command: Command):
+    async def queue_command(self, command: Command) -> None:
         """Adds a new command to the queue and starts processing if needed."""
-        await self._command_queue.put(command)
-        if not self._is_processing:
-            self._is_processing = True
-            asyncio.create_task(self._process_queue())
+        async with self._processing_lock:
+            await self._command_queue.put(command)
+            if not self._is_processing:
+                self._is_processing = True
+                asyncio.create_task(self._process_queue())
 
-    async def _process_queue(self):
+    async def _process_queue(self) -> None:
         """Processes the command queue."""
         while not self._command_queue.empty():
             command = await self._command_queue.get()
@@ -155,7 +167,7 @@ class ChargeSettingHandler:
             
         self._is_processing = False
 
-    async def _execute_command(self, command: Command):
+    async def _execute_command(self, command: Command) -> None:
         """Executes a single command based on its type."""
         handler = self._handlers.get(command.type)
         if handler:
@@ -187,8 +199,7 @@ class ChargeSettingHandler:
 
         # Write and update cache immediately
         if await self._write_register_with_backoff(setting_def["address"], int_value, setting_def["label"]):
-            self.hub.inverter_data[key] = int_value
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._update_cache({key: int_value})
 
     async def _handle_slot_setting(self, mode_type: str, payload: dict) -> None:
         """Handles settings for a specific slot (charge/discharge)."""
@@ -208,8 +219,7 @@ class ChargeSettingHandler:
             if reg_val is not None:
                 if await self._write_register_with_backoff(slot_defs[field], reg_val, f"{label} {field}"):
                     # Update cache
-                    self.hub.inverter_data[f"{label}_{field}"] = value
-                    self.hub.async_set_updated_data(self.hub.inverter_data)
+                    self._update_cache({f"{label}_{field}": value})
             else:
                 _LOGGER.error("Invalid time format for %s %s: %s", label, field, value)
         
@@ -226,7 +236,7 @@ class ChargeSettingHandler:
         if index > 0:
             await self._ensure_slot_enabled(mode_type, index, label)
 
-    async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str):
+    async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str) -> None:
         """Ensures the time_enable bit is set for the given slot."""
         enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
         
@@ -237,8 +247,7 @@ class ChargeSettingHandler:
         if success:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
-            self.hub.inverter_data[key] = new_mask
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._update_cache({key: new_mask})
 
     async def _handle_power_state(self, state_type: str, value: bool) -> None:
         """Handles charging or discharging state changes generically."""
@@ -248,60 +257,84 @@ class ChargeSettingHandler:
         try:
             if await self._write_register_with_backoff(addr, write_value, f"{state_type} state"):
                 # Update cache immediately
-                self.hub.inverter_data[f"{state_type}_enabled"] = write_value
+                self._update_cache({f"{state_type}_enabled": write_value})
                 
                 # Update AppMode logic
-                chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
-                dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
+                chg, dchg = self._get_power_states()
                 await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg)
         finally:
-            # Clear pending state dynamically
-            setattr(self.hub, f"_pending_{state_type}_state", None)
+            self._clear_pending_state(state_type)
             # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
 
     async def _handle_passive_mode(self, value: Optional[int]) -> None:
-        if value is None: return
+        if value is None:
+            return
         desired_int = int(value)
         
         addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
         try:
             if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
                 # Update cache immediately
-                self.hub.inverter_data["passive_charge_enable"] = desired_int
+                self._update_cache({"passive_charge_enable": desired_int})
 
                 if desired_int > 0:
-                    self._capture_app_mode_before_passive()
-                    await self._set_app_mode(3, "passive mode activation")
+                    await self._activate_passive_mode()
                 else:
-                    restored = False
-                    if self._app_mode_before_passive is not None:
-                        await self._set_app_mode(self._app_mode_before_passive, "restore from passive mode", force=True)
-                        restored = True
-                    
-                    if not restored:
-                        chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
-                        dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
-                        await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
-                    self._app_mode_before_passive = None
+                    await self._deactivate_passive_mode()
         finally:
-            # Clear pending state
-            self.hub._pending_passive_mode_state = None
+            self._clear_pending_state("passive_mode")
             # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
 
+    async def _activate_passive_mode(self) -> None:
+        """Activate passive mode by capturing current app mode and setting to passive."""
+        self._capture_app_mode_before_passive()
+        await self._set_app_mode(APP_MODE_PASSIVE, "passive mode activation")
+
+    async def _deactivate_passive_mode(self) -> None:
+        """Deactivate passive mode by restoring previous app mode or calculating from states."""
+        restored = False
+        if self._app_mode_before_passive is not None:
+            await self._set_app_mode(self._app_mode_before_passive, "restore from passive mode", force=True)
+            restored = True
+        
+        if not restored:
+            chg, dchg = self._get_power_states()
+            await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
+        self._app_mode_before_passive = None
+
+    def _get_power_states(self) -> Tuple[bool, bool]:
+        """Get current charging and discharging states from inverter data."""
+        chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
+        dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
+        return chg, dchg
+
+    def _clear_pending_state(self, state_type: str) -> None:
+        """Clear pending state for the given type."""
+        setattr(self.hub, f"_pending_{state_type}_state", None)
+
     # ========== HELPER METHODS ==========
+
+    def _update_cache(self, updates: Dict[str, Any]) -> None:
+        """Update hub inverter_data and notify listeners."""
+        self.hub.inverter_data.update(updates)
+        self.hub.async_set_updated_data(self.hub.inverter_data)
 
     def _parse_time_to_register(self, time_str: str) -> Optional[int]:
         """Validates and converts time string HH:MM to register value."""
         if not isinstance(time_str, str):
+            _LOGGER.debug("Invalid time format: not a string: %s", time_str)
             return None
         try:
             hours, minutes = map(int, time_str.split(":"))
             if 0 <= hours < 24 and 0 <= minutes < 60:
                 return (hours << 8) | minutes
-        except (ValueError, AttributeError):
-            pass
+            _LOGGER.debug("Invalid time range: hours=%s, minutes=%s", hours, minutes)
+        except ValueError as e:
+            _LOGGER.debug("Invalid time format '%s': %s", time_str, e)
+        except AttributeError as e:
+            _LOGGER.debug("Invalid time format '%s': %s", time_str, e)
         return None
 
     def _capture_app_mode_before_passive(self) -> None:
@@ -330,7 +363,7 @@ class ChargeSettingHandler:
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
         passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
-        desired_app_mode = 3 if passive_active else (1 if (charge_enabled or discharge_enabled) else 0)
+        desired_app_mode = APP_MODE_PASSIVE if passive_active else (APP_MODE_FORCE_CHARGE_DISCHARGE if (charge_enabled or discharge_enabled) else APP_MODE_SELF_CONSUMPTION)
         await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
 
     async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
@@ -377,7 +410,7 @@ class ChargeSettingHandler:
             if power_percent is not None:
                 new_power_percent = power_percent
             elif current_value == 0:
-                new_power_percent = 10 # Default
+                new_power_percent = DEFAULT_POWER_PERCENT
             else:
                 new_power_percent = current_power_percent
 
@@ -386,11 +419,16 @@ class ChargeSettingHandler:
         success, new_value = await self._modify_register(address, modifier, f"{label} day_mask_power")
         if success:
             # Update cache
-            self.hub.inverter_data[f"{label}_day_mask"] = (new_value >> 8) & 0xFF
-            self.hub.inverter_data[f"{label}_power_percent"] = new_value & 0xFF
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._update_cache({
+                f"{label}_day_mask": (new_value >> 8) & 0xFF,
+                f"{label}_power_percent": new_value & 0xFF
+            })
 
     # --- Public API (Adapters to Queue) ---
+
+    def _queue_command_async(self, command: Command) -> None:
+        """Queue a command asynchronously."""
+        asyncio.create_task(self.queue_command(command))
 
     def set_pending(self, key: str, value: Any) -> None:
         """Generic setter that queues commands."""
@@ -400,23 +438,28 @@ class ChargeSettingHandler:
             base, idx_str, field = match.groups()
             idx = int(idx_str)
             cmd_type = CommandType.CHARGE_SLOT if base == "charges" else CommandType.DISCHARGE_SLOT
-            asyncio.create_task(self.queue_command(Command(cmd_type, {"index": idx, "field": field, "value": value})))
+            self._queue_command_async(Command(cmd_type, {"index": idx, "field": field, "value": value}))
             return
 
         # Handle simple attributes
-        asyncio.create_task(self.queue_command(Command(CommandType.SIMPLE_SETTING, {"key": key, "value": value})))
+        self._queue_command_async(Command(CommandType.SIMPLE_SETTING, {"key": key, "value": value}))
+
+    def _set_state_with_pending(self, state_type: str, command_type: CommandType, value: Any) -> None:
+        """Set a state with pending flag and queue command."""
+        setattr(self.hub, f"_pending_{state_type}_state", value)
+        self._queue_command_async(Command(command_type, {"value": value}))
 
     def set_charging_state(self, value: bool) -> None:
-        self.hub._pending_charging_state = value
-        asyncio.create_task(self.queue_command(Command(CommandType.CHARGING_STATE, {"value": value})))
+        """Set the charging state."""
+        self._set_state_with_pending("charging", CommandType.CHARGING_STATE, value)
 
     def set_discharging_state(self, value: bool) -> None:
-        self.hub._pending_discharging_state = value
-        asyncio.create_task(self.queue_command(Command(CommandType.DISCHARGING_STATE, {"value": value})))
+        """Set the discharging state."""
+        self._set_state_with_pending("discharging", CommandType.DISCHARGING_STATE, value)
 
     def set_passive_mode(self, value: Optional[int]) -> None:
-        self.hub._pending_passive_mode_state = value
-        asyncio.create_task(self.queue_command(Command(CommandType.PASSIVE_MODE, {"value": value})))
+        """Set the passive mode."""
+        self._set_state_with_pending("passive_mode", CommandType.PASSIVE_MODE, value)
 
     # --- Legacy / Compatibility Methods ---
 

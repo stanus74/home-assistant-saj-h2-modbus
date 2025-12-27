@@ -35,6 +35,16 @@ CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 CONF_USE_HA_MQTT = "use_ha_mqtt"
 
+# Constants
+DEFAULT_MODBUS_PORT = 502
+DEFAULT_SCAN_INTERVAL = 60
+DEFAULT_MQTT_PORT = 1883
+DEFAULT_MQTT_TOPIC_PREFIX = "saj"
+FAST_UPDATE_INTERVAL = 10
+ULTRA_FAST_UPDATE_INTERVAL = 1
+STARTUP_DELAY_RUNNING = 1
+STARTUP_DELAY_MQTT = 30
+
 FAST_POLL_SENSORS = {
     "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
     "inverterPower", "gridPower", "directionPV", "directionBattery",
@@ -53,9 +63,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._config_entry = config_entry
 
         # Config extraction - Connection
-        host = config_entry.options.get(CONF_HOST, config_entry.data.get(CONF_HOST))
-        port = config_entry.options.get(CONF_PORT, config_entry.data.get(CONF_PORT, 502))
-        scan_interval = config_entry.options.get(CONF_SCAN_INTERVAL, config_entry.data.get(CONF_SCAN_INTERVAL, 60))
+        host = self._get_config_value(config_entry, CONF_HOST)
+        port = self._get_config_value(config_entry, CONF_PORT, DEFAULT_MODBUS_PORT)
+        scan_interval = self._get_config_value(config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
             hass,
@@ -65,25 +75,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             update_method=self._async_update_data,
         )
 
-        # Robustes Laden der Konfiguration (Options优先, dann Data)
-        self.ultra_fast_enabled = config_entry.options.get(
-            CONF_ULTRA_FAST_ENABLED, 
-            config_entry.data.get(CONF_ULTRA_FAST_ENABLED, False)
-        )
-        
-        self.fast_enabled = config_entry.options.get(
-            CONF_FAST_ENABLED,
-            config_entry.data.get(CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
-        )
+        # Robust config loading (options priority, then data)
+        self.ultra_fast_enabled = self._get_config_value(config_entry, CONF_ULTRA_FAST_ENABLED, False)
+        self.fast_enabled = self._get_config_value(config_entry, CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
-        mqtt_host = config_entry.options.get("mqtt_host", config_entry.data.get("mqtt_host", ""))
-        mqtt_port = config_entry.options.get("mqtt_port", config_entry.data.get("mqtt_port", 1883))
-        mqtt_user = config_entry.options.get("mqtt_user", config_entry.data.get("mqtt_user", ""))
-        mqtt_password = config_entry.options.get("mqtt_password", config_entry.data.get("mqtt_password", ""))
-        mqtt_topic_prefix = config_entry.options.get(CONF_MQTT_TOPIC_PREFIX, config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "saj"))
-        mqtt_publish_all = config_entry.options.get(CONF_MQTT_PUBLISH_ALL, config_entry.data.get(CONF_MQTT_PUBLISH_ALL, False))
-        use_ha_mqtt = config_entry.options.get(CONF_USE_HA_MQTT, config_entry.data.get(CONF_USE_HA_MQTT, False))
+        mqtt_host = self._get_config_value(config_entry, "mqtt_host", "")
+        mqtt_port = self._get_config_value(config_entry, "mqtt_port", DEFAULT_MQTT_PORT)
+        mqtt_user = self._get_config_value(config_entry, "mqtt_user", "")
+        mqtt_password = self._get_config_value(config_entry, "mqtt_password", "")
+        mqtt_topic_prefix = self._get_config_value(config_entry, CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
+        mqtt_publish_all = self._get_config_value(config_entry, CONF_MQTT_PUBLISH_ALL, False)
+        use_ha_mqtt = self._get_config_value(config_entry, CONF_USE_HA_MQTT, False)
 
         _LOGGER.info(
             "SAJ Hub Initialized. Host: %s, Fast: %s, Ultra: %s, MQTT Prefix: '%s', MQTT Host: '%s'", 
@@ -120,6 +123,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_ultra_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
         self._fast_debug_log_next = 0.0
+        self._fast_poll_sensor_keys = FAST_POLL_SENSORS
 
         self._inverter_static_data: Optional[Dict[str, Any]] = None
         self._warned_missing_states: bool = False
@@ -133,11 +137,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         self._init_setters()
 
-    def _init_setters(self):
+    def _get_config_value(self, config_entry: ConfigEntry, key: str, default: Any = None) -> Any:
+        """Get config value with fallback: options -> data -> default."""
+        return config_entry.options.get(key, config_entry.data.get(key, default))
+
+    def _init_setters(self) -> None:
         """Initializes dynamic setters."""
         for name, attr_path in PENDING_FIELDS:
-            def make_setter(path):
-                async def setter(value):
+            def make_setter(path: str):
+                async def setter(value: Any) -> None:
                     self._setting_handler.set_pending(path, value)
                 return setter
             setattr(self, f"set_{name}", make_setter(attr_path))
@@ -147,23 +155,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.set_discharging = self._set_discharging_state
         self.set_passive_mode = self._set_passive_mode
 
-    async def _set_charging_state(self, value: bool) -> None:
-        self._pending_charging_state = value
+    def _set_power_state(self, value: bool | int | None, state_attr: str, handler_method: str) -> None:
+        """Set a power state with pending flag and trigger processing."""
+        setattr(self, f"_pending_{state_attr}", value)
         self.async_set_updated_data(self.inverter_data)
-        self._setting_handler.set_charging_state(value)
+        getattr(self._setting_handler, handler_method)(value)
         self.hass.async_create_task(self.process_pending_now())
+
+    async def _set_charging_state(self, value: bool) -> None:
+        self._set_power_state(value, "charging_state", "set_charging_state")
 
     async def _set_discharging_state(self, value: bool) -> None:
-        self._pending_discharging_state = value
-        self.async_set_updated_data(self.inverter_data)
-        self._setting_handler.set_discharging_state(value)
-        self.hass.async_create_task(self.process_pending_now())
+        self._set_power_state(value, "discharging_state", "set_discharging_state")
 
     async def _set_passive_mode(self, value: Optional[int]) -> None:
-        self._pending_passive_mode_state = value
-        self.async_set_updated_data(self.inverter_data)
-        self._setting_handler.set_passive_mode(value)
-        self.hass.async_create_task(self.process_pending_now())
+        self._set_power_state(value, "passive_mode_state", "set_passive_mode")
 
     async def process_pending_now(self) -> None:
         """Immediately process pending settings."""
@@ -204,7 +210,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._optimistic_overlay = None
             raise
 
-    async def _run_reader_methods(self, client) -> Dict[str, Any]:
+    def _process_reader_result(self, result: Any) -> bool:
+        """Process a reader result and update cache if valid. Returns True if reconnection needed."""
+        if isinstance(result, dict):
+            return False
+        elif isinstance(result, ReconnectionNeededError):
+            return True
+        elif isinstance(result, Exception):
+            _LOGGER.warning("Reader error: %s", result)
+        return False
+
+    async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
         """Executes all readers using the provided client."""
         new_cache: Dict[str, Any] = {}
         
@@ -247,38 +263,47 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for res in results:
                     if isinstance(res, dict): new_cache.update(res)
-                    elif isinstance(res, ReconnectionNeededError):
+                    elif self._process_reader_result(res):
                          await self.connection.reconnect()
-                    elif isinstance(res, Exception):
-                         _LOGGER.warning("Reader error: %s", res)
 
         return new_cache
 
     # --- FAST POLLING ---
 
-    async def start_fast_updates(self) -> None:
-        # Startup-Delay Logik an den Anfang verschoben (Fix UnboundLocalError)
+    def _get_startup_delay(self) -> int:
+        """Get startup delay based on HA state and MQTT availability."""
         mqtt_in_config = "mqtt" in self.hass.config.components
         is_running = self.hass.state == CoreState.running if hasattr(CoreState, "running") else False
-        startup_delay = 1 if is_running else (30 if mqtt_in_config else 1)
+        return STARTUP_DELAY_RUNNING if is_running else (STARTUP_DELAY_MQTT if mqtt_in_config else STARTUP_DELAY_RUNNING)
 
-        @callback
-        def _start_loop(interval: int, cancel_attr: str, ultra: bool = False):
-            if cancel_attr == "_cancel_fast_update":
-                self._pending_fast_start_cancel = None
-            else:
-                self._pending_ultra_fast_start_cancel = None
+    @callback
+    def _start_update_loop(self, interval: int, cancel_attr: str, ultra: bool = False) -> None:
+        """Start an update loop with the given interval."""
+        if cancel_attr == "_cancel_fast_update":
+            self._pending_fast_start_cancel = None
+        else:
+            self._pending_ultra_fast_start_cancel = None
 
-            if getattr(self, cancel_attr):
-                return
+        if getattr(self, cancel_attr):
+            return
 
-            _LOGGER.info(f"Starting fast update loop ({interval}s)")
-            async def runner(now):
-                await self._async_update_fast(now, ultra=ultra)
+        _LOGGER.info("Starting fast update loop (%ds)", interval)
+        async def runner(now):
+            await self._async_update_fast(now, ultra=ultra)
 
-            setattr(self, cancel_attr, async_track_time_interval(self.hass, runner, timedelta(seconds=interval)))
+        setattr(self, cancel_attr, async_track_time_interval(self.hass, runner, timedelta(seconds=interval)))
 
-        # Start the 10s Fast Loop if enabled (Unabhängig von Ultra)
+    @callback
+    def _schedule_update_loop(self, interval: int, cancel_attr: str, ultra: bool = False) -> None:
+        """Schedule an update loop to start after startup delay."""
+        startup_delay = self._get_startup_delay()
+        self._pending_fast_start_cancel = async_call_later(
+            self.hass, startup_delay, lambda _: self._start_update_loop(interval, cancel_attr, ultra)
+        )
+
+    async def start_fast_updates(self) -> None:
+        """Start fast update loops based on configuration."""
+        # Start the 10s Fast Loop if enabled (independent of Ultra)
         if self.fast_enabled:
             if self._cancel_fast_update:
                 self._cancel_fast_update()
@@ -287,9 +312,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_fast_start_cancel()
                 self._pending_fast_start_cancel = None
 
-            self._pending_fast_start_cancel = async_call_later(
-                self.hass, startup_delay, lambda _: _start_loop(10, "_cancel_fast_update", False)
-            )
+            self._schedule_update_loop(FAST_UPDATE_INTERVAL, "_cancel_fast_update", False)
 
         # Start the 1s Ultra Loop independently if enabled
         if self.ultra_fast_enabled:
@@ -300,19 +323,20 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_ultra_fast_start_cancel()
                 self._pending_ultra_fast_start_cancel = None
 
-            self._pending_ultra_fast_start_cancel = async_call_later(
-                self.hass, startup_delay, lambda _: _start_loop(1, "_cancel_ultra_fast_update", True)
-            )
+            self._schedule_update_loop(ULTRA_FAST_UPDATE_INTERVAL, "_cancel_ultra_fast_update", True)
 
     async def _async_update_fast(self, now=None, ultra: bool = False) -> None:
-        if not self.fast_enabled and not ultra: return
+        """Perform fast update of sensor data."""
+        """Perform fast update of sensor data."""
+        if not self.fast_enabled and not ultra:
+            return
         
         try:
             client = await self.connection.get_client()
             result = await modbus_readers.read_additional_modbus_data_1_part_2(client, self._read_lock)
             
             if result:
-                fast_data = {k: v for k, v in result.items() if k in FAST_POLL_SENSORS}
+                fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
                 if fast_data:
                     self.inverter_data.update(result)
                     await self.mqtt.publish_data(fast_data)
@@ -386,20 +410,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self.use_ha_mqtt = use_ha_mqtt
 
             # Restart Fast Loop (Stop everything first, then restart based on flags)
-            if self._cancel_fast_update:
-                self._cancel_fast_update()
-            if self._cancel_ultra_fast_update:
-                self._cancel_ultra_fast_update()
-            if self._pending_fast_start_cancel:
-                self._pending_fast_start_cancel()
-            if self._pending_ultra_fast_start_cancel:
-                self._pending_ultra_fast_start_cancel()
-            
-            # Clear references completely
-            self._cancel_fast_update = None
-            self._cancel_ultra_fast_update = None
-            self._pending_fast_start_cancel = None
-            self._pending_ultra_fast_start_cancel = None
+            self._cleanup_fast_update_callbacks()
 
             # Start loops independently based on flags
             if self.fast_enabled or self.ultra_fast_enabled:
@@ -408,12 +419,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         finally:
             self.updating_settings = False
 
-    async def async_unload_entry(self) -> None:
-        if self._cancel_fast_update: self._cancel_fast_update()
-        if self._cancel_ultra_fast_update: self._cancel_ultra_fast_update()
-        if self._pending_fast_start_cancel: self._pending_fast_start_cancel()
-        if self._pending_ultra_fast_start_cancel: self._pending_ultra_fast_start_cancel()
+    def _cleanup_fast_update_callbacks(self) -> None:
+        """Clean up all fast update callbacks."""
+        if self._cancel_fast_update:
+            self._cancel_fast_update()
+        if self._cancel_ultra_fast_update:
+            self._cancel_ultra_fast_update()
+        if self._pending_fast_start_cancel:
+            self._pending_fast_start_cancel()
+        if self._pending_ultra_fast_start_cancel:
+            self._pending_ultra_fast_start_cancel()
         
+        # Clear references completely
+        self._cancel_fast_update = None
+        self._cancel_ultra_fast_update = None
+        self._pending_fast_start_cancel = None
+        self._pending_ultra_fast_start_cancel = None
+
+    async def async_unload_entry(self) -> None:
+        self._cleanup_fast_update_callbacks()
         self.mqtt.stop()
         await self.connection.close()
         self._fast_listeners.clear()
@@ -424,7 +448,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             overlay = self._setting_handler.get_optimistic_overlay(self.inverter_data)
             if overlay: self._optimistic_overlay = overlay
-        except Exception: pass
+        except Exception as e:
+            _LOGGER.debug("Failed to apply optimistic overlay: %s", e)
 
     async def _write_register(self, address: int, value: int) -> bool:
         """Helper for charge_control.py to write via connection service."""
@@ -439,7 +464,3 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return await try_read_registers(
             client, self._read_lock, 1, address, count
         )
-
-    @property
-    def _client(self):
-        return self.connection._client
