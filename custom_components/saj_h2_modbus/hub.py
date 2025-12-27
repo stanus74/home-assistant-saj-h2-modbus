@@ -56,33 +56,6 @@ FAST_POLL_SENSORS = {
 CRITICAL_READER_GROUPS = {1, 2}
 
 
-# ============================================================================
-# PERFORMANCE OPTIMIZATION: Data Caching with TTL
-# ============================================================================
-
-class CachedValue:
-    """Cached value with TTL (Time To Live) for performance optimization."""
-    
-    def __init__(self, value: Any, ttl: float = 5.0):
-        """
-        Initialize cached value.
-        
-        Args:
-            value: The value to cache
-            ttl: Time to live in seconds before cache expires
-        """
-        self.value = value
-        self.expiry = datetime.now() + timedelta(seconds=ttl)
-    
-    def is_valid(self) -> bool:
-        """Check if cached value is still valid (not expired)."""
-        return datetime.now() < self.expiry
-    
-    def get(self) -> Optional[Any]:
-        """Get value if valid, None otherwise."""
-        return self.value if self.is_valid() else None
-
-
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._optimistic_push_enabled: bool = True
@@ -148,17 +121,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         self.inverter_data: Dict[str, Any] = {}
         self.updating_settings = False
-        
-        # PERFORMANCE OPTIMIZATION: Data caching with TTL
-        # Cache values to reduce unnecessary Modbus reads and processing
-        self._value_cache: Dict[str, CachedValue] = {}
-        self._cache_ttl_ultra_fast = 1.0   # 1s TTL for ultra fast mode
-        self._cache_ttl_fast = 10.0        # 10s TTL for fast mode
-        self._cache_ttl_slow = 60.0        # 60s TTL for slow mode
-        
-        # PERFORMANCE OPTIMIZATION: Delta MQTT updates
-        # Track last published values to only publish changes
-        self._last_published_values: Dict[str, Any] = {}
         
         # Fast Poll State
         self._fast_unsub = None
@@ -265,58 +227,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.warning("Reader error: %s", result)
         return False
 
-    def _get_cached_value(self, key: str) -> Optional[Any]:
-        """
-        Get cached value if still valid.
-        
-        PERFORMANCE OPTIMIZATION: Reduces unnecessary data processing by
-        returning cached values that haven't expired.
-        
-        Args:
-            key: The cache key to look up
-            
-        Returns:
-            The cached value if valid, None otherwise
-        """
-        cached = self._value_cache.get(key)
-        if cached and cached.is_valid():
-            return cached.get()
-        return None
-    
-    def _set_cached_value(self, key: str, value: Any, ttl: float) -> None:
-        """
-        Set cached value with TTL.
-        
-        PERFORMANCE OPTIMIZATION: Caches values to reduce Modbus reads.
-        
-        Args:
-            key: The cache key
-            value: The value to cache
-            ttl: Time to live in seconds
-        """
-        self._value_cache[key] = CachedValue(value, ttl)
-    
-    def _calculate_delta_updates(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calculate delta updates - only return values that changed.
-        
-        PERFORMANCE OPTIMIZATION: Reduces MQTT message volume by only
-        publishing values that actually changed.
-        
-        Args:
-            data: New data dictionary
-            
-        Returns:
-            Dictionary containing only changed values
-        """
-        delta_data = {}
-        for key, value in data.items():
-            last_value = self._last_published_values.get(key)
-            if last_value != value:
-                delta_data[key] = value
-                self._last_published_values[key] = value
-        return delta_data
-    
     async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
         """Executes all readers using the provided client."""
         new_cache: Dict[str, Any] = {}
