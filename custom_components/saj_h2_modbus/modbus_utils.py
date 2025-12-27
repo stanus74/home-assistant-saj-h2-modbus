@@ -30,40 +30,88 @@ def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
     ModbusGlobalConfig.hass = hass
     _LOGGER.debug("Global Modbus config set: %s:%s (hass configured: %s)", host, port, hass is not None)
 
-async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger) -> None:
-    """Ensures the Modbus client is connected, attempting to connect if not."""
+# ============================================================================
+# CONNECTION MANAGEMENT
+# ============================================================================
+
+# OPTIMIZATION: Combined ensure_client_connected() and connect_if_needed()
+# into a single _connect_client() function to reduce code duplication.
+# The original functions are kept as backward compatibility wrappers.
+
+async def _connect_client(
+    client: ModbusTcpClient,
+    host: str,
+    port: int,
+    logger: logging.Logger,
+    create_new: bool = False
+) -> ModbusTcpClient:
+    """
+    Ensures the Modbus client is connected.
+    
+    This is a unified function that handles both:
+    - Creating new clients when needed (if create_new=True)
+    - Connecting existing clients if not already connected
+    
+    Args:
+        client: The Modbus client to connect (or None if create_new is True)
+        host: The host to connect to
+        port: The port to connect to
+        logger: Logger instance for logging
+        create_new: If True, creates a new client when client is None
+    
+    Returns:
+        The connected Modbus client
+    
+    Raises:
+        ConnectionError: If connection fails
+        ValueError: If client is None and create_new is False
+    """
+    # Create new client if needed and requested
+    if client is None:
+        if not create_new:
+            raise ValueError("Client is None and create_new is False")
+        logger.debug("Creating new ModbusTcpClient for %s:%s", host, port)
+        client = ModbusTcpClient(host=host, port=port, timeout=10)
+    
+    # Connect if not already connected
     if not client.connected:
-        logger.debug("Client not connected, attempting to connect to %s:%s", host, port)
+        logger.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
         try:
             if ModbusGlobalConfig.hass:
                 await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
             else:
                 client.connect()
                 
+            # Verify that the client is actually connected after the connection attempt
             if not client.connected:
                 raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
-            logger.info("Client successfully reconnected to %s:%s", host, port)
+            logger.info("ModbusTcpClient successfully connected to %s:%s", host, port)
         except Exception as e:
             logger.error("Error connecting client to %s:%s: %s", host, port, e)
             raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
-    logger.debug("Client connected: %s:%s", host, port)
+    
+    
+    return client
+
+
+# Backward compatibility wrappers - these maintain the original function signatures
+async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger) -> None:
+    """Ensures the Modbus client is connected, attempting to connect if not."""
+    await _connect_client(client, host, port, logger, create_new=False)
+
 
 async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
-    if client is None:
-        _LOGGER.debug("Creating new ModbusTcpClient for %s:%s", host, port)
-        client = ModbusTcpClient(host=host, port=port, timeout=10)
-    if not client.connected:
-        _LOGGER.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
-        if ModbusGlobalConfig.hass:
-            await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
-        else:
-            client.connect()
-            
-        # Verify that the client is actually connected after the connection attempt
-        if not client.connected:
-            raise ConnectionError("Failed to connect to %s:%s" % (host, port))
-        _LOGGER.debug("ModbusTcpClient successfully connected to %s:%s", host, port)
-    return client
+    """Creates a new client if needed and ensures it is connected."""
+    return await _connect_client(client, host, port, _LOGGER, create_new=True)
+
+# ============================================================================
+# RETRY LOGIC
+# ============================================================================
+
+# OPTIMIZATION: Refactored retry handlers to use separate functions for
+# should_retry and on_retry logic, reducing code duplication and improving
+# maintainability. The _create_retry_handlers() function now uses
+# functools.partial to create on_retry callback.
 
 async def _exponential_backoff(attempt: int, base: float, cap: float) -> None:
     delay = min(base * 2 ** (attempt - 1), cap)
@@ -105,34 +153,72 @@ DEFAULT_WRITE_RETRIES = 2
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
+def _should_retry_modbus_error(e: Exception) -> bool:
+    """
+    Determines if a Modbus error should trigger a retry.
+    
+    Includes ConnectionError to catch standard OS connection errors (like ConnectionResetError).
+    """
+    return isinstance(e, (ConnectionException, ModbusIOException, ConnectionError))
+
+
+async def _on_modbus_retry(
+    client: ModbusTcpClient,
+    host: str,
+    port: int,
+    logger: logging.Logger,
+    operation_name: str,
+    lock: Lock,
+    attempt: int,
+    e: Exception
+) -> None:
+    """
+    Handles retry logic for Modbus operations, including reconnection on connection errors.
+    
+    Args:
+        client: The Modbus client
+        host: The host to connect to
+        port: The port to connect to
+        logger: Logger instance
+        operation_name: Name of the operation being retried
+        lock: Lock for thread safety
+        attempt: Current attempt number
+        e: The exception that triggered the retry
+    """
+    # Trigger reconnection for both pymodbus ConnectionException and standard ConnectionError
+    if isinstance(e, (ConnectionException, ConnectionError)):
+        logger.info("Connection lost during %s, attempting reconnect", operation_name)
+        
+        # Acquire lock to ensure we don't interfere with other tasks using the client
+        async with lock:
+            # Force close to ensure connected state is reset
+            try:
+                client.close()
+            except Exception:
+                pass  # Ignore errors during close
+
+            try:
+                await _connect_client(client, host, port, logger, create_new=False)
+                logger.info("Reconnect during %s successful", operation_name)
+            except Exception as reconnect_error:
+                logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
+                # Do NOT raise here, let the backoff loop continue
+
+
 def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str, lock: Lock):
-    """Create standard retry handlers for Modbus operations."""
+    """
+    Create standard retry handlers for Modbus operations.
     
-    def should_retry(e: Exception) -> bool:
-        # Add ConnectionError to catch standard OS connection errors (like ConnectionResetError)
-        return isinstance(e, (ConnectionException, ModbusIOException, ConnectionError))
-
-    async def on_retry(attempt: int, e: Exception) -> None:
-        # Trigger reconnection for both pymodbus ConnectionException and standard ConnectionError
-        if isinstance(e, (ConnectionException, ConnectionError)):
-            logger.info("Connection lost during %s, attempting reconnect", operation_name)
-            
-            # Acquire lock to ensure we don't interfere with other tasks using the client
-            async with lock:
-                # Force close to ensure connected state is reset and ensure_client_connected tries to connect
-                try:
-                    client.close()
-                except Exception:
-                    pass # Ignore errors during close
-
-                try:
-                    await ensure_client_connected(client, host, port, logger)
-                    logger.info("Reconnect during %s successful", operation_name)
-                except Exception as reconnect_error:
-                    logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
-                    # Do NOT raise here, let the backoff loop continue
-    
+    Returns:
+        Tuple of (should_retry, on_retry) functions
+    """
+    should_retry = _should_retry_modbus_error
+    on_retry = functools.partial(_on_modbus_retry, client, host, port, logger, operation_name, lock)
     return should_retry, on_retry
+
+# ============================================================================
+# MODBUS OPERATIONS
+# ============================================================================
 
 async def _perform_modbus_operation(
     client: ModbusTcpClient,
