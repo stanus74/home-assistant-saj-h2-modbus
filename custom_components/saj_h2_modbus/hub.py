@@ -450,16 +450,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     # Update inverter data with all fast data
                     self.inverter_data.update(fast_data)
                     
-                    # PERFORMANCE OPTIMIZATION: Delta MQTT updates
-                    # Only publish values that actually changed (compared to last published values)
-                    delta_data = self._calculate_delta_updates(fast_data)
-                    if delta_data:
-                        await self.mqtt.publish_data(delta_data)
+                    await self.mqtt.publish_data(fast_data)
 
-                        # Only the 10s loop should push to HA entities to avoid DB spam
-                        if not ultra:
-                            for listener in self._fast_listeners:
-                                listener()
+                    # Only the 10s loop should push to HA entities to avoid DB spam
+                    if not ultra:
+                        for listener in self._fast_listeners:
+                            listener()
 
         except ReconnectionNeededError:
             await self.connection.reconnect()
