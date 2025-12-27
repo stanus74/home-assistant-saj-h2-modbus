@@ -433,6 +433,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             client, self._read_lock, 1, address, value
         )
 
+    async def _read_registers(self, address: int, count: int) -> List[int]:
+        """Helper for charge_control.py to read via connection service."""
+        client = await self.connection.get_client()
+        return await try_read_registers(
+            client, self._read_lock, 1, address, count
+        )
+
     @property
     def _client(self):
         return self.connection._client
