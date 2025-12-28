@@ -18,6 +18,7 @@
 - Added debouncing for sliders, time input fields, and weekday checkboxes.                    
 
 ### Improvements
+- **Dedicated Write Lock**: Implemented a dedicated write lock with priority over read operations. Write operations no longer wait for read operations to complete, and ultra-fast polling (1s) is skipped during write operations to prevent lock contention and improve performance.
 - **Charge Control Simplification**: Removed complex locking mechanisms and artificial delays. The integration now updates the internal cache immediately after a successful Modbus write, providing instant feedback in the UI (Optimistic UI).
 - **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
 

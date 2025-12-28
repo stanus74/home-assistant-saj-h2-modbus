@@ -116,6 +116,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._ultra_fast_lock = asyncio.Lock()  # For 1s ultra fast polling
         self._fast_lock = asyncio.Lock()        # For 10s fast polling
         self._slow_lock = asyncio.Lock()        # For 60s slow polling
+        
+        # DEDICATED WRITE LOCK: Write operations have priority over read operations
+        # This prevents write operations from waiting for read operations to complete
+        self._write_lock = asyncio.Lock()
+        self._write_in_progress = False  # Flag for active write operation
+        
         # Keep _read_lock for backward compatibility (points to slow lock)
         self._read_lock = self._slow_lock
         
@@ -338,8 +344,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         PERFORMANCE OPTIMIZATIONS:
         1. Separate locks for ultra fast vs fast modes - reduces lock contention
+        2. Skip ultra-fast update if write operation is in progress
         """
         if not self.fast_enabled and not ultra:
+            return
+        
+        # Skip ultra-fast update if write operation is in progress
+        if ultra and self._write_in_progress:
+            _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
             return
         
         try:
@@ -474,19 +486,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         """
         Helper for charge_control.py to write via connection service.
         
-        Uses slow lock for write operations to ensure consistency.
+        Uses dedicated write lock with priority over read operations.
         """
-        client = await self.connection.get_client()
-        return await try_write_registers(
-            client, self._slow_lock, 1, address, value
-        )
+        async with self._write_lock:
+            self._write_in_progress = True
+            try:
+                client = await self.connection.get_client()
+                return await try_write_registers(
+                    client, self._write_lock, 1, address, value
+                )
+            finally:
+                self._write_in_progress = False
 
     async def _read_registers(self, address: int, count: int) -> List[int]:
         """
         Helper for charge_control.py to read via connection service.
         
-        Uses slow lock for read operations to ensure consistency.
+        Waits for any pending write operation before reading.
         """
+        # Wait for any pending write operation
+        while self._write_in_progress:
+            await asyncio.sleep(0.01)
+        
         client = await self.connection.get_client()
         return await try_read_registers(
             client, self._slow_lock, 1, address, count
