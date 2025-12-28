@@ -338,8 +338,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         PERFORMANCE OPTIMIZATIONS:
         1. Separate locks for ultra fast vs fast modes - reduces lock contention
-        2. Data caching with TTL - reduces unnecessary Modbus reads
-        3. Delta MQTT updates - only publishes changed values
         """
         if not self.fast_enabled and not ultra:
             return
