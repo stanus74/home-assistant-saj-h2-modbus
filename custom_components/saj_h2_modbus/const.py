@@ -215,6 +215,7 @@ apparent_power_sensors = [
     
     {"name": "CT Grid Power VA", "key": "CT_GridPowerVA", "enable": False},
     {"name": "CT PV Power VA", "key": "CT_PVPowerVA", "enable": False},
+    {"name": "Total Grid Power VA", "key": "totalgridPowerVA", "enable": False},
 
     {"name": "Total Inverter Power VA", "key": "TotalInvPowerVA", "enable": False},
     {"name": "Backup Total Load Power VA", "key": "BackupTotalLoadPowerVA", "enable": False},
