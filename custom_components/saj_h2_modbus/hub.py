@@ -8,7 +8,7 @@ from datetime import timedelta, datetime
 
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.config_entries import ConfigEntry
 
@@ -125,6 +125,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Keep _read_lock for backward compatibility (points to slow lock)
         self._read_lock = self._slow_lock
         
+        # 2025 COMPLIANCE: Update retrigger prevention
+        self._update_in_progress = False  # Flag to prevent parallel updates
+        
         self.inverter_data: Dict[str, Any] = {}
         self.updating_settings = False
         
@@ -200,6 +203,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Regular poll cycle (slow)."""
+        # 2025 COMPLIANCE: Retrigger prevention for parallel updates
+        if self._update_in_progress:
+            _LOGGER.debug("Update already in progress, skipping retrigger")
+            return self.inverter_data
+        
+        self._update_in_progress = True
         try:
             client = await self.connection.get_client() # Ensure connected
 
@@ -218,10 +227,18 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 await self.mqtt.publish_data(self.inverter_data)
             
             return self.inverter_data
+        except ConnectionError as err:
+            _LOGGER.error("Connection error during update: %s", err)
+            self._optimistic_overlay = None
+            # 2025 COMPLIANCE: Use retry_after for connection errors
+            raise UpdateFailed(f"Connection failed: {err}", retry_after=30)
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
             self._optimistic_overlay = None
-            raise
+            # 2025 COMPLIANCE: Use retry_after for general errors
+            raise UpdateFailed(f"Update failed: {err}", retry_after=60)
+        finally:
+            self._update_in_progress = False
 
     def _process_reader_result(self, result: Any) -> bool:
         """Process a reader result and update cache if valid. Returns True if reconnection needed."""

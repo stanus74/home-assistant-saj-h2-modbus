@@ -4,6 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import logging
 
@@ -12,12 +13,6 @@ from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
 
-SENSOR_DEFINITIONS = [
-    {"key": "pvPower", "name": "PV Power", "unit": "W"},
-    {"key": "batteryPower", "name": "Battery Power", "unit": "W"},
-    {"key": "gridPower", "name": "Grid Power", "unit": "W"},
-    {"key": "inverterPower", "name": "Inverter Power", "unit": "W"},
-]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ sensors from a config entry."""
@@ -35,6 +30,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class SajSensor(CoordinatorEntity, SensorEntity):
     """Representation of an SAJ Modbus sensor."""
 
+    # 2025 COMPLIANCE: Diagnostic sensors list
+    _DIAGNOSTIC_SENSOR_KEYS = {
+        "devtype", "subtype", "sn", "pc", "dv", "mcv", "scv",
+        "disphwversion", "ctrlhwversion", "powerhwversion",
+        "commver", "mpvstatus", "mpvmode", "BatNum", "BatCapcity",
+        "BatUserCap", "BatOnline", "Bat1CycleNum", "Bat2CycleNum",
+        "Bat3CycleNum", "Bat4CycleNum", "Bat1DischarCap", "Bat2DischarCap",
+        "Bat3DischarCap", "Bat4DischarCap", "Bat1FaultMSG", "Bat1WarnMSG",
+        "Bat2FaultMSG", "Bat2WarnMSG", "Bat3FaultMSG", "Bat3WarnMSG",
+        "Bat4FaultMSG", "Bat4WarnMSG", "AppMode", "charge_time_enable",
+        "discharge_time_enable", "AntiRefluxCurrentmode",
+    }
+
     def __init__(self, hub: SAJModbusHub, device_info: dict, description: SajModbusSensorEntityDescription):
         """Initialize the sensor."""
         super().__init__(coordinator=hub)
@@ -51,6 +59,10 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
+        
+        # 2025 COMPLIANCE: Set EntityCategory.DIAGNOSTIC for diagnostic sensors
+        if description.key in self._DIAGNOSTIC_SENSOR_KEYS:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         
         # Determine if this is a fast-poll sensor using FAST_POLL_SENSORS from hub
         self._is_fast_sensor = description.key in FAST_POLL_SENSORS

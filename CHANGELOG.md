@@ -1,3 +1,69 @@
+## [v2.8.0] - 2025-12-30
+
+### 2025 Compliance Updates
+
+- **Coordinator Retry-After**: Implemented `UpdateFailed` with `retry_after` parameter for better error handling and backoff timing
+  - Connection errors now trigger 30-second retry delay
+  - General errors trigger 60-second retry delay
+  - Prevents excessive retry attempts during network issues
+
+- **Update Retrigger Prevention**: Added `_update_in_progress` flag to prevent parallel coordinator updates
+  - Eliminates race conditions between fast (10s) and slow (60s) update cycles
+  - Improves stability when multiple updates are triggered simultaneously
+
+- **Entity Categorization**: Implemented proper `EntityCategory` for all entities
+  - **DIAGNOSTIC**: Information sensors (Device Type, Serial Number, Hardware Versions, Fault Messages, Battery Info, App Mode, etc.)
+  - **CONFIG**: Control entities (Switches, Time inputs, Number inputs)
+  - Improves UI organization by separating diagnostics from user-facing controls
+
+### Changed
+
+- **Sensor Entities**: Added `EntityCategory.DIAGNOSTIC` to 38 diagnostic sensors
+  - Device Type, Sub Type, Serial Number, Product Code
+  - Hardware Versions (Display, Master Ctrl, Slave Ctrl, Display Board, Control Board, Power Board)
+  - Communication Version, Inverter Status, Inverter Working Mode
+  - Battery Information (Number, Capacity, User Capacity, Online Status, Cycle Counts, Discharge Capacity)
+  - Battery Fault/Warning Messages (all 4 batteries)
+  - App Mode, Charge/Discharge Time Enable Bitmasks, Anti-Reflux Current Mode
+
+- **Switch Entities**: Added `EntityCategory.CONFIG` to all control switches
+  - Charging Control, Discharging Control
+  - Passive Charge Control, Passive Discharge Control
+
+- **Text Entities**: Added `EntityCategory.CONFIG` to all time input entities
+  - Charge Start/End Time (all 7 slots)
+  - Discharge Start/End Time (all 7 slots)
+
+### Improvements
+
+- **Better UX**: Diagnostic entities are now properly categorized and can be filtered/separated in the UI
+- **Cleaner Dashboard**: Control entities are grouped separately from measurement sensors
+- **Faster Error Recovery**: Retry-after timing prevents excessive retry attempts during outages
+- **More Stable**: Retrigger prevention eliminates race conditions in update cycles
+
+### Technical Details
+
+- **hub.py**:
+  - Imported `UpdateFailed` from `homeassistant.helpers.update_coordinator`
+  - Added `_update_in_progress` flag in `__init__`
+  - Modified `_async_update_data()` with retrigger check and retry_after logic
+  - Added `finally` block to reset flag
+
+- **sensor.py**:
+  - Imported `EntityCategory` from `homeassistant.helpers.entity`
+  - Added `_DIAGNOSTIC_SENSOR_KEYS` class variable with 38 diagnostic sensor keys
+  - Modified `__init__()` to set `EntityCategory.DIAGNOSTIC` for diagnostic sensors
+
+- **switch.py**:
+  - Imported `EntityCategory` from `homeassistant.helpers.entity`
+  - Modified `__init__()` to set `EntityCategory.CONFIG` for all switches
+
+- **text.py**:
+  - Imported `EntityCategory` from `homeassistant.helpers.entity`
+  - Modified `__init__()` to set `EntityCategory.CONFIG` for all time entities
+
+---
+
 ## [v2.7.3]
 
 ### New Features

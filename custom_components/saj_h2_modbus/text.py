@@ -5,6 +5,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.text import TextEntity
 
@@ -87,6 +88,8 @@ class SajTimeTextEntity(TextEntity):
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
+        # 2025 COMPLIANCE: Set EntityCategory.CONFIG for time entities
+        self._attr_entity_category = EntityCategory.CONFIG
         # Set default times:
         # - Charging: 01:00 for start, 01:10 for end
         # - Discharging: 02:00 for start, 02:10 for end

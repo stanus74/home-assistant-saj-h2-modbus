@@ -3,6 +3,7 @@ import time
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -85,6 +86,8 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_entity_registry_enabled_default = True
         self._attr_assumed_state = True
         self._attr_should_poll = False
+        # 2025 COMPLIANCE: Set EntityCategory.CONFIG for control switches
+        self._attr_entity_category = EntityCategory.CONFIG
         self._last_switch_time = 0
         self._switch_timeout = 2
 
