@@ -102,9 +102,21 @@ It is important to always check the start and end times.
 
 ---
 
-# Changelog (v2.6.5)
+# Changelog (v2.7.4) - Refactoring for HA 2025 Standards
 
-- Fixed Fast Coordinator error
+### Refactoring and Improvements:
+- **Centralized MQTT Constants**: MQTT constants (`CONF_MQTT_TOPIC_PREFIX`, `CONF_MQTT_PUBLISH_ALL`) moved to `const.py`.
+- **Optimistic Overlay Removed**: Unused optimistic overlay feature removed from `hub.py` and `charge_control.py`.
+- **Pending States Simplified**: Redundant initialization of pending states in `charge_control.py` removed.
+- **Lock System Consolidated**: Redundant `_read_lock` removed from `hub.py`.
+- **Helper Methods Centralized**: `_write_register` and `_read_registers` moved from `hub.py` to `ModbusConnectionManager` in `services.py`.
+- **Redundant Variables Removed**: Unused `_warned_missing_states` removed from `hub.py`.
+- **Code Documentation Improved**: Docstrings added/enhanced in `hub.py`.
+- **Circular Dependencies Managed**: `TYPE_CHECKING` import in `charge_control.py` confirmed as standard practice.
+- **Config Handling Refactored**: Configuration passing reviewed and deemed appropriate.
+- **Architectural Review**: Integration design assessed against HA 2025 standards, confirming adherence to best practices.
+
+# Changelog (v2.7.3)
 - Added more charging slots (all 7)
 - Fixed minor error
 

@@ -12,13 +12,6 @@ from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
 
-SENSOR_DEFINITIONS = [
-    {"key": "pvPower", "name": "PV Power", "unit": "W"},
-    {"key": "batteryPower", "name": "Battery Power", "unit": "W"},
-    {"key": "gridPower", "name": "Grid Power", "unit": "W"},
-    {"key": "inverterPower", "name": "Inverter Power", "unit": "W"},
-]
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ sensors from a config entry."""
     hub: SAJModbusHub = hass.data[DOMAIN][entry.entry_id]["hub"]

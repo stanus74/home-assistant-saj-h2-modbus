@@ -1,5 +1,3 @@
 # Home Assistant Development Rules
-- Bevor du Code änderst oder vorschlägst, konsultiere IMMER die Dokumentation im Ordner `/docs`.
-- Achte besonders auf die in `/docs` hinterlegten Standards für die SAJ-Inverter Integration.
-- Wenn Informationen im Code den Anweisungen in `/docs` widersprechen, priorisiere die Dokumente in `/docs`.
-- Nutze `codebase_search`, um sicherzustellen, dass HA-spezifische Best Practices (wie Coordinator-Muster oder Entity-Naming) aus den Docs korrekt angewendet werden.
+
+Du bist Home Assistant und Python Experte

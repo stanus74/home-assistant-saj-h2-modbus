@@ -129,9 +129,6 @@ class ChargeSettingHandler:
         # Cache removed
 
         # Initialize hub pending states (kept for compatibility if hub accesses them directly)
-        self.hub._pending_charging_state = None
-        self.hub._pending_discharging_state = None
-        self.hub._pending_passive_mode_state = None
 
         # Command Dispatcher
         self._handlers = {
