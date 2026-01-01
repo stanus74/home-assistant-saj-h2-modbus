@@ -250,18 +250,33 @@ class ChargeSettingHandler:
         """Handles charging or discharging state changes generically."""
         addr = MODBUS_ADDRESSES["power_states"][state_type]["address"]
         write_value = 1 if value else 0
+        pending_attr = f"_pending_{state_type}_state"
+
+        # Mark pending before awaiting I/O so the UI reflects the transition immediately
+        setattr(self.hub, pending_attr, value)
+        self.hub.async_set_updated_data(self.hub.inverter_data)
+
+        write_success = False
         
         try:
-            if await self._write_register_with_backoff(addr, write_value, f"{state_type} state"):
-                # Update cache immediately
+            write_success = await self._write_register_with_backoff(addr, write_value, f"{state_type} state")
+
+            if write_success:
+                # Update cache immediately so entities reflect new state
                 self._update_cache({f"{state_type}_enabled": write_value})
-                
-                # Update AppMode logic
+
+                # Update AppMode logic after cache reflects current state
                 chg, dchg = self._get_power_states()
                 await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg)
+            else:
+                _LOGGER.warning("Failed to write %s state. AppMode not changed.", state_type)
+        except Exception as e:
+            _LOGGER.error("Exception in _handle_power_state for %s: %s", state_type, e, exc_info=True)
         finally:
+            # Always clear pending so UI does not stick when write fails
             self._clear_pending_state(state_type)
-            # Force UI update to clear pending flag and show new state
+
+            # Push latest pending flag / state to HA regardless of outcome
             self.hub.async_set_updated_data(self.hub.inverter_data)
 
     async def _handle_passive_mode(self, value: Optional[int]) -> None:
@@ -359,10 +374,27 @@ class ChargeSettingHandler:
                 self.hub.async_set_updated_data(self.hub.inverter_data)
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
+        """Update AppMode based on current charge/discharge states."""
+        
+        # Prüfen, ob Passive Mode aktiv ist
         passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
-        desired_app_mode = APP_MODE_PASSIVE if passive_active else (APP_MODE_FORCE_CHARGE_DISCHARGE if (charge_enabled or discharge_enabled) else APP_MODE_SELF_CONSUMPTION)
-        await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
+        
+        # Logik für AppMode:
+        # 3 = Passive (Priority 1)
+        # 1 = Force Charge/Discharge (Priority 2)
+        # 0 = Self Consumption (Priority 3)
+        
+        desired_app_mode = 0  # Default
+        
+        if passive_active:
+            desired_app_mode = 3
+        elif charge_enabled or discharge_enabled:
+            desired_app_mode = 1
+        else:
+            desired_app_mode = 0
 
+        # Aufrufen
+        await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
     async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
         """Write register with exponential backoff retry."""
         for attempt in range(1, MAX_HANDLER_RETRIES + 1):

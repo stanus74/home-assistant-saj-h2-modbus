@@ -488,15 +488,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         Uses dedicated write lock with priority over read operations.
         """
-        async with self._write_lock:
-            self._write_in_progress = True
-            try:
-                client = await self.connection.get_client()
-                return await try_write_registers(
-                    client, self._write_lock, 1, address, value
-                )
-            finally:
-                self._write_in_progress = False
+        # Do not acquire the lock twice: try_write_registers already uses it.
+        self._write_in_progress = True
+        try:
+            client = await self.connection.get_client()
+            return await try_write_registers(
+                client, self._write_lock, 1, address, value
+            )
+        finally:
+            self._write_in_progress = False
 
     async def _read_registers(self, address: int, count: int) -> List[int]:
         """
