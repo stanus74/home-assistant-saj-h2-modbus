@@ -116,6 +116,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._ultra_fast_lock = asyncio.Lock()  # For 1s ultra fast polling
         self._fast_lock = asyncio.Lock()        # For 10s fast polling
         self._slow_lock = asyncio.Lock()        # For 60s slow polling
+
+        # Merge locks for shared state/mask registers
+        self._merge_locks: Dict[int, asyncio.Lock] = {
+            0x3604: asyncio.Lock(),  # charging state + charge_time_enable mask
+            0x3605: asyncio.Lock(),  # discharging state + discharge_time_enable mask
+        }
         
         # DEDICATED WRITE LOCK: Write operations have priority over read operations
         # This prevents write operations from waiting for read operations to complete
@@ -310,8 +316,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def _schedule_update_loop(self, interval: int, cancel_attr: str, ultra: bool = False) -> None:
         """Schedule an update loop to start after startup delay."""
         startup_delay = self._get_startup_delay()
-        self._pending_fast_start_cancel = async_call_later(
-            self.hass, startup_delay, lambda _: self._start_update_loop(interval, cancel_attr, ultra)
+        pending_attr = (
+            "_pending_ultra_fast_start_cancel"
+            if cancel_attr == "_cancel_ultra_fast_update"
+            else "_pending_fast_start_cancel"
+        )
+
+        # Replace any existing pending handle for the same loop
+        pending_handle = getattr(self, pending_attr, None)
+        if pending_handle:
+            pending_handle()
+
+        setattr(
+            self,
+            pending_attr,
+            async_call_later(
+                self.hass,
+                startup_delay,
+                lambda _: self._start_update_loop(interval, cancel_attr, ultra),
+            ),
         )
 
     async def start_fast_updates(self) -> None:
@@ -516,3 +539,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         return await try_read_registers(
             client, self._slow_lock, 1, address, count
         )
+
+    async def merge_write_register(
+        self,
+        address: int,
+        modifier: Callable[[int], int],
+        label: str = "merge write",
+    ) -> tuple[bool, int]:
+        """Read-modify-write with per-register lock to preserve shared bits."""
+        lock = self._merge_locks.get(address, self._write_lock)
+        async with lock:
+            current_regs = await self._read_registers(address, 1)
+            if not current_regs:
+                return False, 0
+            current = current_regs[0]
+            new_val = modifier(current)
+            if new_val == current:
+                return True, current
+            ok = await self._write_register(address, new_val)
+            if ok:
+                _LOGGER.debug("%s: wrote merged value %s to 0x%04x", label, new_val, address)
+                return True, new_val
+            return False, current

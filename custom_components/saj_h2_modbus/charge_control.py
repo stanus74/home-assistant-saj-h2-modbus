@@ -217,6 +217,24 @@ class ChargeSettingHandler:
             await self._handle_passive_mode(value)
             return
 
+        # charge_time_enable / discharge_time_enable teilen sich das Register mit State-Bit
+        if key in ("charge_time_enable", "discharge_time_enable"):
+            try:
+                int_value = int(value)
+            except (ValueError, TypeError):
+                _LOGGER.error("Invalid value for %s: %s", key, value)
+                return
+
+            addr = setting_def["address"]
+            def modifier(cur: int) -> int:
+                state_bit = cur & 0x1
+                return (int_value & ~0x1) | state_bit
+
+            ok, new_val = await self.hub.merge_write_register(addr, modifier, f"{key} (merged)")
+            if ok:
+                self._update_cache({key: new_val})
+            return
+
         try:
             int_value = int(value)
         except (ValueError, TypeError):
@@ -266,10 +284,18 @@ class ChargeSettingHandler:
         """Ensures the time_enable bit is set for the given slot."""
         enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
         
-        def modifier(current_mask):
-            return current_mask | (1 << index)
+        if enable_def["address"] in (0x3604, 0x3605):
+            addr = enable_def["address"]
+            def modifier(cur: int) -> int:
+                state_bit = cur & 0x1
+                new_val = cur | (1 << index)
+                return (new_val & ~0x1) | state_bit
+            success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
+        else:
+            def modifier(current_mask):
+                return current_mask | (1 << index)
 
-        success, new_mask = await self._modify_register(enable_def["address"], modifier, f"{label} time_enable")
+            success, new_mask = await self._modify_register(enable_def["address"], modifier, f"{label} time_enable")
         if success:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
@@ -288,7 +314,12 @@ class ChargeSettingHandler:
         write_success = False
         
         try:
-            write_success = await self._write_register_with_backoff(addr, write_value, f"{state_type} state")
+            if addr in (0x3604, 0x3605):
+                def modifier(cur: int) -> int:
+                    return (cur & ~0x1) | (write_value & 0x1)
+                write_success, merged_val = await self.hub.merge_write_register(addr, modifier, f"{state_type} state (merged)")
+            else:
+                write_success = await self._write_register_with_backoff(addr, write_value, f"{state_type} state")
 
             if write_success:
                 # Update cache immediately so entities reflect new state
