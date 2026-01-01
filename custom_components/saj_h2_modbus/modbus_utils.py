@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import logging
+import os
 import time
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
@@ -13,7 +14,18 @@ from .const import Lock
 _LOGGER = logging.getLogger(__name__)
 
 # Set to True to enable detailed Modbus read attempt logging, False to disable
-ENABLE_DETAILED_MODBUS_READ_LOGGING = False
+# Entweder hier per DEBUG_READ_DEFAULT auf True setzen oder per Env `SAJ_DEBUG_MODBUS_READ=1`
+DEBUG_READ_DEFAULT = False
+ENABLE_DETAILED_MODBUS_READ_LOGGING = (
+    os.getenv("SAJ_DEBUG_MODBUS_READ", "0") == "1" or DEBUG_READ_DEFAULT
+)
+
+# Toggle für detailliertes Write-Logging
+# Entweder hier direkt auf True setzen oder per Env `SAJ_DEBUG_MODBUS_WRITE=1`
+DEBUG_WRITE_DEFAULT = False
+ENABLE_DETAILED_MODBUS_WRITE_LOGGING = (
+    os.getenv("SAJ_DEBUG_MODBUS_WRITE", "0") == "1" or DEBUG_WRITE_DEFAULT
+)
 
 class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
@@ -355,6 +367,8 @@ async def try_read_registers(
     should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "read", lock)
     
     async def read_once():
+        if ENABLE_DETAILED_MODBUS_READ_LOGGING:
+            _LOGGER.debug("[read] unit=%s addr=%s count=%s", unit, hex(address), count)
         response = await _perform_modbus_operation(
             client, lock, unit, client.read_holding_registers, address=address, count=count
         )
@@ -368,7 +382,8 @@ async def try_read_registers(
 
         if not hasattr(response, "registers"):
             raise ModbusIOException("No registers in response")
-
+        if ENABLE_DETAILED_MODBUS_READ_LOGGING:
+            _LOGGER.debug("[read-ok] unit=%s addr=%s count=%s regs=%s", unit, hex(address), count, response.registers)
         return response.registers  # type: ignore
     
     async def on_read_retry(attempt: int, e: Exception) -> None:
@@ -406,18 +421,22 @@ async def try_write_registers(
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
+        if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
+            _LOGGER.debug("[write] unit=%s addr=%s values=%s", unit, hex(address), values)
+
         if is_single:
-            _LOGGER.debug("Writing single value %s to register %s", values, hex(address))
             result = await _perform_modbus_operation(
                 client, lock, unit, client.write_register, address=address, value=values
             )
         else:
-            _LOGGER.debug("Writing values %s to registers starting at %s", values, hex(address))
             result = await _perform_modbus_operation(
                 client, lock, unit, client.write_registers, address=address, values=values
             )
         if result.isError():
             raise ModbusIOException("Write response error")
+
+        if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
+            _LOGGER.debug("[write-ok] unit=%s addr=%s values=%s", unit, hex(address), values)
         return True
 
     return await _retry_with_backoff(
