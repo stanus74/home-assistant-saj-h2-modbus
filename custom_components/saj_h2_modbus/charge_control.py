@@ -276,8 +276,8 @@ class ChargeSettingHandler:
                 label
             )
 
-        # Handle time_enable for slots 2-7 (index 1-6)
-        if index > 0:
+        # Handle time_enable for slots 1-7 (index 0-6)
+        if index >= 0:
             await self._ensure_slot_enabled(mode_type, index, label)
 
     async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str) -> None:
@@ -287,6 +287,9 @@ class ChargeSettingHandler:
         if enable_def["address"] in (0x3604, 0x3605):
             addr = enable_def["address"]
             def modifier(cur: int) -> int:
+                if index == 0:
+                    # Slot 1 shares the charging/discharging state bit, so enabling it sets bit 0.
+                    return cur | 0x1
                 state_bit = cur & 0x1
                 new_val = cur | (1 << index)
                 return (new_val & ~0x1) | state_bit

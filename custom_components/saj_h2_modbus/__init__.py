@@ -1,17 +1,18 @@
 """The SAJ Modbus integration."""
+from __future__ import annotations
+
 import logging
 import time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 
-from .hub import SAJModbusHub
 from .const import (
-    DOMAIN, 
-    ATTR_MANUFACTURER, 
-    DEFAULT_SCAN_INTERVAL, 
-    DEFAULT_PORT, 
-    CONF_FAST_ENABLED, 
+    DOMAIN,
+    ATTR_MANUFACTURER,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_PORT,
+    CONF_FAST_ENABLED,
 )
 from homeassistant.helpers import config_validation as cv
 
@@ -42,10 +43,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "hub": hub,
         "device_info": _create_device_info(entry)
     }
-
-    # Start the main coordinator scheduling
-    await hub.start_main_coordinator()
-    _LOGGER.info("Main coordinator scheduling started")
 
     # Start fast updates only if enabled in hub
     if hub.fast_enabled:
@@ -123,6 +120,8 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
         scan_interval = _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
         _LOGGER.info("Starting hub with first refresh...")
+
+        from .hub import SAJModbusHub
 
         hub = SAJModbusHub(
             hass,

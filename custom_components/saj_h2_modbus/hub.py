@@ -58,8 +58,6 @@ CRITICAL_READER_GROUPS = {1, 2}
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-        self._optimistic_push_enabled: bool = True
-        self._optimistic_overlay: dict[str, Any] | None = None
         self._config_entry = config_entry
 
         # Config extraction - Connection
@@ -127,9 +125,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # This prevents write operations from waiting for read operations to complete
         self._write_lock = asyncio.Lock()
         self._write_in_progress = False  # Flag for active write operation
-        
-        # Keep _read_lock for backward compatibility (points to slow lock)
-        self._read_lock = self._slow_lock
         
         self.inverter_data: Dict[str, Any] = {}
         self.updating_settings = False
@@ -200,24 +195,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- COORDINATOR METHODS ---
 
-    async def start_main_coordinator(self) -> None:
-        """Legacy compatibility."""
-        _LOGGER.debug("start_main_coordinator called")
-
     async def _async_update_data(self) -> Dict[str, Any]:
         """Regular poll cycle (slow)."""
         try:
             client = await self.connection.get_client() # Ensure connected
 
-            if self._optimistic_push_enabled and self._setting_handler.has_pending():
-                self._apply_optimistic_overlay()
-                if self._optimistic_overlay:
-                    self.async_set_updated_data(self._optimistic_overlay)
-
             await self._setting_handler.process_pending()
 
             cache = await self._run_reader_methods(client)
-            self._optimistic_overlay = None
             self.inverter_data = cache
 
             if self.mqtt.publish_all and self.inverter_data:
@@ -226,7 +211,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             return self.inverter_data
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
-            self._optimistic_overlay = None
             raise
 
     def _process_reader_result(self, result: Any) -> bool:
@@ -502,13 +486,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- HELPERS ---
     
-    def _apply_optimistic_overlay(self) -> None:
-        try:
-            overlay = self._setting_handler.get_optimistic_overlay(self.inverter_data)
-            if overlay: self._optimistic_overlay = overlay
-        except Exception as e:
-            _LOGGER.debug("Failed to apply optimistic overlay: %s", e)
-
     async def _write_register(self, address: int, value: int) -> bool:
         """
         Helper for charge_control.py to write via connection service.
