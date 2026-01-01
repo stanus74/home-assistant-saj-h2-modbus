@@ -122,6 +122,8 @@ class ChargeSettingHandler:
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self._is_processing = False
         self._processing_lock = asyncio.Lock()
+        self._worker_task: Optional[asyncio.Task] = None
+        self._stop_processing = False
 
         # Locks & Caches
         self._app_mode_before_passive: Optional[int] = None
@@ -144,25 +146,33 @@ class ChargeSettingHandler:
 
     async def queue_command(self, command: Command) -> None:
         """Adds a new command to the queue and starts processing if needed."""
+        if self._stop_processing:
+            _LOGGER.debug("Queue is stopped; ignoring command %s", command.type)
+            return
         async with self._processing_lock:
             await self._command_queue.put(command)
             if not self._is_processing:
                 self._is_processing = True
-                asyncio.create_task(self._process_queue())
+                self._stop_processing = False
+                self._worker_task = asyncio.create_task(self._process_queue())
+                self._worker_task.add_done_callback(lambda _: setattr(self, "_worker_task", None))
 
     async def _process_queue(self) -> None:
         """Processes the command queue."""
-        while not self._command_queue.empty():
-            command = await self._command_queue.get()
-            try:
-                await self._execute_command(command)
-            except Exception as e:
-                _LOGGER.error("Error executing command %s: %s", command.type, e, exc_info=True)
-            
-            # Small delay to prevent bus saturation
-            await asyncio.sleep(0.1)
-            
-        self._is_processing = False
+        try:
+            while not self._stop_processing and not self._command_queue.empty():
+                command = await self._command_queue.get()
+                try:
+                    await self._execute_command(command)
+                except Exception as e:
+                    _LOGGER.error("Error executing command %s: %s", command.type, e, exc_info=True)
+                
+                # Small delay to prevent bus saturation
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            _LOGGER.debug("Command queue processing cancelled")
+        finally:
+            self._is_processing = False
 
     async def _execute_command(self, command: Command) -> None:
         """Executes a single command based on its type."""
@@ -171,6 +181,25 @@ class ChargeSettingHandler:
             await handler(command.payload)
         else:
             _LOGGER.warning("No handler for command type: %s", command.type)
+
+    async def shutdown(self) -> None:
+        """Stop queue processing and drain pending commands."""
+        self._stop_processing = True
+        if self._worker_task and not self._worker_task.done():
+            self._worker_task.cancel()
+            try:
+                await self._worker_task
+            except asyncio.CancelledError:
+                pass
+        # Drain queue to avoid processing after reload
+        try:
+            while not self._command_queue.empty():
+                self._command_queue.get_nowait()
+                self._command_queue.task_done()
+        except Exception:
+            pass
+        self._is_processing = False
+        self._worker_task = None
 
     # ========== COMMAND HANDLERS ==========
 

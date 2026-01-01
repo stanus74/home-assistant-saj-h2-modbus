@@ -470,6 +470,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def async_unload_entry(self) -> None:
         self._cleanup_fast_update_callbacks()
         self.mqtt.stop()
+        try:
+            await self._setting_handler.shutdown()
+        except Exception as e:
+            _LOGGER.debug("Error during setting handler shutdown: %s", e)
         await self.connection.close()
         self._fast_listeners.clear()
 
