@@ -368,7 +368,19 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
             lock = self._ultra_fast_lock if ultra else self._fast_lock
             
-            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+            # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
+            # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
+            try:
+                result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+            except Exception as e:
+                _LOGGER.debug("Ultra-fast poll failed, attempting one retry: %s", e)
+                try:
+                    # Immediate retry once
+                    result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                except Exception as retry_e:
+                    # If retry also fails, skip the update cycle
+                    _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
+                    return
             
             if result:
                 fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}

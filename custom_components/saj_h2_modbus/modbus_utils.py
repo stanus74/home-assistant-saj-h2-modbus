@@ -84,7 +84,7 @@ async def _connect_client(
         if not create_new:
             raise ValueError("Client is None and create_new is False")
         logger.debug("Creating new ModbusTcpClient for %s:%s", host, port)
-        client = ModbusTcpClient(host=host, port=port, timeout=10)
+        client = ModbusTcpClient(host=host, port=port, timeout=5)
     
     # Connect if not already connected
     if not client.connected:
@@ -103,7 +103,7 @@ async def _connect_client(
             logger.error("Error connecting client to %s:%s: %s", host, port, e)
             raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
     
-    
+
     return client
 
 
@@ -253,10 +253,10 @@ async def _retry_with_backoff(
 
 # Default retry settings
 DEFAULT_READ_RETRIES = 3
-DEFAULT_READ_BASE_DELAY = 2.0
-DEFAULT_READ_CAP_DELAY = 10.0
+DEFAULT_READ_BASE_DELAY = 0.5
+DEFAULT_READ_CAP_DELAY = 5.0
 
-DEFAULT_WRITE_RETRIES = 2
+DEFAULT_WRITE_RETRIES = 3
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
