@@ -7,7 +7,7 @@
  * - Protects specific input interactions (time, range) from disruptive re-renders.
  *
  * @author stanu74 
- * @version 1.2.1
+ * @version 1.2.2
  */
 
 class SajH2InverterCard extends HTMLElement {
@@ -16,13 +16,13 @@ class SajH2InverterCard extends HTMLElement {
     return {
       // Charging entities (7 slots like discharge)
       chargeSlots: [
-        { startTime: 'text.saj_charge1_start_time_time', endTime: 'text.saj_charge1_end_time_time', power: 'number.saj_charge1_power_percent_input', dayMask: 'number.saj_charge1_day_mask_input' },
-        { startTime: 'text.saj_charge2_start_time_time', endTime: 'text.saj_charge2_end_time_time', power: 'number.saj_charge2_power_percent_input', dayMask: 'number.saj_charge2_day_mask_input' },
-        { startTime: 'text.saj_charge3_start_time_time', endTime: 'text.saj_charge3_end_time_time', power: 'number.saj_charge3_power_percent_input', dayMask: 'number.saj_charge3_day_mask_input' },
-        { startTime: 'text.saj_charge4_start_time_time', endTime: 'text.saj_charge4_end_time_time', power: 'number.saj_charge4_power_percent_input', dayMask: 'number.saj_charge4_day_mask_input' },
-        { startTime: 'text.saj_charge5_start_time_time', endTime: 'text.saj_charge5_end_time_time', power: 'number.saj_charge5_power_percent_input', dayMask: 'number.saj_charge5_day_mask_input' },
-        { startTime: 'text.saj_charge6_start_time_time', endTime: 'text.saj_charge6_end_time_time', power: 'number.saj_charge6_power_percent_input', dayMask: 'number.saj_charge6_day_mask_input' },
-        { startTime: 'text.saj_charge7_start_time_time', endTime: 'text.saj_charge7_end_time_time', power: 'number.saj_charge7_power_percent_input', dayMask: 'number.saj_charge7_day_mask_input' }
+        { startTime: 'text.saj_charge1_start_time_time', endTime: 'text.saj_charge1_end_time_time', power: 'number.saj_charge1_power_percent_input', dayMask: 'number.saj_charge1_day_mask_input', dayMaskSensor: 'sensor.saj_charge1_day_mask' },
+        { startTime: 'text.saj_charge2_start_time_time', endTime: 'text.saj_charge2_end_time_time', power: 'number.saj_charge2_power_percent_input', dayMask: 'number.saj_charge2_day_mask_input', dayMaskSensor: 'sensor.saj_charge2_day_mask' },
+        { startTime: 'text.saj_charge3_start_time_time', endTime: 'text.saj_charge3_end_time_time', power: 'number.saj_charge3_power_percent_input', dayMask: 'number.saj_charge3_day_mask_input', dayMaskSensor: 'sensor.saj_charge3_day_mask' },
+        { startTime: 'text.saj_charge4_start_time_time', endTime: 'text.saj_charge4_end_time_time', power: 'number.saj_charge4_power_percent_input', dayMask: 'number.saj_charge4_day_mask_input', dayMaskSensor: 'sensor.saj_charge4_day_mask' },
+        { startTime: 'text.saj_charge5_start_time_time', endTime: 'text.saj_charge5_end_time_time', power: 'number.saj_charge5_power_percent_input', dayMask: 'number.saj_charge5_day_mask_input', dayMaskSensor: 'sensor.saj_charge5_day_mask' },
+        { startTime: 'text.saj_charge6_start_time_time', endTime: 'text.saj_charge6_end_time_time', power: 'number.saj_charge6_power_percent_input', dayMask: 'number.saj_charge6_day_mask_input', dayMaskSensor: 'sensor.saj_charge6_day_mask' },
+        { startTime: 'text.saj_charge7_start_time_time', endTime: 'text.saj_charge7_end_time_time', power: 'number.saj_charge7_power_percent_input', dayMask: 'number.saj_charge7_day_mask_input', dayMaskSensor: 'sensor.saj_charge7_day_mask' }
       ],
       chargeTimeEnable: 'number.saj_charge_time_enable_input',       // For WRITING
       chargeTimeEnableSensor: 'sensor.saj_charge_time_enable_bitmask', // For READING (actual hardware state)
@@ -30,13 +30,13 @@ class SajH2InverterCard extends HTMLElement {
 
       // Discharging entities
       dischargeSlots: [
-        { startTime: 'text.saj_discharge1_start_time_time', endTime: 'text.saj_discharge1_end_time_time', power: 'number.saj_discharge1_power_percent_input', dayMask: 'number.saj_discharge1_day_mask_input' },
-        { startTime: 'text.saj_discharge2_start_time_time', endTime: 'text.saj_discharge2_end_time_time', power: 'number.saj_discharge2_power_percent_input', dayMask: 'number.saj_discharge2_day_mask_input' },
-        { startTime: 'text.saj_discharge3_start_time_time', endTime: 'text.saj_discharge3_end_time_time', power: 'number.saj_discharge3_power_percent_input', dayMask: 'number.saj_discharge3_day_mask_input' },
-        { startTime: 'text.saj_discharge4_start_time_time', endTime: 'text.saj_discharge4_end_time_time', power: 'number.saj_discharge4_power_percent_input', dayMask: 'number.saj_discharge4_day_mask_input' },
-        { startTime: 'text.saj_discharge5_start_time_time', endTime: 'text.saj_discharge5_end_time_time', power: 'number.saj_discharge5_power_percent_input', dayMask: 'number.saj_discharge5_day_mask_input' },
-        { startTime: 'text.saj_discharge6_start_time_time', endTime: 'text.saj_discharge6_end_time_time', power: 'number.saj_discharge6_power_percent_input', dayMask: 'number.saj_discharge6_day_mask_input' },
-        { startTime: 'text.saj_discharge7_start_time_time', endTime: 'text.saj_discharge7_end_time_time', power: 'number.saj_discharge7_power_percent_input', dayMask: 'number.saj_discharge7_day_mask_input' }
+        { startTime: 'text.saj_discharge1_start_time_time', endTime: 'text.saj_discharge1_end_time_time', power: 'number.saj_discharge1_power_percent_input', dayMask: 'number.saj_discharge1_day_mask_input', dayMaskSensor: 'sensor.saj_discharge1_day_mask' },
+        { startTime: 'text.saj_discharge2_start_time_time', endTime: 'text.saj_discharge2_end_time_time', power: 'number.saj_discharge2_power_percent_input', dayMask: 'number.saj_discharge2_day_mask_input', dayMaskSensor: 'sensor.saj_discharge2_day_mask' },
+        { startTime: 'text.saj_discharge3_start_time_time', endTime: 'text.saj_discharge3_end_time_time', power: 'number.saj_discharge3_power_percent_input', dayMask: 'number.saj_discharge3_day_mask_input', dayMaskSensor: 'sensor.saj_discharge3_day_mask' },
+        { startTime: 'text.saj_discharge4_start_time_time', endTime: 'text.saj_discharge4_end_time_time', power: 'number.saj_discharge4_power_percent_input', dayMask: 'number.saj_discharge4_day_mask_input', dayMaskSensor: 'sensor.saj_discharge4_day_mask' },
+        { startTime: 'text.saj_discharge5_start_time_time', endTime: 'text.saj_discharge5_end_time_time', power: 'number.saj_discharge5_power_percent_input', dayMask: 'number.saj_discharge5_day_mask_input', dayMaskSensor: 'sensor.saj_discharge5_day_mask' },
+        { startTime: 'text.saj_discharge6_start_time_time', endTime: 'text.saj_discharge6_end_time_time', power: 'number.saj_discharge6_power_percent_input', dayMask: 'number.saj_discharge6_day_mask_input', dayMaskSensor: 'sensor.saj_discharge6_day_mask' },
+        { startTime: 'text.saj_discharge7_start_time_time', endTime: 'text.saj_discharge7_end_time_time', power: 'number.saj_discharge7_power_percent_input', dayMask: 'number.saj_discharge7_day_mask_input', dayMaskSensor: 'sensor.saj_discharge7_day_mask' }
       ],
       dischargeTimeEnable: 'number.saj_discharge_time_enable_input',       // For WRITING
       dischargeTimeEnableSensor: 'sensor.saj_discharge_time_enable_bitmask', // For READING (actual hardware state)
@@ -47,7 +47,7 @@ class SajH2InverterCard extends HTMLElement {
   constructor() {
     super();
 
-    console.log(`[SAJ H2 Inverter Card] Version: 1.2.1`);
+    console.log(`[SAJ H2 Inverter Card] Version: 1.2.2`);
     
     this.attachShadow({ mode: 'open' });
     
@@ -56,7 +56,7 @@ class SajH2InverterCard extends HTMLElement {
     this._mode = 'both';
     this._hass = null;
     this._debug = false;
-    this._sliderTimeouts = {};
+    this._debounceTimeouts = {}; // Generic debounce storage
     this._showAllChargeSlots = false;
     this._showAllDischargeSlots = false;
   }
@@ -186,14 +186,14 @@ class SajH2InverterCard extends HTMLElement {
         relevantEntityIds.push(
             this._entities.chargeTimeEnableSensor, // Use SENSOR for reading
             this._entities.chargingSwitch,
-            ...(this._entities.chargeSlots || []).flatMap(slot => slot ? [slot.startTime, slot.endTime, slot.power, slot.dayMask] : [])
+            ...(this._entities.chargeSlots || []).flatMap(slot => slot ? [slot.startTime, slot.endTime, slot.power, slot.dayMask, slot.dayMaskSensor] : [])
         );
     }
     if (this._mode !== 'charge') {
         relevantEntityIds.push(
             this._entities.dischargeTimeEnableSensor, // Use SENSOR for reading
             this._entities.dischargingSwitch,
-            ...(this._entities.dischargeSlots || []).flatMap(slot => slot ? [slot.startTime, slot.endTime, slot.power, slot.dayMask] : [])
+            ...(this._entities.dischargeSlots || []).flatMap(slot => slot ? [slot.startTime, slot.endTime, slot.power, slot.dayMask, slot.dayMaskSensor] : [])
         );
     }
     const uniqueIds = [...new Set(relevantEntityIds)].filter(Boolean);
@@ -326,6 +326,7 @@ class SajH2InverterCard extends HTMLElement {
       const sEnd = this._hass.states[slotConfig.endTime];
       const sPower = this._hass.states[slotConfig.power];
       const sMask = this._hass.states[slotConfig.dayMask];
+      const sMaskSensor = slotConfig.dayMaskSensor ? this._hass.states[slotConfig.dayMaskSensor] : null;
       const valid = sStart && sEnd && sPower && sMask;
 
       if (!valid) {
@@ -333,17 +334,31 @@ class SajH2InverterCard extends HTMLElement {
           slotErrors.push(`Slot ${i+1}: ${missing || 'invalid config'}`);
       }
 
-      const enabled = (timeEnableValue & (1 << i)) !== 0;
+      const sensorEnabled = (timeEnableValue & (1 << i)) !== 0;
+      // Check for pending data on this slot's entities (Optimistic UI)
+      const hasPendingData = (
+          sStart?.attributes?.pending_write === true ||
+          sEnd?.attributes?.pending_write === true ||
+          sPower?.attributes?.pending_write === true ||
+          sMask?.attributes?.pending_write === true
+      );
+      
+      const enabled = sensorEnabled || hasPendingData;
+      
+      // Use sensor value if available, otherwise fallback to input value. Prefer pending input value if writing.
+      const dayMaskValue = (sMask?.attributes?.pending_write) 
+          ? (parseInt(sMask.state) || 0) 
+          : (sMaskSensor ? (parseInt(sMaskSensor.state) || 0) : (valid ? parseInt(sMask.state) || 0 : 0));
       
       // DEBUG LOGGING per slot
       if (this._debug && i === 0) { // Only log slot 1 to avoid spam
-          console.log(`  - Slot ${i+1}: enabled=${enabled}, bit=${(timeEnableValue & (1 << i))}, chargingEnabled=${chargingEnabled}`);
+          console.log(`  - Slot ${i+1}: enabled=${enabled}, bit=${(timeEnableValue & (1 << i))}, chargingEnabled=${chargingEnabled}, mask=${dayMaskValue}`);
       }
 
       return {
         index: i, valid, enabled: enabled,
         startTime: valid ? sStart.state : '00:00', endTime: valid ? sEnd.state : '00:00',
-        power: valid ? parseInt(sPower.state) || 0 : 0, dayMask: valid ? parseInt(sMask.state) || 0 : 0,
+        power: valid ? parseInt(sPower.state) || 0 : 0, dayMask: dayMaskValue,
         config: slotConfig
       };
     });
@@ -368,7 +383,7 @@ class SajH2InverterCard extends HTMLElement {
 
     const html = `
       <div class="section charging-section">
-        <div class="section-header">Charging Settings (Version 1.2.1)</div>
+        <div class="section-header">Charging Settings (Version 1.2.2)</div>
         ${!chargingEnabled && !pendingWrite ? '<div class="hint-message">ℹ️ Charging is currently disabled. <b>Start time, end time and power are essential.</b></div>' : ''}
         ${pendingWrite ? '<div class="hint-message">🕓 Settings pending confirmation via Modbus...</div>' : ''}
         <div class="subsection">
@@ -419,7 +434,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`charge-slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">
@@ -464,6 +479,7 @@ class SajH2InverterCard extends HTMLElement {
       const sEnd = this._hass.states[slotConfig.endTime];
       const sPower = this._hass.states[slotConfig.power];
       const sMask = this._hass.states[slotConfig.dayMask];
+      const sMaskSensor = slotConfig.dayMaskSensor ? this._hass.states[slotConfig.dayMaskSensor] : null;
       const valid = sStart && sEnd && sPower && sMask;
 
       if (!valid) {
@@ -471,10 +487,26 @@ class SajH2InverterCard extends HTMLElement {
           slotErrors.push(`Slot ${i+1}: ${missing || 'invalid config'}`);
       }
 
+      const sensorEnabled = (timeEnableValue & (1 << i)) !== 0;
+      // Check for pending data on this slot's entities (Optimistic UI)
+      const hasPendingData = (
+          sStart?.attributes?.pending_write === true ||
+          sEnd?.attributes?.pending_write === true ||
+          sPower?.attributes?.pending_write === true ||
+          sMask?.attributes?.pending_write === true
+      );
+      
+      const enabled = sensorEnabled || hasPendingData;
+
+      // Use sensor value if available, otherwise fallback to input value. Prefer pending input value if writing.
+      const dayMaskValue = (sMask?.attributes?.pending_write) 
+          ? (parseInt(sMask.state) || 0) 
+          : (sMaskSensor ? (parseInt(sMaskSensor.state) || 0) : (valid ? parseInt(sMask.state) || 0 : 0));
+
       return {
-        index: i, valid, enabled: (timeEnableValue & (1 << i)) !== 0,
+        index: i, valid, enabled: enabled,
         startTime: valid ? sStart.state : '00:00', endTime: valid ? sEnd.state : '00:00',
-        power: valid ? parseInt(sPower.state) || 0 : 0, dayMask: valid ? parseInt(sMask.state) || 0 : 0,
+        power: valid ? parseInt(sPower.state) || 0 : 0, dayMask: dayMaskValue,
         config: slotConfig
       };
     });
@@ -550,7 +582,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">
@@ -589,28 +621,29 @@ class SajH2InverterCard extends HTMLElement {
     );
   }
 
-  // Debounce Slider-Änderungen (verzögert Service-Call)
-  // Verhindert zu viele Modbus-Calls bei schnellen Slider-Bewegungen
-  _debouncedSliderChange(sliderId, entityId, value, delay = 800) {
-    // Alten Timer löschen, falls noch aktiv
-    if (this._sliderTimeouts[sliderId]) {
-      clearTimeout(this._sliderTimeouts[sliderId]);
-      if (this._debug) {
-        console.log(`[saj-h2-inverter-card] Debounce Timer abgebrochen für ${sliderId}`);
-      }
+  // Generic debounce function
+  _debounce(key, func, delay = 1000) {
+    if (this._debounceTimeouts[key]) {
+      clearTimeout(this._debounceTimeouts[key]);
     }
+    this._debounceTimeouts[key] = setTimeout(() => {
+      func();
+      delete this._debounceTimeouts[key];
+    }, delay);
+  }
 
-    // Neuen Timer starten
-    this._sliderTimeouts[sliderId] = setTimeout(() => {
+  // Debounce slider changes (delays service call)
+  // Prevents too many Modbus calls during rapid slider movements
+  _debouncedSliderChange(sliderId, entityId, value, delay = 800) {
+    this._debounce(sliderId, () => {
       if (this._debug) {
-        console.log(`[saj-h2-inverter-card] Debounce abgelaufen: Sende ${sliderId} = ${value}`);
+        console.log(`[saj-h2-inverter-card] Debounce expired: Sending ${sliderId} = ${value}`);
       }
       this._setEntityValue(entityId, parseInt(value, 10), 'number');
-      delete this._sliderTimeouts[sliderId];
     }, delay);
 
     if (this._debug) {
-      console.log(`[saj-h2-inverter-card] Debounce Timer gestartet für ${sliderId} (${delay}ms)`);
+      console.log(`[saj-h2-inverter-card] Debounce timer started for ${sliderId} (${delay}ms)`);
     }
   }
 
@@ -773,7 +806,7 @@ class SajH2InverterCard extends HTMLElement {
                 return;
             }
             
-            // WICHTIG: currentMask von SENSOR lesen (aktueller Hardware-Status)
+            // IMPORTANT: Read currentMask from SENSOR (actual hardware status)
             const currentMask = parseInt(timeEnableSensor.state || '0');
             const bit = 1 << i;
             const newMask = chk.checked ? (currentMask | bit) : (currentMask & ~bit);
@@ -801,7 +834,7 @@ class SajH2InverterCard extends HTMLElement {
       // Slot Time Inputs
       this._setupTimeListeners(`charge-slot-${i}`, slotConfig.startTime, slotConfig.endTime);
 
-      // Slot Power Slider
+      // Slot Power Slider - WITH DEBOUNCING
       const slider = q(`#charge-slot-${i}-power`);
       if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -903,7 +936,7 @@ class SajH2InverterCard extends HTMLElement {
                 return;
             }
             
-            // WICHTIG: currentMask von SENSOR lesen (aktueller Hardware-Status)
+            // IMPORTANT: Read currentMask from SENSOR (actual hardware status)
             const currentMask = parseInt(timeEnableSensor.state || '0');
             const bit = 1 << i;
             const newMask = chk.checked ? (currentMask | bit) : (currentMask & ~bit);
@@ -930,7 +963,7 @@ class SajH2InverterCard extends HTMLElement {
       // Slot Time Inputs
       this._setupTimeListeners(`slot-${i}`, slotConfig.startTime, slotConfig.endTime);
 
-      // Slot Power Slider - MIT DEBOUNCING
+      // Slot Power Slider - WITH DEBOUNCING
       const slider = q(`#slot-${i}-power`);
       if (slider && !slider.hasAttribute('data-listener-added')) {
         slider.setAttribute('data-listener-added', 'true');
@@ -959,10 +992,14 @@ class SajH2InverterCard extends HTMLElement {
       if (input && !input.hasAttribute('data-listener-added')) {
         input.setAttribute('data-listener-added', 'true');
         input.addEventListener('change', e => {
-            if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(e.target.value)) {
-                 this._setEntityValue(entityId, e.target.value, 'text');
+            const val = e.target.value;
+            if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(val)) {
+                 // Debounce time updates to catch rapid changes
+                 this._debounce(`time-${entityId}`, () => {
+                    this._setEntityValue(entityId, val, 'text');
+                 }, 1000);
             } else {
-                console.warn(`[saj-h2-inverter-card] Invalid time format entered for ${entityId}: ${e.target.value}. Reverting.`);
+                console.warn(`[saj-h2-inverter-card] Invalid time format entered for ${entityId}: ${val}. Reverting.`);
                 const prevState = this._hass.states[entityId]?.state;
                  if (prevState && /^([01]\d|2[0-3]):([0-5]\d)$/.test(prevState)) {
                      e.target.value = prevState;
@@ -991,7 +1028,10 @@ class SajH2InverterCard extends HTMLElement {
                         if (!isNaN(dayIndex)) newMask |= (1 << dayIndex);
                     }
                 });
-                this._setEntityValue(maskEntity, newMask, 'number');
+                // Debounce mask updates to allow multiple checkbox clicks (e.g. selecting Mon, Tue, Wed)
+                this._debounce(`mask-${maskEntity}`, () => {
+                    this._setEntityValue(maskEntity, newMask, 'number');
+                }, 1000);
             }
         });
         container.querySelectorAll(`input[type="checkbox"][id^="${prefix}-day-"]`).forEach(chk => {
@@ -1198,20 +1238,20 @@ class SajH2InverterCard extends HTMLElement {
       .time-input:disabled { color: var(--disabled-text-color); cursor: not-allowed; }
       .time-input-container:has(input:disabled) {
         background-color: var(--input-disabled-fill-color, rgba(var(--disabled-text-color-rgb), 0.1));
-        border-color: var(--input-disabled-ink-color, var(--divider-color)); cursor: not-allowed;
+        border-color: var(--input-disabled-ink-color, var,--divider-color)); cursor: not-allowed;
       }
       .power-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 40px; box-sizing: border-box; }
       .power-value {
         display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px;
         border: 1px solid var(--input-ink-color, var(--divider-color)); border-radius: 8px;
-        background-color: var(--input-fill-color, var(--card-background-color)); font-size: 1.1em; font-weight: 500;
+        background-color: var(--input-fill-color, var,--card-background-color)); font-size: 1.1em; font-weight: 500;
         color: var(--primary-text-color); min-width: 60px; min-height: 40px; box-sizing: border-box; text-align: center;
         transition: background-color 0.2s ease, border-color 0.2s ease;
       }
       .time-box.power-time:has(input:disabled) .power-value,
       .time-power-row:has(input.power-slider:disabled) .power-value {
         background-color: var(--input-disabled-fill-color, rgba(var(--disabled-text-color-rgb), 0.1));
-        border-color: var(--input-disabled-ink-color, var(--divider-color)); color: var(--disabled-text-color);
+        border-color: var(--input-disabled-ink-color, var,--divider-color)); color: var(--disabled-text-color);
       }
 
       /* Days Selection */

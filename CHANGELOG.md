@@ -1,5 +1,31 @@
-## [v2.7.2]
+## [v2.8.0]
 
+### New Features
+- **Passive Charge/Discharge Switches**: Added dedicated switches for passive charge and discharge modes , explained here https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
+
+- **Charge Control** and **Number Entities**: Implementation of an asynchronous command queue for immediate execution of setting changes, independent of the polling interval.
+
+### Changed
+
+- **Number Entities**: Reduced maximum value for passive power settings (`passive_grid_charge_power`, `passive_grid_discharge_power`, etc.) to 500.
+- **Number Entities**: Reduced maximum value for power percentages of charge/discharge time slots (`chargeX_power_percent`, `dischargeX_power_percent`) to 50%.
+
+*Read >* https://github.com/stanus74/home-assistant-saj-h2-modbus/issues/141
+
+- **Inverter Card**: Bumped version to 1.2.2.
+- Adjusted slider range for power percentages to 0-50%.
+- Added debouncing for sliders, time input fields, and weekday checkboxes.                    
+
+### Improvements
+- **Dedicated Write Lock**: Implemented a dedicated write lock with priority over read operations. Write operations no longer wait for read operations to complete, and ultra-fast polling (1s) is skipped during write operations to prevent lock contention and improve performance.
+- **Charge Control Simplification**: Removed complex locking mechanisms and artificial delays. The integration now updates the internal cache immediately after a successful Modbus write, providing instant feedback in the UI (Optimistic UI).
+- **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
+
+- and some more code refactoring
+
+
+## [v2.7.2]
+  
 ### New Features
 - **Ultra Fast Polling (1s)**: Added a new "Ultra Fast" mode that polls critical power sensors every second.
 - **Direct MQTT Configuration**: Added specific configuration fields (Host, Port, User, Password) for an MQTT broker in the integration options.
@@ -77,9 +103,21 @@ It is important to always check the start and end times.
 
 ---
 
-# Changelog (v2.6.5)
+# Changelog (v2.7.4) - Refactoring for HA 2025 Standards
 
-- Fixed Fast Coordinator error
+### Refactoring and Improvements:
+- **Centralized MQTT Constants**: MQTT constants (`CONF_MQTT_TOPIC_PREFIX`, `CONF_MQTT_PUBLISH_ALL`) moved to `const.py`.
+- **Optimistic Overlay Removed**: Unused optimistic overlay feature removed from `hub.py` and `charge_control.py`.
+- **Pending States Simplified**: Redundant initialization of pending states in `charge_control.py` removed.
+- **Lock System Consolidated**: Redundant `_read_lock` removed from `hub.py`.
+- **Helper Methods Centralized**: `_write_register` and `_read_registers` moved from `hub.py` to `ModbusConnectionManager` in `services.py`.
+- **Redundant Variables Removed**: Unused `_warned_missing_states` removed from `hub.py`.
+- **Code Documentation Improved**: Docstrings added/enhanced in `hub.py`.
+- **Circular Dependencies Managed**: `TYPE_CHECKING` import in `charge_control.py` confirmed as standard practice.
+- **Config Handling Refactored**: Configuration passing reviewed and deemed appropriate.
+- **Architectural Review**: Integration design assessed against HA 2025 standards, confirming adherence to best practices.
+
+# Changelog (v2.7.3)
 - Added more charging slots (all 7)
 - Fixed minor error
 
@@ -125,3 +163,4 @@ Go to *Apps → Home Assistant → Storage → Clear Cache and Data*.
   - `switch.py`: `is_on` property now checks BOTH registers (discharging_enabled > 0 AND AppMode == 1)
   - Removed blocking `asyncio.run_coroutine_threadsafe()` calls → Reads directly from cache (synchronous, fast)
   - No more "took 1.001 seconds" warnings
+
