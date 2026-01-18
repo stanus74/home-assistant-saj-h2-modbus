@@ -1,10 +1,9 @@
-## [v2.7.3]
+## [v2.8.0]
 
 ### New Features
 - **Passive Charge/Discharge Switches**: Added dedicated switches for passive charge and discharge modes , explained here https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
 
 - **Charge Control** and **Number Entities**: Implementation of an asynchronous command queue for immediate execution of setting changes, independent of the polling interval.
-
 
 ### Changed
 
@@ -21,6 +20,8 @@
 - **Dedicated Write Lock**: Implemented a dedicated write lock with priority over read operations. Write operations no longer wait for read operations to complete, and ultra-fast polling (1s) is skipped during write operations to prevent lock contention and improve performance.
 - **Charge Control Simplification**: Removed complex locking mechanisms and artificial delays. The integration now updates the internal cache immediately after a successful Modbus write, providing instant feedback in the UI (Optimistic UI).
 - **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
+
+- and some more code refactoring
 
 
 ## [v2.7.2]

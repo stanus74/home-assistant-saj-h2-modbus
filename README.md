@@ -26,8 +26,9 @@ It should work for Ampere Solar Inverter (EKD-Solar) too. They use SAJ HS2 Inver
 ## Features 
 
 - Installation through Config Flow UI
-- Over 330 registers (power, energy, temperature sensors, battery...)
-- Configurable polling interval - changeable at any time
+- Over 390 registers (power, energy, temperature sensors, battery...)
+- Configurable polling interval - changeable at any time, with real-time sensors adjustable at 10-second intervals or **even 1-second intervals** (via MQTT)
+
 - Smart Modbus connection management - especially for AIO3 
 
 - **New Feature:** Configure Charging Time and Power, ability to switch the working mode between **Self-Consumption** / **Time-of-Use Mode** (to charge the battery with grid power) 
@@ -47,8 +48,6 @@ This integration is available in the HACS default repository.
 1. Navigate to the "Integrations" page in your configuration, then click "Add Integration and 
 select "SAJ H2 Modbus."
 2. Enter the IP Address and Interval 
-
-**Important**: don't set intervall **at least 60 seconds**
 
 3. Optional: Setting the charge values for charging the battery from the grid >[read the instructions](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/working-mode-doc.pdf)
 4. Set charging values in Home Assistant, see below
@@ -70,7 +69,6 @@ select "SAJ H2 Modbus."
 You can be enabled/disable in Configuration Settings every time
 
 
-
 ### 🚀 Charging/Discharging Control
 
 > **⚠️ Warning: Write Registers**
@@ -86,18 +84,37 @@ You can be enabled/disable in Configuration Settings every time
 > Use write functions carefully.  
 > The developer is not liable for any issues arising from user-applied register writes.
 
-All Input Entities here >
+### ⚡ SAJ Inverter – Passive Mode 
 
+Passive Mode allows you to charge or discharge your battery at a fixed power level – for example, during low electricity rates or for grid support.
+
+Learn more: https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
+
+**How it works:**
+
+1. **Set the power level** (0–1000, where 1000 = 100%):
+   - `number.saj_passive_bat_charge_power` – Battery charge power
+   - `number.saj_passive_bat_discharge_power` – Battery discharge power
+
+2. **Activate the mode** via Switch:
+   - `switch.saj_passive_charge_control` (ON = Charge / OFF = Off)
+   - `switch.saj_passive_discharge_control` (ON = Discharge / OFF = Off)
+
+**Important** for Power Settings
+https://github.com/stanus74/home-assistant-saj-h2-modbus/issues/141
+
+That's it – the inverter handles the rest automatically.
 
 ### 🚀 Export Limit Control
 
 - **SAJ Export Limit (Input)** 
   `number.saj_export_limit_input` : Value in **percent** – e.g. `500` = 50% of inverter max power (e.g. 4000 W for 8 kW inverter)
 
-Perfect for zero export or dynamic grid feed-in limitation.
+Perfect for zero export or dynamic grid feed-in limitation. 
+**Important**: This applies to PV power surplus that is fed into the public grid.
 
 
-### Configure Charging and Discharging Time and Power
+### Configure Charging and Discharging Time and Power (Time-of-Use Mode)
 
 #### 🚀 Custom Lovelace Card for Charging/Discharging Control
 
