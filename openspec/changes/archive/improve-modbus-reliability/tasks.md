@@ -1,3 +1,0 @@
-- [ ] Implement asyncio Timeout-handling in the Modbus query.
-- [ ] Add retry logic (3 attempts) for connection interruptions.
-- [ ] Set sensors to 'Unavailable' when the inverter does not respond.

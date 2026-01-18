@@ -1,4 +1,0 @@
-- [ ] Analyze the 'empty dictionary bug' in `_read_modbus_data()`.
-- [ ] Examine lock contention between the 3 polling levels.
-- [ ] Validate register addresses (330+) against the mapping.
-- [ ] Propose a robust solution for Partial-Data Recovery.
