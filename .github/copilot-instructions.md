@@ -4,7 +4,8 @@
 
 ## Quick Start for AI Agents
 
-**Before modifying code, understand:**
+**Before modifying code, understand (see also `/plans/architecture_overview.md`):**
+
 1. **3-tier polling architecture** with separate asyncio locks (`_slow_lock`, `_fast_lock`, `_ultra_fast_lock`) - never consolidate into one
 2. **Configuration-driven** register parsing - add sensors via `_DATA_READ_CONFIG` dicts, not by modifying decode logic
 3. **Command queue pattern** for all writes - charge control uses `asyncio.Queue` to prevent race conditions
@@ -12,14 +13,15 @@
 5. **Connection caching** in `ModbusConnectionManager` (60s TTL) - reduces lock contention significantly
 6. **7 functional domains** (see `/plans/FUNKTIONSBEREICHE-ANALYSE.md`): Modbus reads, HA entity updates, MQTT publishing, charge control, config flow, entity optimization
 
-**Löste Probleme aus analyse-010126.md:**
-- ✅ Fast/Ultra-Fast Loop scheduling bug behoben (pending handle management)
-- ✅ Register 0x3604 merge lock strategy implementiert (prevent charging state corruption)
-- ✅ Queue cleanup in `async_unload_entry` implementiert (no zombie tasks)
+**Fixed problems from analyse-010126.md:**
+- ✅ Fast/Ultra-Fast loop scheduling bug fixed (pending handle management)
+- ✅ Register 0x3604 merge lock strategy implemented (prevents charging state corruption)
+- ✅ Queue cleanup in `async_unload_entry` implemented (no zombie tasks)
+- ✅ Fast-listener lifecycle fixed (sensors unregister via `async_on_remove`, no log spam after removal)
 
 ## Project Overview
 
-**Context:** Unofficial community integration (not endorsed by SAJ) for reading SAJ H2 inverters (8kW-10kW) via Modbus TCP with charging/discharging control and export limits. Register mappings are **empirically determined** (reverse-engineered, not from official docs) - firmware updates may break compatibility.
+**Context:** Unofficial community integration (not endorsed by SAJ) for reading SAJ H2 inverters (8kW-10kW) via Modbus TCP with charging/discharging control and export limits. Register mappings are **empirically determined** (reverse-engineered, not from official docs) - firmware updates may break compatibility. See `/plans/architecture_overview.md` for the current high-level structure (3 polling loops, lock assignments, services, and queue).
 
 **3-Tier Polling Architecture:**
 - **60s (Standard)** - All 330+ registers, high-latency tolerance
@@ -165,7 +167,7 @@ except Exception as e:
     _LOGGER.log(log_level_on_error, "Error reading modbus data: %s", e)
     return {}  # ← LOSES ALL DATA, even if 100 fields succeeded!
 ```
-**Phase 1 fix:** Return tuple `(data, errors)` with per-field try-catch blocks (see [todo.md](../Dev-Protocol/todo.md)).
+**Phase 1 fix:** Return tuple `(data, errors)` with per-field try-catch blocks (see Dev-Protocol/todo.md).
 
 **Connection errors:** Always re-raise `ReconnectionNeededError` so hub can trigger reconnect:
 ```python
@@ -215,43 +217,43 @@ disable_slot_3 = (current_value & ~(1 << 3))  # Clear bit 3
 
 ### Entity Write Confirmation (number.py, text.py, switch.py)
 
-**Pattern für optimistische Updates + Schreibbestätigung** (see `/plans/entity-optimization-plan.md`):
+**Pattern for optimistic updates + write confirmation** (see `/plans/entity-optimization-plan.md`):
 
 ```python
 async def async_set_native_value(self, value):
     val = int(value)
     
-    # 1. Validierung
+    # 1. Validation
     if not self._attr_native_min_value <= val <= self._attr_native_max_value:
         _LOGGER.error(f"Invalid value: {val}")
         return
     
-    # 2. Optimistisches Update (sofortiges UI-Feedback)
+    # 2. Optimistic update (instant UI feedback)
     old_value = self._attr_native_value
     self._attr_native_value = val
     self.async_write_ha_state()
     
-    # 3. Schreiben zum Gerät
+    # 3. Write to the device
     if self.set_method:
         success = await self.set_method(val)
         if not success:
             _LOGGER.error(f"Failed to write: {val}")
-            # Rollback bei Fehler
+            # Roll back on failure
             self._attr_native_value = old_value
             self.async_write_ha_state()
             return
     
-    # 4. Verifizierung (optional: read-back nach Verzögerung)
+    # 4. Verification (optional read-back after a delay)
     # await asyncio.sleep(0.5)
     # actual_value = self._hub.inverter_data.get(self._get_data_key())
     # if actual_value != val:
     #     _LOGGER.warning(f"Mismatch: expected {val}, got {actual_value}")
 ```
 
-**Warum 3 Schritte?**
-- Optimistisches Update: Benutzer sieht sofort Änderung
-- Schreiben: Modbus-Befehl an Inverter
-- Verifizierung: Sicherstellung, dass Wert wirklich geschrieben wurde
+**Why 3 steps?**
+- Optimistic update: users see the change immediately
+- Write: send the Modbus command to the inverter
+- Verification: ensure the value was actually written
 
 ### Adding a New Sensor (Complete Checklist)
 

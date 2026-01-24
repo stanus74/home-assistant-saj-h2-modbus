@@ -4,8 +4,9 @@
 - **Partial Modbus Data Loss**: `_read_modbus_data()` now returns `(data, errors)` so single-field decoding issues no longer wipe the entire block and the log reports exactly which registers misbehaved.
 - **Register 0x3604/0x3605 Guard**: Direct writes to the shared state/mask registers are rejected unless performed through `merge_write_register()`, preventing accidental clearing of the charging state during slot updates.
 - **Fast Listener Cleanup**: Sensor entities now deregister their fast-poll callbacks via an `async_on_remove` hook, so disabling/removing an entity immediately stops 10 s updates and avoids race conditions or log spam from stale listeners.
+- **Charge Queue Shutdown**: The charge/discharge command handler now cancels and drains its queue cleanly on reload/unload, eliminating zombie tasks that previously kept running after the integration restarted.
 
-
+## [v2.8.0]
 
 ### New Features
 - **Passive Charge/Discharge Switches**: Added dedicated switches for passive charge and discharge modes , explained here https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
@@ -19,9 +20,6 @@
 - **Charge Control Simplification**: Removed complex locking mechanisms and artificial delays. The integration now updates the internal cache immediately after a successful Modbus write, providing instant feedback in the UI (Optimistic UI).
 
 - and some more code refactoring
-
-
-
 
 
 ## [v2.7.2]

@@ -160,14 +160,22 @@ class ChargeSettingHandler:
     async def _process_queue(self) -> None:
         """Processes the command queue."""
         try:
-            while not self._stop_processing and not self._command_queue.empty():
-                command = await self._command_queue.get()
+            while True:
+                if self._stop_processing and self._command_queue.empty():
+                    break
+
+                try:
+                    command = await asyncio.wait_for(self._command_queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+
                 try:
                     await self._execute_command(command)
                 except Exception as e:
                     _LOGGER.error("Error executing command %s: %s", command.type, e, exc_info=True)
-                
-                # Small delay to prevent bus saturation
+                finally:
+                    self._command_queue.task_done()
+
                 await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             _LOGGER.debug("Command queue processing cancelled")
@@ -191,13 +199,17 @@ class ChargeSettingHandler:
                 await self._worker_task
             except asyncio.CancelledError:
                 pass
-        # Drain queue to avoid processing after reload
-        try:
-            while not self._command_queue.empty():
+
+        while not self._command_queue.empty():
+            try:
                 self._command_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
                 self._command_queue.task_done()
-        except Exception:
-            pass
+
+        # Reset queue so new handler instances start clean after reload
+        self._command_queue = asyncio.Queue()
         self._is_processing = False
         self._worker_task = None
 
