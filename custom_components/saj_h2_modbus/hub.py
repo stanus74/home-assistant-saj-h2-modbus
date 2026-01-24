@@ -498,12 +498,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- HELPERS ---
     
-    async def _write_register(self, address: int, value: int) -> bool:
+    async def _write_register(self, address: int, value: int, *, allow_merge_locked: bool = False) -> bool:
         """
         Helper for charge_control.py to write via connection service.
         
         Uses dedicated write lock with priority over read operations.
         """
+        if not allow_merge_locked and address in self._merge_locks:
+            raise ValueError(
+                f"Direct write to merge-locked register 0x{address:04x} is not allowed; use merge_write_register()."
+            )
+
         # Do not acquire the lock twice: try_write_registers already uses it.
         self._write_in_progress = True
         try:
@@ -545,7 +550,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             new_val = modifier(current)
             if new_val == current:
                 return True, current
-            ok = await self._write_register(address, new_val)
+            ok = await self._write_register(address, new_val, allow_merge_locked=True)
             if ok:
                 _LOGGER.debug("%s: wrote merged value %s to 0x%04x", label, new_val, address)
                 return True, new_val

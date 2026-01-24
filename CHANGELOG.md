@@ -1,27 +1,26 @@
-## [v2.8.0]
+## [v2.8.1]
+
+### Fixed
+- **Partial Modbus Data Loss**: `_read_modbus_data()` now returns `(data, errors)` so single-field decoding issues no longer wipe the entire block and the log reports exactly which registers misbehaved.
+- **Register 0x3604/0x3605 Guard**: Direct writes to the shared state/mask registers are rejected unless performed through `merge_write_register()`, preventing accidental clearing of the charging state during slot updates.
+
+
 
 ### New Features
 - **Passive Charge/Discharge Switches**: Added dedicated switches for passive charge and discharge modes , explained here https://github.com/stanus74/home-assistant-saj-h2-modbus/discussions/105
 
-- **Charge Control** and **Number Entities**: Implementation of an asynchronous command queue for immediate execution of setting changes, independent of the polling interval.
-
 ### Changed
-
-- **Number Entities**: Reduced maximum value for passive power settings (`passive_grid_charge_power`, `passive_grid_discharge_power`, etc.) to 500.
-- **Number Entities**: Reduced maximum value for power percentages of charge/discharge time slots (`chargeX_power_percent`, `dischargeX_power_percent`) to 50%.
 
 *Read >* https://github.com/stanus74/home-assistant-saj-h2-modbus/issues/141
 
-- **Inverter Card**: Bumped version to 1.2.2.
-- Adjusted slider range for power percentages to 0-50%.
-- Added debouncing for sliders, time input fields, and weekday checkboxes.                    
 
-### Improvements
 - **Dedicated Write Lock**: Implemented a dedicated write lock with priority over read operations. Write operations no longer wait for read operations to complete, and ultra-fast polling (1s) is skipped during write operations to prevent lock contention and improve performance.
 - **Charge Control Simplification**: Removed complex locking mechanisms and artificial delays. The integration now updates the internal cache immediately after a successful Modbus write, providing instant feedback in the UI (Optimistic UI).
-- **MQTT Backoff**: Home Assistant MQTT failures now trigger an exponential cooldown with adaptive re-checks, cutting CPU and network load during broker outages while reconnecting automatically after recovery.
 
 - and some more code refactoring
+
+
+
 
 
 ## [v2.7.2]

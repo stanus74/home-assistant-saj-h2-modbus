@@ -220,19 +220,24 @@ class ChargeSettingHandler:
         # charge_time_enable / discharge_time_enable teilen sich das Register mit State-Bit
         if key in ("charge_time_enable", "discharge_time_enable"):
             try:
-                int_value = int(value)
+                int_value = int(value) & 0x7F  # clamp to 7 bits (slots + state)
             except (ValueError, TypeError):
                 _LOGGER.error("Invalid value for %s: %s", key, value)
                 return
 
             addr = setting_def["address"]
+
             def modifier(cur: int) -> int:
-                state_bit = cur & 0x1
-                return (int_value & ~0x1) | state_bit
+                return int_value
 
             ok, new_val = await self.hub.merge_write_register(addr, modifier, f"{key} (merged)")
             if ok:
-                self._update_cache({key: new_val})
+                updates = {key: new_val}
+                if key == "charge_time_enable":
+                    updates["charging_enabled"] = new_val & 0x1
+                else:
+                    updates["discharging_enabled"] = new_val & 0x1
+                self._update_cache(updates)
             return
 
         try:
@@ -466,6 +471,9 @@ class ChargeSettingHandler:
                 if ok:
                     _LOGGER.info("Successfully wrote %s=%s to 0x%04x", label, value, address)
                     return True
+            except ValueError as err:
+                _LOGGER.error("Write aborted for %s: %s", label, err)
+                break
             except Exception as e:
                 _LOGGER.error("Error writing %s (attempt %d/%d): %s", label, attempt, MAX_HANDLER_RETRIES, e)
 
