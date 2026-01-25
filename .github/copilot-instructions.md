@@ -128,7 +128,7 @@ async with self._write_lock:
     success = await hub._write_register(address, value)
 ```
 
-**Merge locks:** Registers 0x3604 and 0x3605 contain both state bits and enable bitmasks. Use `_merge_locks` for read-modify-write to prevent corruption:
+**Merge locks:** Registers 0x3604 (charge slots) and 0x3605 (discharge slots) are pure slot bitmasks (bit 0 = Slot 1 … bit 6 = Slot 7). Use `_merge_locks` for read-modify-write to prevent corruption:
 ```python
 async with self._merge_locks[0x3604]:
     current = await read_registers(0x3604, 1)
@@ -136,18 +136,7 @@ async with self._merge_locks[0x3604]:
     await write_registers(0x3604, new_val)
 ```
 
-**Critical:** Register 0x3604 layout:
-- **Bit 0**: Charging state (1=charging, 0=off)
-- **Bits 1-6**: charge_time_enable mask for slots 1-7
-- **Bit 7**: Reserved
-
-**Before modifying bit 1-6** (slots), always preserve bit 0 (charging state):
-```python
-def modifier(current: int) -> int:
-    state_bit = current & 0x1  # Preserve bit 0
-    new_mask = (current | (1 << slot_idx)) & ~0x1  # Set slot, clear bit 0
-    return new_mask | state_bit  # Restore charging state
-```
+**Critical:** Do **not** invent a dedicated "state" bit inside these registers. `charge_time_enable`/`discharge_time_enable` report only which slots are planned. Whether charging/discharging is *active* must be derived elsewhere (see `switch.py::_is_power_state_active()`, which checks `AppMode == 1 and mask > 0`).
 
 ### Configuration Priority & Fallback
 
@@ -367,7 +356,7 @@ ha logs follow | grep saj_h2_modbus
 3. **Test optimistic updates** - UI should reflect changes instantly, HA should persist them after write confirmation
 4. **Register addresses are reverse-engineered** - always test changes with real inverter (simulator doesn't exist)
 5. **Check PENDING_FIELDS mismatch first** if charge entities don't sync - most common source of charge control bugs
-6. **Register 0x3604/0x3605 are shared** - charging state + enable mask combined. Always use merge_write_register to prevent bit corruption
+6. **Register 0x3604/0x3605 are slot masks** - Bits 0-6 map to slots 1-7 (charge vs discharge). Treat them as pure bitmasks; the actual charging/discharging *state* is `AppMode == 1` **and** mask > 0 (handled in `switch.py`). Still use `merge_write_register` to avoid corrupting other slot bits.
 7. **Queue cleanup critical** - ensure ChargeSettingHandler queue is drained in `async_unload_entry` to prevent zombie tasks on reload
 8. **Fast listener lifecycle matters** - entity must unsubscribe from fast updates in `async_remove()` or risk dangling callbacks
 9. **ReconnectionNeededError bubbles up** - never swallow this exception, always re-raise so hub can trigger reconnect

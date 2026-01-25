@@ -92,23 +92,17 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
     def is_on(self) -> bool:
         """Return true if switch is on.
 
-        Simplified to only check register values without AppMode dependency.
-        This ensures immediate UI feedback like in version 2.6.0.
+        Charging/Discharging require AppMode=1 in addition to their bitmasks.
+        Passive switches retain the legacy register-only behavior.
         """
         try:
             data = self._hub.inverter_data
 
             if self._switch_type == "charging":
-                charging_enabled = data.get("charging_enabled")
-                if charging_enabled is None:
-                    return False
-                return bool(charging_enabled > 0)
+                return self._is_power_state_active("charging_enabled")
 
             elif self._switch_type == "discharging":
-                discharging_enabled = data.get("discharging_enabled")
-                if discharging_enabled is None:
-                    return False
-                return bool(discharging_enabled > 0)
+                return self._is_power_state_active("discharging_enabled")
 
             elif self._switch_type in PASSIVE_SWITCH_KEYS:
                 passive_state = data.get("passive_charge_enable")
@@ -188,6 +182,28 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._set_state(False)
+
+    def _is_power_state_active(self, state_key: str) -> bool:
+        """Check cached bitmask + AppMode for charging/discharging switches."""
+        data = self._hub.inverter_data
+        state_value = data.get(state_key)
+        app_mode = data.get("AppMode")
+
+        if state_value is None or app_mode is None:
+            return False
+
+        try:
+            state_active = int(state_value) > 0
+        except (TypeError, ValueError):
+            state_active = bool(state_value)
+
+        try:
+            app_mode_value = int(app_mode)
+        except (TypeError, ValueError):
+            _LOGGER.debug("Invalid AppMode value %s, defaulting %s to off", app_mode, self._switch_type)
+            return False
+
+        return state_active and app_mode_value == 1
 
     def _allow_switch(self) -> bool:
         current_time = time.time()
