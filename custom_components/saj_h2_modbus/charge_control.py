@@ -229,26 +229,28 @@ class ChargeSettingHandler:
             await self._handle_passive_mode(value)
             return
 
-        # charge_time_enable / discharge_time_enable teilen sich das Register mit State-Bit
+        # charge_time_enable / discharge_time_enable are pure bitmasks (Bit 0-6 = Slot 1-7)
         if key in ("charge_time_enable", "discharge_time_enable"):
             try:
-                int_value = int(value) & 0x7F  # clamp to 7 bits (slots + state)
-            except (ValueError, TypeError):
+                mask_bits = int(value) & 0x7F  # Bits 0-6 = Slots 1-7
+            except (TypeError, ValueError):
                 _LOGGER.error("Invalid value for %s: %s", key, value)
                 return
 
             addr = setting_def["address"]
 
-            def modifier(cur: int) -> int:
-                return int_value
+            def modifier(_current: int) -> int:
+                return mask_bits
 
             ok, new_val = await self.hub.merge_write_register(addr, modifier, f"{key} (merged)")
             if ok:
                 updates = {key: new_val}
+                # Update enabled state based on mask presence (any slot active)
+                is_enabled = new_val > 0
                 if key == "charge_time_enable":
-                    updates["charging_enabled"] = new_val & 0x1
+                    updates["charging_enabled"] = is_enabled
                 else:
-                    updates["discharging_enabled"] = new_val & 0x1
+                    updates["discharging_enabled"] = is_enabled
                 self._update_cache(updates)
             return
 
@@ -304,12 +306,8 @@ class ChargeSettingHandler:
         if enable_def["address"] in (0x3604, 0x3605):
             addr = enable_def["address"]
             def modifier(cur: int) -> int:
-                if index == 0:
-                    # Slot 1 shares the charging/discharging state bit, so enabling it sets bit 0.
-                    return cur | 0x1
-                state_bit = cur & 0x1
-                new_val = cur | (1 << index)
-                return (new_val & ~0x1) | state_bit
+                # Simple bitmask logic: Set the bit for this slot index
+                return cur | (1 << index)
             success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
         else:
             def modifier(current_mask):

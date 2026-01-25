@@ -186,24 +186,9 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
     def _is_power_state_active(self, state_key: str) -> bool:
         """Check cached bitmask + AppMode for charging/discharging switches."""
         data = self._hub.inverter_data
-        state_value = data.get(state_key)
-        app_mode = data.get("AppMode")
-
-        if state_value is None or app_mode is None:
-            return False
-
-        try:
-            state_active = int(state_value) > 0
-        except (TypeError, ValueError):
-            state_active = bool(state_value)
-
-        try:
-            app_mode_value = int(app_mode)
-        except (TypeError, ValueError):
-            _LOGGER.debug("Invalid AppMode value %s, defaulting %s to off", app_mode, self._switch_type)
-            return False
-
-        return state_active and app_mode_value == 1
+        state_value = bool(data.get(state_key))
+        app_mode_value = int(data.get("AppMode", 0))
+        return state_value and app_mode_value == 1
 
     def _allow_switch(self) -> bool:
         current_time = time.time()

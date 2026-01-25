@@ -596,6 +596,8 @@ async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     if data:
         try:
             _decode_time_power_slots(data, "charge")
+            # NOTE: These flags only reflect the bitmask (at least one slot planned).
+            # Whether charging is actually active depends on AppMode == 1.
             data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
             data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
         except Exception as e:

@@ -257,12 +257,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 for method in group:
                     try:
                         res = await method(client, self._slow_lock)
-                        if isinstance(res, dict): new_cache.update(res)
+                        if isinstance(res, dict):
+                            new_cache.update(res)
+                    except ReconnectionNeededError:
+                        await self.connection.reconnect()
+                        raise
                     except Exception as e:
                          _LOGGER.warning("Reader error: %s", e)
             else:
-                # Parallel - use slow lock for non-critical groups
-                tasks = [method(client, self._slow_lock) for method in group]
+                # Parallel - use independent locks to allow true concurrency via asyncio.gather
+                tasks = [method(client, asyncio.Lock()) for method in group]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for res in results:
                     if isinstance(res, dict): new_cache.update(res)

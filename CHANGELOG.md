@@ -1,11 +1,15 @@
-## [v2.8.1]
+## [v2.8.1] - 2026-01-25
 
 ### Fixed
+- **Charge Slot Logic**: Fixed incorrect handling of Slot 1 (Bit 0) in charge/discharge control. All slots (1-7) are now treated identically as a 7-bit mask in registers 0x3604/0x3605.
+- **Modbus Reconnect**: Critical readers now properly trigger a reconnection sequence upon connection failure instead of swallowing the error.
+- **Poll Performance**: Non-critical reader groups now use independent locks, allowing `asyncio.gather` to execute Modbus requests truly in parallel (client permitting).
 - **Partial Modbus Data Loss**: `_read_modbus_data()` now returns `(data, errors)` so single-field decoding issues no longer wipe the entire block and the log reports exactly which registers misbehaved.
 - **Register 0x3604/0x3605 Guard**: Direct writes to the shared state/mask registers are rejected unless performed through `merge_write_register()`, preventing accidental clearing of the charging state during slot updates.
 - **Fast Listener Cleanup**: Sensor entities now deregister their fast-poll callbacks via an `async_on_remove` hook, so disabling/removing an entity immediately stops 10 s updates and avoids race conditions or log spam from stale listeners.
 - **Charge Queue Shutdown**: The charge/discharge command handler now cancels and drains its queue cleanly on reload/unload, eliminating zombie tasks that previously kept running after the integration restarted.
-- **AppMode-Aware Switches**: Charging/discharging switches once again validate that `AppMode` (0x3647) equals `1` in addition to the bitmask registers, keeping the inverter card’s buttons from showing “enabled” when only the raw mask is set.
+- **AppMode-Aware Switches**: Charging/discharging switches once again validate that `AppMode` (0x3647) equals `1` in addition to the bitmask registers.
+
 
 ## [v2.8.0]
 
