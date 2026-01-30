@@ -7,7 +7,7 @@
  * - Protects specific input interactions (time, range) from disruptive re-renders.
  *
  * @author stanu74 
- * @version 1.2.2
+ * @version 1.2.3
  */
 
 class SajH2InverterCard extends HTMLElement {
@@ -434,7 +434,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`charge-slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="charge-slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">
@@ -582,7 +582,7 @@ class SajH2InverterCard extends HTMLElement {
               ${this._renderTimeSelects(`slot-${slot.index}`, slot.startTime, slot.endTime, slot.power, contentDisabled)}
             </div>
             <div class="slider-container">
-              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="50" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
+              <input type="range" id="slot-${slot.index}-power" class="power-slider" min="0" max="100" step="1" value="${slot.power}" ${contentDisabled ? 'disabled' : ''} />
             </div>
           </div>
           <div class="days-select">

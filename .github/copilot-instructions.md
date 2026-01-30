@@ -1,151 +1,313 @@
 # AI Agent Instructions for SAJ H2 Modbus Integration
 
-This document helps AI agents understand the architecture and conventions of the SAJ H2 Modbus Home Assistant integration. answer in german language
+**Status:** Updated Jan 26 2026 (v2.8.1) | **Project:** Unofficial Home Assistant integration for SAJ H2 inverters (reverse-engineered Modbus registers)
+
+## Quick Start for AI Agents
+
+**Before modifying code, understand (see also `/plans/architecture_overview.md`):**
+
+1.  **3-tier polling architecture** with separate asyncio locks (`_slow_lock`, `_fast_lock`, `_ultra_fast_lock`).
+    *   **Standard (60s)**: Sequential execution of all readers.
+    *   **Fast (10s)**: High-frequency sensors only.
+    *   **Ultra-Fast (1s)**: MQTT-only, fire-and-forget, skipped during write operations.
+2.  **Configuration-driven** register parsing - add sensors via `_DATA_READ_CONFIG` dicts.
+3.  **Command queue pattern** for all writes - `ChargeSettingHandler` uses `asyncio.Queue` to serialize and prioritize writes over reads.
+4.  **Strategy pattern** for MQTT - prefers HA MQTT, falls back to paho-mqtt.
+5.  **Connection caching** in `ModbusConnectionManager` (60s TTL).
+6.  **Parallel Execution**: Non-critical reader groups use independent locks, allowing `asyncio.gather` to execute Modbus requests concurrently where possible.
+
+**Recent Major Fixes (v2.8.x):**
+- ✅ **Slot Logic**: All charge/discharge slots (1-7) use a unified 7-bit mask in registers 0x3604/0x3605.
+- ✅ **Data Integrity**: `_read_modbus_data()` returns `(data, errors)` tuple, preventing total data loss on partial read failures.
+- ✅ **Write Guard**: Direct writes to 0x3604/0x3605 are blocked; use `merge_write_register()` to preserve shared bits.
+- ✅ **Lifecycle**: Fast listeners unregister cleanly; Charge queue drains on unload.
+- ✅ **AppMode**: Switches validate `AppMode == 1` for active charging/discharging state.
 
 ## Project Overview
 
-A Home Assistant integration for SAJ H2 inverters (8kW-10kW) that reads operational data via Modbus TCP and provides control over charging, discharging, and export limits. The integration uses **3-tier polling** (60s standard, 10s fast, 1s ultra-fast) with separate asyncio locks to prevent contention between polling levels.
+**Context:** Unofficial community integration for reading SAJ H2 inverters (8kW-10kW) via Modbus TCP. Firmware updates may break compatibility.
 
 **Key Files:**
-- [custom_components/saj_h2_modbus/hub.py](../custom_components/saj_h2_modbus/hub.py) - Central coordinator and state manager
-- [custom_components/saj_h2_modbus/modbus_readers.py](../custom_components/saj_h2_modbus/modbus_readers.py) - Data parsing/decoding
-- [custom_components/saj_h2_modbus/modbus_utils.py](../custom_components/saj_h2_modbus/modbus_utils.py) - Low-level Modbus communication
-- [custom_components/saj_h2_modbus/charge_control.py](../custom_components/saj_h2_modbus/charge_control.py) - Charge/discharge business logic
-- [custom_components/saj_h2_modbus/config_flow.py](../custom_components/saj_h2_modbus/config_flow.py) - Configuration UI
+- [hub.py](../custom_components/saj_h2_modbus/hub.py) - DataUpdateCoordinator, polling orchestration.
+- [modbus_readers.py](../custom_components/saj_h2_modbus/modbus_readers.py) - Configuration-driven register parsing.
+- [modbus_utils.py](../custom_components/saj_h2_modbus/modbus_utils.py) - Low-level Modbus TCP, retry logic, connection caching.
+- [charge_control.py](../custom_components/saj_h2_modbus/charge_control.py) - Async command queue for write operations.
+- [services.py](../custom_components/saj_h2_modbus/services.py) - ModbusConnectionManager, MqttPublisher.
+- [const.py](../custom_components/saj_h2_modbus/const.py) - Sensor definitions.
+- [switch.py](../custom_components/saj_h2_modbus/switch.py) - Charging/Discharging and Passive Mode switches.
 
 ## Architecture & Data Flow
 
 ### Multi-Level Polling System
 
-The hub uses **three independent polling loops** with separate locks to prevent blocking:
-
-1. **Standard (60s)** - All 330+ registers, uses `_slow_lock`
-2. **Fast (10s)** - Only high-frequency sensors (power, battery status), uses `_fast_lock`  
-3. **Ultra-Fast (1s)** - MQTT-only, critical metrics, uses `_ultra_fast_lock`
-
-**Why separate locks?** MQTT operations at 1s intervals would block slower 60s reads. Separate locks allow concurrent polling at different speeds.
-
-**Fast Poll Sensor Keys** (defined in [hub.py](../custom_components/saj_h2_modbus/hub.py)):
-```python
-FAST_POLL_SENSORS = {
-    "TotalLoadPower", "pvPower", "batteryPower", "totalgridPower",
-    "inverterPower", "gridPower", "directionPV", "directionBattery",
-    # ... (see hub.py for complete list)
-}
-```
+1.  **Standard (60s)**: Reads all data. Uses `_slow_lock`. Critical groups run sequentially; non-critical groups run in parallel using `asyncio.gather`.
+2.  **Fast (10s)**: Reads `FAST_POLL_SENSORS` only. Uses `_fast_lock`. Updates HA entities.
+3.  **Ultra-Fast (1s)**: Reads `FAST_POLL_SENSORS`. Uses `_ultra_fast_lock`. Publishes to MQTT only. **Skipped if a write operation is in progress.**
 
 ### Component Responsibilities
 
-**SAJModbusHub** - Orchestrates all operations:
-- Manages Modbus connection via `ModbusConnectionManager`
-- Publishes to MQTT via `MqttPublisher` 
-- Processes charge/discharge requests via `ChargeSettingHandler`
-- Maintains `inverter_data` dict as single source of truth
-- Supports **optimistic updates** for instant UI feedback
+**SAJModbusHub**:
+- Orchestrates polling loops.
+- Manages `_merge_locks` for registers 0x3604/0x3605.
+- Holds `inverter_data` (source of truth).
 
-**ModbusUtils** - Reliable communication:
-- Retry logic with exponential backoff (2-10s for reads, 1-5s for writes)
-- Connection caching with 60s TTL via `ConnectionCache`
-- Async executor pattern to avoid blocking Home Assistant event loop
-- Special handling for `ReconnectionNeededError` in charge operations
+**ChargeSettingHandler**:
+- Queues all commands (`CommandType`).
+- `process_queue` runs in background task.
+- Uses `_write_register_with_backoff` for reliability.
+- **Optimistic UI**: Updates `inverter_data` immediately after write command is queued/processed to give instant feedback.
 
-**ModbusReaders** - Data parsing:
-- Stateless decoder functions (`_read_realtime_data`, `_read_battery_info`, etc.)
-- Uses `_DATA_READ_CONFIG` and `_PHASE_READ_CONFIG` dicts to consolidate read parameters
-- Handles special cases: fault message decoding, time format conversion (BCD)
-- Returns `dict[str, Any]` (full dict even on partial errors - see todo.md for bug)
+**ModbusReader**:
+- `_read_modbus_data()`: Returns `new_data` dict and `errors` list. Even if some registers fail, valid data is returned.
+- **Configuration**: Use `_DATA_READ_CONFIG` to add new registers/sensors.
 
-**ChargeSettingHandler** - Write operation queue:
-- Serializes charge/discharge commands via `asyncio.Queue`
-- Prevents race conditions during mask register merges
-- Uses `PENDING_FIELDS` mapping to correlate entity names with Modbus registers
-- Tracks "pending" charge settings before write confirmation
+**Switch Entities**:
+- **Charging/Discharging**: Controls registers 0x3604/0x3605 + AppMode (0x3647).
+- **Passive Mode**: Controls `passive_charge_enable` and AppMode=3. Controlled via `PASSIVE_SWITCH_KEYS` in `switch.py`.
+
+### 7 Functional Domains (from `/plans/FUNKTIONSBEREICHE-ANALYSE.md`)
+
+The codebase is organized into 7 independent functional areas:
+
+1. **Modbus Register Reading** - Data ingestion, decoding, caching
+2. **HA Entity Updates** - State publishing, fast listeners, registry management
+3. **MQTT Publishing** - Strategy pattern, filtering, async publishing
+4. **Charge Control** - Command queue, write operations, optimization
+5. **Configuration Flow** - Setup UI, options, validation
+6. **Entity Optimization** - Write confirmation, optimistic updates, error recovery
+7. **Performance & Lifecycle** - Lock management, startup/shutdown, resource cleanup
 
 ## Development Patterns & Conventions
 
-### Lock Management (Critical for Concurrency)
+### Lock Management (Critical - Do Not Skip)
 
-When modifying polling logic:
-- **Do NOT use single `_read_lock` for all polling** - this blocks fast/ultra-fast updates
-- Use appropriate lock based on polling interval:
-  ```python
-  async with self._slow_lock:  # For 60s polling
-      data = await try_read_registers(...)
-  async with self._fast_lock:  # For 10s polling
-      data = await try_read_registers(...)
-  ```
-- **Write operations use `_write_lock` (separate from read locks)** to prioritize writes over reads
-- Merge locks (0x3604, 0x3605) exist for mask register operations that modify bit fields
+**Problem:** Using a single lock for all polling serializes operations, blocking fast updates behind slow ones.
+
+**Solution:** Use appropriate lock based on operation type:
+```python
+# Read high-frequency data (10s loop)
+async with self._fast_lock:
+    data = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+
+# Read all data (60s loop)  
+async with self._slow_lock:
+    data = await modbus_readers.read_realtime_data(client, lock)
+
+# Write operations (prioritized)
+async with self._write_lock:
+    success = await hub._write_register(address, value)
+```
+
+**Merge locks:** Registers 0x3604 (charge slots) and 0x3605 (discharge slots) are pure slot bitmasks (bit 0 = Slot 1 … bit 6 = Slot 7). Use `_merge_locks` for read-modify-write to prevent corruption. **Special Case:** When disabling charging/discharging entirely (via Switch), the register must be set to `0` (clearing all slots).
+
+```python
+async with self._merge_locks[0x3604]:
+    current = await read_registers(0x3604, 1)
+    new_val = modifier(current) # Returns 0 if disabling, else toggles Bit 0
+    await write_registers(0x3604, new_val)
+```
+
+**Critical:** Do **not** invent a dedicated "state" bit inside these registers. `charge_time_enable`/`discharge_time_enable` report only which slots are planned. Whether charging/discharging is *active* must be derived elsewhere (see `switch.py::_is_power_state_active()`, which checks `AppMode == 1 and mask > 0`).
+
+### Configuration Priority & Fallback
+
+When accessing config, **always** follow this cascade:
+```python
+def _get_config_value(entry, key, default=None):
+    return entry.options.get(key, entry.data.get(key, default))
+```
+
+**Why:** Users change options frequently (config_entry.options), but setup data persists. Always prefer user's latest choice.
 
 ### Error Handling & Logging
 
-- Use structured logging: `_LOGGER.debug()`, `_LOGGER.info()`, `_LOGGER.warning()`
-- **CRITICAL BUG:** `_read_modbus_data()` returns `{}` on ANY error, losing all read data. Phase 1 fix: tuple return `(data, errors)` with per-field try-catch (see [Dev-Protocol/todo.md](../Dev-Protocol/todo.md))
-- Connection errors in charge operations catch `ReconnectionNeededError` for retry logic
-- MQTT publish failures should NOT block main polling loops
-
-### Data Type Handling
-
-- Modbus registers return integers; decoding depends on field definition
-- Time values: BCD format (0x0830 = 08:30) - decode in `_decode_time()`
-- Power/energy: Often scaled (e.g., watts × 0.1 = actual value)
-- Boolean flags: Often encoded in bit masks (e.g., `charge_time_enable` at bit 0x04)
-- Device class mapping in [const.py](../custom_components/saj_h2_modbus/const.py) defines units and precision
-
-### Configuration Priority
-
-When accessing config values, follow this order:
-1. `config_entry.options` (user-editable, takes priority)
-2. `config_entry.data` (original setup values)
-3. Default constant (fallback)
-
-Example in [__init__.py](../custom_components/saj_h2_modbus/__init__.py):
+**Reader Resilience:** `_read_modbus_data()` returns a tuple `(data, errors)`.
 ```python
-fast_enabled = _get_config_value(entry, CONF_FAST_ENABLED, False)
+data, errors = await _read_modbus_data(...)
+# Log errors but process valid 'data'
+if errors:
+    _LOGGER.warning("Partial read failure: %s", errors)
 ```
 
-## Common Tasks & Examples
+**Connection errors:** Always re-raise `ReconnectionNeededError` so hub can trigger reconnect:
+```python
+except ReconnectionNeededError:
+    raise  # Critical - don't swallow!
+except OtherError as e:
+    _LOGGER.warning("Handled error: %s", e)
+    return {}, [str(e)]
+```
 
-### Adding a New Sensor
+**Logging levels:**
+- `ERROR` - Connection lost, data corruption, unhandled exceptions
+- `WARNING` - Recoverable errors (invalid field, timeout with retry), ignored operations
+- `INFO` - Config changes, component lifecycle (start/stop), important feature state
+- `DEBUG` - Register values, decode details, performance metrics (use lazy evaluation: `%s` not f-strings)
 
-1. Define in [modbus_readers.py](../custom_components/saj_h2_modbus/modbus_readers.py): Add to appropriate `*_MAP` dict
-2. Add `SajModbusSensorEntityDescription` in [const.py](../custom_components/saj_h2_modbus/const.py)
-3. Add to [sensor.py](../custom_components/saj_h2_modbus/sensor.py) entity factory
-4. For high-frequency sensors, add key to `FAST_POLL_SENSORS` in [hub.py](../custom_components/saj_h2_modbus/hub.py)
+### Data Type Conversions
 
-### Adding Charge Control
+**Time values (BCD format):**
+```python
+# Register 0x1234 = 0x0830 means 08:30
+def decode_time(value: int) -> str:
+    return f"{(value >> 8) & 0xFF:02d}:{value & 0xFF:02d}"
+```
 
-1. Define pending field mapping in [charge_control.py](../custom_components/saj_h2_modbus/charge_control.py): `PENDING_FIELDS`
-2. Add Modbus register addresses and validation in `ChargeSettingHandler`
-3. Use `hub.charge_control_handler.queue_write()` to enqueue operation
-4. Handler processes via asyncio Queue, merges mask registers, retries on failure
+**Power scaling:**
+```python
+# Many registers store watts * 0.1, apply factor in _DATA_READ_CONFIG:
+("pvPower", "16i", 0.1)  # Divide by 10 to get watts
+```
+
+**Bit masks (slots enable/disable):**
+```python
+# charge_time_enable = 0x0F means slots 1,2,3,4 enabled
+# Bit 0 = charging state, Bits 1-6 = slot 1-7 enables, Bit 7 = reserved
+enable_slot_3 = (current_value | (1 << 3))  # Set bit 3
+disable_slot_3 = (current_value & ~(1 << 3))  # Clear bit 3
+```
+
+**32-bit registers (energy totals):**
+```python
+# Use consecutive register pairs, decode as UINT32
+("totalenergy", "32u", 0.01)  # Reads 2 consecutive registers
+```
+
+## Common Tasks & Patterns
+
+### Entity Write Pattern (Queue-Based)
+
+Entities (Number, Switch) do **not** wait for Modbus confirmation blocking the UI. They use a fire-and-forget pattern with Optimistic UI updates.
+
+```python
+async def async_set_native_value(self, value):
+    val = int(value)
+    
+    # 1. Validation
+    if not self._attr_native_min_value <= val <= self._attr_native_max_value:
+        return
+    
+    # 2. Optimistic update (instant UI feedback)
+    self._attr_native_value = val
+    self.async_write_ha_state()
+    
+    # 3. Queue command to device (Fire & Forget)
+    if self.set_method:
+         await self.set_method(val) # This queues, doesn't block for Modbus
+```
+
+**Why?**
+- Prevents UI freezing during Modbus timeouts.
+- `ChargeSettingHandler` ensures serialization and retries in background.
+- If write ultimately fails (logged in background), state remains "wrong" in UI until next poll corrects it.
+
+### Adding a New Sensor (Complete Checklist)
+
+1. **Define in modbus_readers.py** - Add to `*_MAP`:
+   ```python
+   ADDITIONAL_DATA_1_PART_1_MAP = [
+       ("myNewSensor", "16u", 0.1),  # name, type, factor
+   ]
+   ```
+
+2. **Add to config dict** (if it's a new reader function):
+   ```python
+   _DATA_READ_CONFIG["my_data"] = {
+       "address": 0x4000,
+       "count": 10,
+       "decode_map": MY_MAP,
+       "data_key": "my_data",
+   }
+   ```
+
+3. **Add to const.py** - Define sensor description:
+   ```python
+   {"name": "My Sensor", "key": "myNewSensor", "enable": True, "icon": "flash"}
+   ```
+
+4. **If high-frequency:** Add to `FAST_POLL_SENSORS` in hub.py:
+   ```python
+   FAST_POLL_SENSORS = {"myNewSensor", ...}
+   ```
+
+### Adding Charge Control (Register Write)
+
+1. **Add to MODBUS_ADDRESSES** in charge_control.py:
+   ```python
+   "my_setting": {"address": 0x3650, "label": "my setting"},
+   ```
+
+2. **Add to PENDING_FIELDS** mapping:
+   ```python
+   ("my_setting", "my_setting")
+   ```
+
+3. **Create command handler** or reuse `_handle_simple_setting()`:
+   ```python
+   await self._write_register_with_backoff(0x3650, value, "my setting")
+   self._update_cache({"my_setting": value})
+   ```
 
 ### Debugging Modbus Issues
 
-Enable verbose logging in config, check:
-1. Connection status via `ModbusConnectionManager` (retries 3x, logs on failure)
-2. Register addresses in [modbus_readers.py](../custom_components/saj_h2_modbus/modbus_readers.py) map definitions
-3. Data decoding in decoder functions (search for field name, check scaling/format)
-4. Frame timing in fast coordinator (should complete in <1s per iteration)
+**Enable verbose logging:**
+```bash
+# In terminal, set env vars:
+export SAJ_DEBUG_MODBUS_READ=1
+export SAJ_DEBUG_MODBUS_WRITE=1
+```
 
-## Known Limitations & TODOs
+**Check in order:**
+1. Connection status: `ModbusConnectionManager.connected` and retry count in logs
+2. Register address: grep for register in `modbus_readers.py` maps
+3. Data decoding: search field name, verify type (`16i` vs `16u`) and factor
+4. Frame timing: watch logs for duration of fast coordinator iterations (should be <1s)
 
-- **Data Loss Bug:** Empty `{}` returned on any read error instead of partial success (Phase 1 fix documented in todo.md)
-- **File Naming:** Some modules use PascalCase (should be snake_case per todo.md)
-- **Ultra-Fast Mode:** MQTT-only, requires explicit MQTT configuration
-- **Charge Schedule:** Limited to 7 time slots per operation (hardcoded array size)
+### Testing with Real Inverter
 
-## Testing & Validation
+- No automated test suite; manual testing via HA UI only
+- Enable `ADVANCED_LOGGING = True` in hub.py to trace lock contention
+- Check MQTT topic format: `{prefix}/inverter/{field_name}`
+- Verify register addresses are correct (firmware versions may differ)
 
-- No automated test suite in main branch (see Dev-Protocol/ for analysis notes)
-- Manual testing via Home Assistant UI: Services, automations, Lovelace cards
-- Verify lock contention isn't blocking with debug logs: `ADVANCED_LOGGING = True` in [hub.py](../custom_components/saj_h2_modbus/hub.py)
-- Check MQTT connectivity in ultra-fast mode: verify topic prefix and payload format
+## Critical Gotchas
+
+**DO:**
+- ✅ Use `_merge_locks` for 0x3604/0x3605.
+- ✅ Check `PENDING_FIELDS` when modifying charge control entity names.
+- ✅ Ensure `AppMode` is handled when changing power states (Active=1, Passive=3).
+- ✅ Write `0` to 0x3604/0x3605 when disabling functionality to clear all slots.
+
+**DON'T:**
+- ❌ Block the event loop with synchronous Modbus calls (use executor).
+- ❌ Swallow `ReconnectionNeededError`.
+- ❌ Direct write to 0x3604/0x3605 without merge logic.
+
+## Known Issues
+
+1.  **Naming**: Some entities use camelCase instead of snake_case (legacy).
+2.  **Tests**: No automated test suite.
+3.  **Slot Logic**: Only 7 slots supported (firmware limit).
+4.  **Entity Optimization**: Rollback on write failure is not fully implemented (relies on next poll).
+
+## Reference Commands
+
+```bash
+# View integration logs (HA CLI)
+ha logs follow | grep saj_h2_modbus
+
+# Reload integration after code changes
+# (in HA Developer Tools -> Services -> Reload integration)
+```
 
 ## Important Notes for AI Agents
 
-1. **Always check PENDING_FIELDS mapping** when modifying charge-related code - mismatch breaks UI<->Modbus syncing
-2. **Use appropriate locks** - wrong lock selection causes race conditions or polling delays
-3. **Preserve optimistic updates** - instant UI feedback depends on `_optimistic_overlay` pattern
-4. **Test with real inverter** - Modbus register addresses are reverse-engineered, edge cases exist
-5. **Check lock contention first** if polling seems slow - likely culprit in concurrent operations
+1.  **Always verify lock usage** - wrong lock causes race conditions or polling delays.
+2.  **Configuration-driven architecture** - favor adding entries to `_DATA_READ_CONFIG`.
+3.  **Test optimistic updates** - UI should reflect changes instantly.
+4.  **Register addresses are reverse-engineered**.
+5.  **Check PENDING_FIELDS mismatch first** if charge entities don't sync.
+6.  **Register 0x3604/0x3605 are slot masks**. Writing `0` clears all slots.
+7.  **Queue cleanup critical** - ensure `ChargeSettingHandler` is shutdown properly.
+8.  **ReconnectionNeededError bubbles up** - never swallow this exception.
+9.  **AppMode 3 is Passive Mode** - requires special handling in switches.

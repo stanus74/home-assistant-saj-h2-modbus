@@ -48,6 +48,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         # Determine if this is a fast-poll sensor using FAST_POLL_SENSORS from hub
         self._is_fast_sensor = description.key in FAST_POLL_SENSORS
         self._remove_fast_listener = None
+        self._on_remove_cleanup_registered = False
         self._last_value = None  # Cache last value for change detection
         # Flag to prevent race conditions during entity removal
         self._is_removed = False
@@ -76,22 +77,16 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """When entity is added to hass."""
         await super().async_added_to_hass()
         
+        if not self._on_remove_cleanup_registered:
+            self.async_on_remove(self._cleanup_fast_listener)
+            self._on_remove_cleanup_registered = True
+
         # Initial registration check
         self._update_fast_listener_registration()
 
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from hass."""
-        # Set flag immediately to prevent any pending fast updates from processing
-        self._is_removed = True
-        
-        if self._remove_fast_listener is not None:
-            try:
-                self._remove_fast_listener()
-                _LOGGER.debug(f"Sensor {self._attr_name} unregistered from fast updates")
-            except Exception as e:
-                _LOGGER.warning(f"Error unregistering fast listener for {self._attr_name}: {e}")
-            finally:
-                self._remove_fast_listener = None
+        self._cleanup_fast_listener()
                 
         await super().async_will_remove_from_hass()
         _LOGGER.debug(f"Sensor {self._attr_name} fully removed from hass")
@@ -158,3 +153,21 @@ class SajSensor(CoordinatorEntity, SensorEntity):
                 _LOGGER.debug(
                     f"Fast update for {self._attr_name}: {self._last_value} -> {new_value}"
                 )
+
+    @callback
+    def _cleanup_fast_listener(self) -> None:
+        """Ensure fast listener is removed exactly once when entity is torn down."""
+        if self._is_removed:
+            return
+
+        self._is_removed = True
+
+        if self._remove_fast_listener is not None:
+            try:
+                self._remove_fast_listener()
+                if ADVANCED_LOGGING:
+                    _LOGGER.debug(f"Sensor {self._attr_name} unregistered from fast updates")
+            except Exception as e:
+                _LOGGER.warning(f"Error unregistering fast listener for {self._attr_name}: {e}")
+            finally:
+                self._remove_fast_listener = None

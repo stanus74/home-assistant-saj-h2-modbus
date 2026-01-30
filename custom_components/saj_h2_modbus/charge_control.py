@@ -160,14 +160,22 @@ class ChargeSettingHandler:
     async def _process_queue(self) -> None:
         """Processes the command queue."""
         try:
-            while not self._stop_processing and not self._command_queue.empty():
-                command = await self._command_queue.get()
+            while True:
+                if self._stop_processing and self._command_queue.empty():
+                    break
+
+                try:
+                    command = await asyncio.wait_for(self._command_queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+
                 try:
                     await self._execute_command(command)
                 except Exception as e:
                     _LOGGER.error("Error executing command %s: %s", command.type, e, exc_info=True)
-                
-                # Small delay to prevent bus saturation
+                finally:
+                    self._command_queue.task_done()
+
                 await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             _LOGGER.debug("Command queue processing cancelled")
@@ -191,13 +199,17 @@ class ChargeSettingHandler:
                 await self._worker_task
             except asyncio.CancelledError:
                 pass
-        # Drain queue to avoid processing after reload
-        try:
-            while not self._command_queue.empty():
+
+        while not self._command_queue.empty():
+            try:
                 self._command_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
                 self._command_queue.task_done()
-        except Exception:
-            pass
+
+        # Reset queue so new handler instances start clean after reload
+        self._command_queue = asyncio.Queue()
         self._is_processing = False
         self._worker_task = None
 
@@ -217,22 +229,29 @@ class ChargeSettingHandler:
             await self._handle_passive_mode(value)
             return
 
-        # charge_time_enable / discharge_time_enable teilen sich das Register mit State-Bit
+        # charge_time_enable / discharge_time_enable are pure bitmasks (Bit 0-6 = Slot 1-7)
         if key in ("charge_time_enable", "discharge_time_enable"):
             try:
-                int_value = int(value)
-            except (ValueError, TypeError):
+                mask_bits = int(value) & 0x7F  # Bits 0-6 = Slots 1-7
+            except (TypeError, ValueError):
                 _LOGGER.error("Invalid value for %s: %s", key, value)
                 return
 
             addr = setting_def["address"]
-            def modifier(cur: int) -> int:
-                state_bit = cur & 0x1
-                return (int_value & ~0x1) | state_bit
+
+            def modifier(_current: int) -> int:
+                return mask_bits
 
             ok, new_val = await self.hub.merge_write_register(addr, modifier, f"{key} (merged)")
             if ok:
-                self._update_cache({key: new_val})
+                updates = {key: new_val}
+                # Update enabled state based on mask presence (any slot active)
+                is_enabled = new_val > 0
+                if key == "charge_time_enable":
+                    updates["charging_enabled"] = is_enabled
+                else:
+                    updates["discharging_enabled"] = is_enabled
+                self._update_cache(updates)
             return
 
         try:
@@ -287,12 +306,8 @@ class ChargeSettingHandler:
         if enable_def["address"] in (0x3604, 0x3605):
             addr = enable_def["address"]
             def modifier(cur: int) -> int:
-                if index == 0:
-                    # Slot 1 shares the charging/discharging state bit, so enabling it sets bit 0.
-                    return cur | 0x1
-                state_bit = cur & 0x1
-                new_val = cur | (1 << index)
-                return (new_val & ~0x1) | state_bit
+                # Simple bitmask logic: Set the bit for this slot index
+                return cur | (1 << index)
             success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
         else:
             def modifier(current_mask):
@@ -319,6 +334,10 @@ class ChargeSettingHandler:
         try:
             if addr in (0x3604, 0x3605):
                 def modifier(cur: int) -> int:
+                    # If disabling, clear entire register (all slots) per user requirement
+                    if not value:
+                        return 0
+                    # If enabling, toggle bit 0 (Slot 1) based on value
                     return (cur & ~0x1) | (write_value & 0x1)
                 write_success, merged_val = await self.hub.merge_write_register(addr, modifier, f"{state_type} state (merged)")
             else:
@@ -466,6 +485,9 @@ class ChargeSettingHandler:
                 if ok:
                     _LOGGER.info("Successfully wrote %s=%s to 0x%04x", label, value, address)
                     return True
+            except ValueError as err:
+                _LOGGER.error("Write aborted for %s: %s", label, err)
+                break
             except Exception as e:
                 _LOGGER.error("Error writing %s (attempt %d/%d): %s", label, attempt, MAX_HANDLER_RETRIES, e)
 

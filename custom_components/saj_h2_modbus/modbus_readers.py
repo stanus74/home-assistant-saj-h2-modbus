@@ -12,8 +12,24 @@ from .const import DEVICE_STATUSSES, FAULT_MESSAGES
 from .modbus_utils import try_read_registers, ReconnectionNeededError
 
 DataDict: TypeAlias = Dict[str, Any]
+ReadResult: TypeAlias = tuple[DataDict, List[str]]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _log_partial_errors(data_key: str, errors: List[str], log_level_on_error: int) -> None:
+    """Emit a single log entry for partial decode failures."""
+    if not errors:
+        return
+
+    log_level = logging.WARNING if log_level_on_error > logging.WARNING else log_level_on_error
+    _LOGGER.log(
+        log_level,
+        "Partial errors decoding %s (%d fields): %s",
+        data_key,
+        len(errors),
+        "; ".join(errors),
+    )
 
 # --- Static Decoding Maps ---
 # (Maps bleiben unverändert, um Platz zu sparen - sie sind korrekt)
@@ -172,64 +188,79 @@ async def _read_modbus_data(
     default_decoder: str = "16u",
     default_factor: float = 0.01,
     log_level_on_error: int = logging.ERROR
-) -> DataDict:
-    """Helper function to read and decode Modbus data."""
+) -> ReadResult:
+    """Helper function to read and decode Modbus data with partial-error resilience."""
+    errors: List[str] = []
+    new_data: DataDict = {}
+
     try:
         regs = await try_read_registers(client, lock, 1, start_address, count)
-
-        if not regs:
-            _LOGGER.log(log_level_on_error, "Error reading modbus data: No response for %s", data_key)
-            return {}
-
-        new_data = {}
-        index = 0
-
-        for instruction in decode_instructions:
-            key, method, factor = (instruction + (default_factor,))[:3]
-            method = method or default_decoder
-
-            if method == "skip_bytes":
-                index += factor // 2  # factor in Bytes; 2 Bytes per register
-                continue
-            if not key or index >= len(regs):
-                # Missing key or not enough registers: skip field
-                continue
-
-            try:
-                raw_value = regs[index]
-                if method == "16i":
-                    value = client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.INT16)
-                elif method == "16u":
-                    value = client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.UINT16)
-                elif method == "32u":
-                    if index + 1 >= len(regs):
-                        value = 0  # Block too short -> neutral value
-                    else:
-                        value = client.convert_from_registers([raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32)
-                        index += 1
-                else:
-                    value = raw_value
-
-                new_data[key] = round(value * factor, 2) if factor != 1 else value
-            except Exception as e:
-                _LOGGER.log(log_level_on_error, "Error decoding %s: %s", key, e)
-            finally:
-                index += 1
-
-        return new_data
-
     except ValueError as ve:
         # Known error, e.g. Exception 131/0
         _LOGGER.info("Unsupported Modbus register for %s: %s", data_key, ve)
-        return {}
-    
+        errors.append(f"{data_key}: {ve}")
+        return new_data, errors
     except ReconnectionNeededError:
         # CRITICAL FIX: Re-raise reconnection errors so the Hub can handle them!
         raise
-
     except Exception as e:
-        _LOGGER.log(log_level_on_error, "Error reading modbus data: %s", e)
-        return {}
+        _LOGGER.log(log_level_on_error, "Error reading modbus data for %s: %s", data_key, e)
+        errors.append(f"{data_key}: {e}")
+        return new_data, errors
+
+    if not regs:
+        message = f"{data_key}: No response"
+        _LOGGER.log(log_level_on_error, "Error reading modbus data: No response for %s", data_key)
+        errors.append(message)
+        return new_data, errors
+
+    index = 0
+
+    for instruction in decode_instructions:
+        key, method, factor = (instruction + (default_factor,))[:3]
+        method = method or default_decoder
+
+        if method == "skip_bytes":
+            try:
+                index += int(factor) // 2  # factor in Bytes; 2 Bytes per register
+            except (TypeError, ValueError):
+                errors.append(f"{data_key}: invalid skip_bytes factor '{factor}'")
+            continue
+
+        if not key:
+            continue
+
+        if index >= len(regs):
+            errors.append(f"{key}: missing register at index {index}")
+            continue
+
+        try:
+            raw_value = regs[index]
+            if method == "16i":
+                value = client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.INT16)
+            elif method == "16u":
+                value = client.convert_from_registers([raw_value], ModbusClientMixin.DATATYPE.UINT16)
+            elif method == "32u":
+                if index + 1 >= len(regs):
+                    errors.append(f"{key}: insufficient registers for 32-bit value")
+                    value = 0
+                else:
+                    value = client.convert_from_registers(
+                        [raw_value, regs[index + 1]], ModbusClientMixin.DATATYPE.UINT32
+                    )
+                    index += 1
+            else:
+                value = raw_value
+
+            new_data[key] = round(value * factor, 2) if factor != 1 else value
+        except Exception as e:
+            errors.append(f"{key}: {e}")
+            if _LOGGER.isEnabledFor(logging.DEBUG):
+                _LOGGER.debug("Error decoding %s for %s: %s", key, data_key, e)
+        finally:
+            index += 1
+
+    return new_data, errors
 
 async def read_modbus_inverter_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads basic inverter data using the pymodbus 3.9 API."""
@@ -380,7 +411,7 @@ async def _read_configured_data(client: ModbusTcpClient, lock: Lock, config_key:
         Dictionary of decoded data
     """
     config = _DATA_READ_CONFIG[config_key]
-    return await _read_modbus_data(
+    data, errors = await _read_modbus_data(
         client,
         lock,
         config["address"],
@@ -390,6 +421,8 @@ async def _read_configured_data(client: ModbusTcpClient, lock: Lock, config_key:
         default_factor=config.get("default_factor", 0.01),
         log_level_on_error=config.get("log_level_on_error", logging.ERROR)
     )
+    _log_partial_errors(config["data_key"], errors, config.get("log_level_on_error", logging.ERROR))
+    return data
 
 
 async def _read_configured_phase_data(client: ModbusTcpClient, lock: Lock, config_key: str) -> DataDict:
@@ -425,7 +458,16 @@ async def _read_configured_phase_data(client: ModbusTcpClient, lock: Lock, confi
 
 async def read_modbus_realtime_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads real-time operating data."""
-    data = await _read_modbus_data(client, lock, 16388, 19, REALTIME_DATA_MAP, 'realtime_data', default_factor=1)
+    data, errors = await _read_modbus_data(
+        client,
+        lock,
+        16388,
+        19,
+        REALTIME_DATA_MAP,
+        'realtime_data',
+        default_factor=1,
+    )
+    _log_partial_errors('realtime_data', errors, logging.ERROR)
 
     fault_messages = []
     for key in ["faultMsg0", "faultMsg1", "faultMsg2"]:
@@ -474,7 +516,18 @@ async def _read_phase_block(client: ModbusTcpClient, lock: Lock, start: int, cou
             name, method, *fac = entry
             factor = fac[0] if fac else default_factor
             decode.append((f"{phase}{key_prefix}{name}", method, factor))
-    return await _read_modbus_data(client, lock, start, count, decode, f"{key_prefix.lower()}phase_data", default_factor=default_factor)
+    data_key = f"{key_prefix.lower()}phase_data"
+    data, errors = await _read_modbus_data(
+        client,
+        lock,
+        start,
+        count,
+        decode,
+        data_key,
+        default_factor=default_factor,
+    )
+    _log_partial_errors(data_key, errors, logging.ERROR)
+    return data
 
 # Phase data reading wrappers - now using configuration-driven approach
 async def read_additional_modbus_data_4(client: ModbusTcpClient, lock: Lock) -> DataDict:
@@ -530,10 +583,21 @@ def _decode_time_power_slots(data: DataDict, prefix: str, slots: int = 7) -> Non
 
 async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads charge schedule data and decodes time/power slots."""
-    data = await _read_modbus_data(client, lock, 0x3604, 23, CHARGE_DATA_MAP, "charge_data_extended", default_factor=1)
+    data, errors = await _read_modbus_data(
+        client,
+        lock,
+        0x3604,
+        23,
+        CHARGE_DATA_MAP,
+        "charge_data_extended",
+        default_factor=1,
+    )
+    _log_partial_errors("charge_data_extended", errors, logging.ERROR)
     if data:
         try:
             _decode_time_power_slots(data, "charge")
+            # NOTE: These flags only reflect the bitmask (at least one slot planned).
+            # Whether charging is actually active depends on AppMode == 1.
             data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
             data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
         except Exception as e:
@@ -544,7 +608,16 @@ async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
 
 async def read_discharge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads discharge schedule data and decodes time/power slots."""
-    data = await _read_modbus_data(client, lock, 0x361B, 21, DISCHARGE_DATA_MAP, "discharge_data", default_factor=1)
+    data, errors = await _read_modbus_data(
+        client,
+        lock,
+        0x361B,
+        21,
+        DISCHARGE_DATA_MAP,
+        "discharge_data",
+        default_factor=1,
+    )
+    _log_partial_errors("discharge_data", errors, logging.ERROR)
     if not data: return {}
     try:
         _decode_time_power_slots(data, "discharge")
@@ -561,7 +634,16 @@ async def read_discharge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
 async def read_passive_battery_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads passive battery and anti-reflux data with mode decoding."""
     try:
-        data = await _read_modbus_data(client, lock, 0x3636, 39, PASSIVE_BATTERY_DATA_MAP, "passive_battery_anti_reflux_data", default_factor=0.1)
+        data, errors = await _read_modbus_data(
+            client,
+            lock,
+            0x3636,
+            39,
+            PASSIVE_BATTERY_DATA_MAP,
+            "passive_battery_anti_reflux_data",
+            default_factor=0.1,
+        )
+        _log_partial_errors("passive_battery_anti_reflux_data", errors, logging.ERROR)
         if data:
             mode = data.pop("AntiRefluxCurrentmode_raw", None)
             if mode is not None:
