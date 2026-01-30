@@ -334,6 +334,10 @@ class ChargeSettingHandler:
         try:
             if addr in (0x3604, 0x3605):
                 def modifier(cur: int) -> int:
+                    # If disabling, clear entire register (all slots) per user requirement
+                    if not value:
+                        return 0
+                    # If enabling, toggle bit 0 (Slot 1) based on value
                     return (cur & ~0x1) | (write_value & 0x1)
                 write_success, merged_val = await self.hub.merge_write_register(addr, modifier, f"{state_type} state (merged)")
             else:

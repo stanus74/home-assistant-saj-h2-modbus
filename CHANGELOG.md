@@ -1,4 +1,4 @@
-## [v2.8.1] - 2026-01-25
+## [v2.8.1] 
 
 ### Fixed
 - **Charge Slot Logic**: Fixed incorrect handling of Slot 1 (Bit 0) in charge/discharge control. All slots (1-7) are now treated identically as a 7-bit mask in registers 0x3604/0x3605.
@@ -9,6 +9,9 @@
 - **Fast Listener Cleanup**: Sensor entities now deregister their fast-poll callbacks via an `async_on_remove` hook, so disabling/removing an entity immediately stops 10 s updates and avoids race conditions or log spam from stale listeners.
 - **Charge Queue Shutdown**: The charge/discharge command handler now cancels and drains its queue cleanly on reload/unload, eliminating zombie tasks that previously kept running after the integration restarted.
 - **AppMode-Aware Switches**: Charging/discharging switches once again validate that `AppMode` (0x3647) equals `1` in addition to the bitmask registers.
+
+### Changed
+- **Charge/Discharge Power Percent**: Increased both the HA number entities and the inverter card sliders to allow 0‑100 % instead of capping at 50 %, aligning the UI with the inverter’s actual power scaling.
 
 
 ## [v2.8.0]
