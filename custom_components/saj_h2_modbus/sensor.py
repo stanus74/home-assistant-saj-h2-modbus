@@ -54,9 +54,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._is_removed = False
         
         if ADVANCED_LOGGING and self._is_fast_sensor:
-            _LOGGER.debug(
-                f"Sensor {self._attr_name} (key: {description.key}) marked as fast-poll sensor"
-            )
+            _LOGGER.debug("Sensor %s (key: %s) marked as fast-poll sensor", self._attr_name, description.key)
 
     @property
     def native_value(self):
@@ -89,7 +87,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._cleanup_fast_listener()
                 
         await super().async_will_remove_from_hass()
-        _LOGGER.debug(f"Sensor {self._attr_name} fully removed from hass")
+        _LOGGER.debug("Sensor %s fully removed from hass", self._attr_name)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -117,17 +115,13 @@ class SajSensor(CoordinatorEntity, SensorEntity):
                 self._handle_fast_update
             )
             if ADVANCED_LOGGING:
-                _LOGGER.debug(
-                    f"Sensor {self._attr_name} registered for fast updates (10s)"
-                )
+                _LOGGER.debug("Sensor %s registered for fast updates (10s)", self._attr_name)
         elif not should_listen and is_listening:
             if self._remove_fast_listener:
                 try:
                     self._remove_fast_listener()
                     if ADVANCED_LOGGING:
-                        _LOGGER.debug(
-                            f"Sensor {self._attr_name} unregistered from fast updates"
-                        )
+                        _LOGGER.debug("Sensor %s unregistered from fast updates", self._attr_name)
                 except Exception as e:
                     _LOGGER.warning(f"Error unregistering fast listener for {self._attr_name}: {e}")
                 finally:
@@ -138,7 +132,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """Handle fast update notification (10s interval)."""
         # Prevent processing if the entity has been removed or is disabled
         if self._is_removed or not self.enabled:
-            _LOGGER.debug(f"Skipping fast update for {self._attr_name} (removed={self._is_removed}, enabled={self.enabled})")
+            _LOGGER.debug("Skipping fast update for %s (removed=%s, enabled=%s)", self._attr_name, self._is_removed, self.enabled)
             return
         
         # This is ONLY called for sensors registered in FAST_POLL_SENSORS
@@ -150,9 +144,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
             self.async_write_ha_state()
             
             if ADVANCED_LOGGING:
-                _LOGGER.debug(
-                    f"Fast update for {self._attr_name}: {self._last_value} -> {new_value}"
-                )
+                _LOGGER.debug("Fast update for %s: %s -> %s", self._attr_name, self._last_value, new_value)
 
     @callback
     def _cleanup_fast_listener(self) -> None:
@@ -166,7 +158,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
             try:
                 self._remove_fast_listener()
                 if ADVANCED_LOGGING:
-                    _LOGGER.debug(f"Sensor {self._attr_name} unregistered from fast updates")
+                    _LOGGER.debug("Sensor %s unregistered from fast updates", self._attr_name)
             except Exception as e:
                 _LOGGER.warning(f"Error unregistering fast listener for {self._attr_name}: {e}")
             finally:

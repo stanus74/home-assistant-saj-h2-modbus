@@ -125,9 +125,7 @@ class SajTimeTextEntity(TextEntity):
             value = value.strftime("%H:%M")
         
         if not isinstance(value, str) or not re.match(self._attr_pattern, value):
-            _LOGGER.error(
-                f"Invalid time format for {self._attr_name}: {value}. Expected HH:MM"
-            )
+            _LOGGER.error("Invalid time format for %s: %s. Expected HH:MM", self._attr_name, value)
             return
 
         await self.set_method(value)

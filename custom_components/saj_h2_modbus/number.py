@@ -197,7 +197,7 @@ class SajGenericNumberEntity(SajNumberEntity):
     async def async_set_native_value(self, value):
         val = int(value)
         if not self._attr_native_min_value <= val <= self._attr_native_max_value:
-            _LOGGER.error(f"Invalid value for {self._attr_name}: {val}")
+            _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
             return
         self._attr_native_value = val
         if self.set_method:
