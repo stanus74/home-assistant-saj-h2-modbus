@@ -4,7 +4,7 @@
 
 ## Quick Start for AI Agents
 
-**Before modifying code, understand (see also `/plans/architecture_overview.md`):**
+**Before modifying code, understand (see also `docs/architecture_overview.md`):**
 
 1.  **3-tier polling architecture** with separate asyncio locks (`_slow_lock`, `_fast_lock`, `_ultra_fast_lock`).
     *   **Standard (60s)**: Sequential execution of all readers.
@@ -25,7 +25,7 @@
 
 ## Project Overview
 
-**Context:** Unofficial community integration for reading SAJ H2 inverters (8kW-10kW) via Modbus TCP. Firmware updates may break compatibility.
+**Context:** Unofficial community integration for reading SAJ H2 inverters (8kW-10kW) via Modbus TCP.
 
 **Key Files:**
 - [hub.py](../custom_components/saj_h2_modbus/hub.py) - DataUpdateCoordinator, polling orchestration.
