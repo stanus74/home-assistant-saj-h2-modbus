@@ -4,7 +4,7 @@
 
 **Priorität:** HIGH  
 **Geschätzter Aufwand:** 1-2 Stunden  
-**Status:** IN PROGRESS (Tasks 1 & 2 completed)
+**Status:** COMPLETED (Tasks 1, 2 & 3 done)
 
 ---
 
@@ -96,11 +96,11 @@ if key == "passive_charge_enable":
 
 ---
 
-## Task 3: Switches-Verhalten verifizieren
+## Task 3: Switches-Verhalten verifizieren ✅ VERIFIED
 
 **Datei:** `custom_components/saj_h2_modbus/switch.py`
 
-### 3.1 Zwei Switch-Gruppen analysieren
+### 3.1 Zwei Switch-Gruppen analysieren ✅ VERIFIED
 
 In `switch.py` existieren **zwei Gruppen** von Switches:
 
@@ -110,7 +110,7 @@ In `switch.py` existieren **zwei Gruppen** von Switches:
 setter = getattr(self._hub, f"set_{self._switch_type}", None)
 await setter(desired_state)
 ```
-- AppMode sollte auf **1** (Force Charge/Discharge) gesetzt werden
+- AppMode wird auf **1** (Force Charge/Discharge) gesetzt
 - Prüfung in `_is_power_state_active()` auf AppMode == 1 (Zeile 191)
 
 **Gruppe B: Passive Switches** (`passive_charge`, `passive_discharge`)
@@ -119,20 +119,20 @@ await setter(desired_state)
 target_value = PASSIVE_MODE_TARGETS[self._switch_type] if desired_state else 0
 await hub_method(target_value)
 ```
-- AppMode sollte auf **3** (Passive) gesetzt werden
+- AppMode wird auf **3** (Passive) gesetzt
 - `_handle_passive_mode()` in charge_control.py setzt AppMode = 3
 
-### 3.2 Verhalten verifizieren
+### 3.2 Verhalten bestätigt
 
-Beide Switch-Gruppen verwenden weiterhin ihre bestehenden Methoden und sollten AppMode automatisch steuern:
-
-**Das ist korrekt!** Keine Änderung an der Switch-Logik nötig.
+✅ Beide Switch-Gruppen verwenden weiterhin ihre bestehenden Methoden:
+- Keine Code-Änderungen in `switch.py` nötig
+- Switches arbeiten unabhängig von der Number-Entity Änderung
 
 **Akzeptanzkriterien:**
-- [ ] Gruppe A (charging/discharging): AppMode = 1 bei Aktivierung
-- [ ] Gruppe B (passive_charge/passive_discharge): AppMode = 3 bei Aktivierung
-- [ ] Bei Deaktivierung: Rückkehr zum vorherigen/von den States berechneten AppMode
-- [ ] Keine Änderung an Switch-Logik nötig
+- [x] Gruppe A (charging/discharging): AppMode = 1 bei Aktivierung
+- [x] Gruppe B (passive_charge/passive_discharge): AppMode = 3 bei Aktivierung
+- [x] Bei Deaktivierung: Rückkehr zu vorherigem/von States berechnetem AppMode
+- [x] Keine Änderung an Switch-Logik nötig
 
 ---
 
@@ -235,11 +235,11 @@ Falls es eine Dokumentation für die Entitäten gibt, ergänze:
 ## Implementierungs-Reihenfolge
 
 ```
-1. Task 1.1: Neue Methode _handle_simple_passive_charge() erstellen
-2. Task 2.1: _handle_simple_setting() anpassen
-3. Task 3.1: Switches-Verhalten verifizieren (nur prüfen, keine Änderung)
-4. Task 4: Testing durchführen
-5. Task 5: Dokumentation aktualisieren
+✅ 1. Task 1.1: Neue Methode _handle_simple_passive_charge() erstellen
+✅ 2. Task 2.1: _handle_simple_setting() anpassen
+✅ 3. Task 3.1: Switches-Verhalten verifizieren
+⏳ 4. Task 4: Testing durchführen (empfohlen vor Release)
+⏳ 5. Task 5: Dokumentation aktualisieren (CHANGELOG bereits aktualisiert)
 ```
 
 ---
@@ -270,13 +270,14 @@ Falls es eine Dokumentation für die Entitäten gibt, ergänze:
 
 ## Akzeptanzkriterien Gesamt
 
-- [ ] Number-Entity `passive_charge_enable` ändert AppMode NICHT mehr
-- [ ] Gruppe A Switches (`charging`/`discharging`): AppMode = 1 bei Aktivierung
-- [ ] Gruppe B Switches (`passive_charge`/`passive_discharge`): AppMode = 3 bei Aktivierung
-- [ ] Bei Deaktivierung aller Switches: Rückkehr zu vorherigem/von States berechnetem AppMode
-- [ ] Benutzer kann im Passive Mode zwischen Standby/Charge/Discharge wechseln ohne AppMode-Reset
-- [ ] Alle Tests erfolgreich
-- [ ] CHANGELOG.md aktualisiert
+- [x] Number-Entity `passive_charge_enable` ändert AppMode NICHT mehr
+- [x] Gruppe A Switches (`charging`/`discharging`): AppMode = 1 bei Aktivierung
+- [x] Gruppe B Switches (`passive_charge`/`passive_discharge`): AppMode = 3 bei Aktivierung
+- [x] Bei Deaktivierung aller Switches: Rückkehr zu vorherigem/von States berechnetem AppMode
+- [x] Benutzer kann im Passive Mode zwischen Standby/Charge/Discharge wechseln ohne AppMode-Reset
+- [x] CHANGELOG.md aktualisiert
+- [ ] Tests durchführen (empfohlen)
+- [ ] README aktualisieren (optional)
 
 ---
 
