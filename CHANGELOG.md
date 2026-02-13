@@ -11,6 +11,15 @@
   - Eliminates code duplication across `hub.py`, `__init__.py`, and `config_flow.py`
   - Single source of truth for config value retrieval (options → data → default)
 
+### Fixed
+- **Passive Charge Enable Number Entity**: Setting the number entity no longer automatically changes AppMode
+  - Users can now freely switch between Standby (0), Discharge (1), and Charge (2) while remaining in Passive Mode (3)
+  - Switches continue to automatically manage AppMode:
+    - Charging/Discharging switches: AppMode = 1 (Force Charge/Discharge) on activation
+    - Passive Charge/Discharge switches: AppMode = 3 (Passive) on activation
+    - All switches restore previous mode on deactivation
+  - Fixes issue where setting Passive Charge Enable to 0 would unexpectedly switch back to Self-use Mode
+
 ### Changed
 - **Code Quality Improvements**:
   - Removed ~44 lines of duplicated `_get_config_value()` implementations

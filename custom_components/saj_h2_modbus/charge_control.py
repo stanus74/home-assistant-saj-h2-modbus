@@ -225,8 +225,9 @@ class ChargeSettingHandler:
             return
 
         # Special handling for passive_charge_enable if it comes through simple settings
+        # Number entities should NOT change AppMode - only write register
         if key == "passive_charge_enable":
-            await self._handle_passive_mode(value)
+            await self._handle_simple_passive_charge(value)
             return
 
         # charge_time_enable / discharge_time_enable are pure bitmasks (Bit 0-6 = Slot 1-7)
@@ -397,6 +398,35 @@ class ChargeSettingHandler:
             chg, dchg = self._get_power_states()
             await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
         self._app_mode_before_passive = None
+
+    async def _handle_simple_passive_charge(self, value: int) -> None:
+        """Handle passive_charge_enable via number entity - NO AppMode change.
+
+        This method only writes to register 0x3636 without changing AppMode.
+        Used by number entities to allow free switching between
+        0=Standby, 1=Discharge, 2=Charge while staying in Passive Mode.
+
+        Args:
+            value: The desired value (0=Standby, 1=Discharge, 2=Charge)
+        """
+        if value is None:
+            return
+
+        desired_int = int(value)
+        addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
+
+        try:
+            if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
+                # Update cache immediately
+                self._update_cache({"passive_charge_enable": desired_int})
+                _LOGGER.debug(
+                    "Passive charge enable set to %s (no AppMode change)",
+                    desired_int
+                )
+        finally:
+            self._clear_pending_state("passive_charge_enable")
+            # Force UI update to clear pending flag and show new state
+            self.hub.async_set_updated_data(self.hub.inverter_data)
 
     def _get_power_states(self) -> Tuple[bool, bool]:
         """Get current charging and discharging states from inverter data."""
