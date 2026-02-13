@@ -25,6 +25,7 @@
   - Removed ~44 lines of duplicated `_get_config_value()` implementations
   - Consolidated all config value access through centralized utility function
 
+ - revert passive charge/discharge power to 100% (max input value 1100)
 ---
 
 ## [v2.8.1] 
