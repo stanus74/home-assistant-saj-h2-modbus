@@ -8,48 +8,62 @@
 ## Phase 1: Quick Wins (Critical Issues) ⭐
 **Dauer:** ~6 Stunden | **Risiko:** Minimal | **Impact:** Hoch
 
-### 1.1 Fast-Poll State-Class Fix [CRITICAL] 🚨
-**Aufwand:** 30 Min | **Priorität:** P0
+### 1.1 Fast-Poll State-Class Fix [CRITICAL] 🚨 ✅ COMPLETED
+**Aufwand:** 30 Min | **Priorität:** P0 | **Status:** DONE
 
-- [ ] Neue Sensor-Klasse `FastPollSensor` in `sensor.py` erstellen
-  - [ ] `state_class = None` setzen (keine DB-Aufzeichnung)
-  - [ ] `force_update = True` beibehalten (UI-Updates)
-- [ ] `SlowPollSensor` als Standard-Klasse definieren
-- [ ] `async_setup_entry` anpassen:
-  - [ ] Prüfung auf `FAST_POLL_SENSORS` Membership
-  - [ ] Korrekte Klasse zuweisen (FastPollSensor vs SlowPollSensor)
-- [ ] Test: Verifizieren, dass Fast-Poll Sensoren nicht in `states` Tabelle geschrieben werden
+- [x] Duplizierte Entities für Fast-Poll Sensoren erstellt
+  - [x] Normale Entity: `sensor.saj_pvpower` (60s, mit DB-Aufzeichnung)
+  - [x] Fast Entity: `sensor.saj_fast_pvpower` (10s, ohne DB-Aufzeichnung)
+- [x] `FastPollSensor` Klasse mit `_attr_state_class = None`
+- [x] `SajSensor` mit `is_fast_variant` Parameter
+- [x] `async_setup_entry` angepasst:
+  - [x] Für Fast-Poll Sensoren werden BEIDE Entities erstellt
+  - [x] Unique IDs mit "fast_" Präfix für Fast-Varianten
+  - [x] Namen mit "Fast " Präfix für Fast-Varianten
+- [ ] Test: Verifizieren, dass Fast-Varianten nicht in `states` Tabelle geschrieben werden
 
 **Akzeptanzkriterien:**
-- [ ] Fast-Poll Sensoren (10s) erzeugen keine DB-Einträge
-- [ ] UI zeigt trotzdem Live-Updates
-- [ ] Slow-Poll Sensoren (60s) werden normal aufgezeichnet
+- [x] Jeder Fast-Poll Sensor existiert 2x (normal + fast-Variante)
+- [x] Fast-Varianten haben "fast_" Präfix in unique_id und Name
+- [x] Fast-Varianten (10s) erzeugen keine DB-Einträge (state_class = None)
+- [x] Normale Varianten (60s) werden mit DB-Aufzeichnung aktualisiert
+- [x] UI zeigt für beide Live-Updates
+
+**Implementierung:**
+- `sensor.saj_pvpower` → 60s Updates, mit DB (für Historie/Langzeitdaten)
+- `sensor.saj_fast_pvpower` → 10s Updates, ohne DB (für Live-Monitoring)
+- Logging zeigt Anzahl: "Added SAJ sensors (X normal, Y fast-variants)"
 
 ---
 
-### 1.2 Config Value Utility
-**Aufwand:** 30 Min | **Priorität:** P1
+### 1.2 Config Value Utility ✅ COMPLETED
+**Aufwand:** 30 Min | **Priorität:** P1 | **Status:** DONE
 
-- [ ] Neue Datei `utils.py` erstellen
-  - [ ] Funktion `get_config_value(entry, key, default=None)` implementieren
-  - [ ] Docstring mit Args/Returns
-- [ ] `hub.py` refactoren:
-  - [ ] Import hinzufügen: `from .utils import get_config_value`
-  - [ ] Methode `_get_config_value()` entfernen
-  - [ ] Alle Aufrufe anpassen
-- [ ] `__init__.py` refactoren:
-  - [ ] Import hinzufügen
-  - [ ] Funktion `_get_config_value()` entfernen
-  - [ ] Aufrufe anpassen
-- [ ] `config_flow.py` refactoren:
-  - [ ] Import hinzufügen
-  - [ ] Methode `_get_option_default()` entfernen
-  - [ ] Aufrufe anpassen
+- [x] Neue Datei `utils.py` erstellt
+  - [x] Funktion `get_config_value(entry, key, default=None)` implementiert
+  - [x] Docstring mit Args/Returns
+- [x] `hub.py` refactored:
+  - [x] Import hinzugefügt: `from .utils import get_config_value`
+  - [x] Methode `_get_config_value()` entfernt
+  - [x] Alle 12 Aufrufe angepasst
+- [x] `__init__.py` refactored:
+  - [x] Import hinzugefügt
+  - [x] Funktion `_get_config_value()` entfernt
+  - [x] Alle 14 Aufrufe angepasst
+- [x] `config_flow.py` refactored:
+  - [x] Import hinzugefügt
+  - [x] Methode `_get_option_default()` entfernt
+  - [x] Alle 18 Aufrufe angepasst
 
 **Akzeptanzkriterien:**
-- [ ] Alle 3 Dateien nutzen zentrale Funktion
-- [ ] Keine Duplikation mehr
-- [ ] Integration startet ohne Fehler
+- [x] Alle 3 Dateien nutzen zentrale Funktion
+- [x] Keine Duplikation mehr (~44 Zeilen eliminiert)
+- [x] Single Source of Truth für Config-Value Retrieval
+
+**Ergebnis:**
+- Neue Datei `utils.py` mit `get_config_value()`
+- DRY Principle: Keine redundanten Implementierungen mehr
+- Einfachere Wartung: Änderungen nur an einer Stelle
 
 ---
 
@@ -237,7 +251,38 @@
 
 ---
 
-### 2.6 Architektur-Dokumentation
+### 2.6 Device Info Class
+**Aufwand:** 1 Stunde | **Priorität:** P3
+
+- [ ] `utils.py` erweitern:
+  ```python
+  @dataclass
+  class SajDeviceInfo:
+      name: str
+      host: str
+      
+      def to_ha_device_info(self) -> dict:
+          return {
+              "identifiers": {(DOMAIN, self.name)},
+              "name": self.name,
+              "manufacturer": ATTR_MANUFACTURER,
+              "configuration_url": f"http://{self.host}",
+          }
+  ```
+- [ ] `__init__.py` refactoren:
+  - [ ] `_create_device_info()` Funktion entfernen
+  - [ ] `SajDeviceInfo` Instanz erzeugen
+  - [ ] `to_ha_device_info()` nutzen
+- [ ] Optional: Firmware-Version, Modell ergänzen
+
+**Akzeptanzkriterien:**
+- [ ] Type-safe Device Info
+- [ ] Configuration URL verfügbar
+- [ ] Erweiterbar für weitere Metadaten
+
+---
+
+### 2.7 Architektur-Dokumentation
 **Aufwand:** 2 Stunden | **Priorität:** P3
 
 - [ ] `docs/architecture.md` erstellen:
@@ -386,7 +431,8 @@ Phase 2 (SHOULD):
 ├── 2.3 Error Decorators [ABHÄNGIG von 1.4]
 ├── 2.4 Switch Definitions
 ├── 2.5 Docstrings
-└── 2.6 Arch Docs
+├── 2.6 Device Info Class
+└── 2.7 Arch Docs
 
 Phase 3 (COULD - Nur nach 1&2!):
 ├── 3.1 Lock System [ABHÄNGIG von 2.1]

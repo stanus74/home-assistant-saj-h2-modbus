@@ -15,6 +15,7 @@ from .const import (
     CONF_FAST_ENABLED,
 )
 from homeassistant.helpers import config_validation as cv
+from .utils import get_config_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,39 +86,32 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
     if hub is not None:
         await hub.update_connection_settings(
-            host=_get_config_value(entry, CONF_HOST),
-            port=_get_config_value(entry, CONF_PORT, DEFAULT_PORT),
-            scan_interval=_get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            fast_enabled=_get_config_value(entry, CONF_FAST_ENABLED, False),
-            ultra_fast_enabled=_get_config_value(entry, "ultra_fast_enabled", False),
-            mqtt_host=_get_config_value(entry, "mqtt_host", ""),
-            mqtt_port=_get_config_value(entry, "mqtt_port", 1883),
-            mqtt_user=_get_config_value(entry, "mqtt_user", ""),
-            mqtt_password=_get_config_value(entry, "mqtt_password", ""),
-            mqtt_topic_prefix=_get_config_value(entry, "mqtt_topic_prefix", "saj"),
-            mqtt_publish_all=_get_config_value(entry, "mqtt_publish_all", False),
-            use_ha_mqtt=_get_config_value(entry, "use_ha_mqtt", False),
+            host=get_config_value(entry, CONF_HOST),
+            port=get_config_value(entry, CONF_PORT, DEFAULT_PORT),
+            scan_interval=get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            fast_enabled=get_config_value(entry, CONF_FAST_ENABLED, False),
+            ultra_fast_enabled=get_config_value(entry, "ultra_fast_enabled", False),
+            mqtt_host=get_config_value(entry, "mqtt_host", ""),
+            mqtt_port=get_config_value(entry, "mqtt_port", 1883),
+            mqtt_user=get_config_value(entry, "mqtt_user", ""),
+            mqtt_password=get_config_value(entry, "mqtt_password", ""),
+            mqtt_topic_prefix=get_config_value(entry, "mqtt_topic_prefix", "saj"),
+            mqtt_publish_all=get_config_value(entry, "mqtt_publish_all", False),
+            use_ha_mqtt=get_config_value(entry, "use_ha_mqtt", False),
         )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
         await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _get_config_value(entry: ConfigEntry, key: str, default=None):
-    """Get config value with fallback from options to data."""
-    # Import CONF_FAST_ENABLED from const.py
-    from .const import CONF_FAST_ENABLED
-    return entry.options.get(key, entry.data.get(key, default))
-
-
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
     """Helper function to create the SAJ Modbus hub."""
     try:
         # Get fast_enabled setting from config entry options or data
-        fast_enabled = _get_config_value(entry, CONF_FAST_ENABLED, False)
-        
+        fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
+
         # Ensure the scan_interval is correctly passed to the hub
-        scan_interval = _get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        scan_interval = get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
         _LOGGER.info("Starting hub with first refresh...")
 

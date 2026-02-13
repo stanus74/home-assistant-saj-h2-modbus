@@ -24,6 +24,7 @@ from .charge_control import (
     PENDING_FIELDS,
 )
 from .services import ModbusConnectionManager, MqttPublisher
+from .utils import get_config_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,9 +62,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._config_entry = config_entry
 
         # Config extraction - Connection
-        host = self._get_config_value(config_entry, CONF_HOST)
-        port = self._get_config_value(config_entry, CONF_PORT, DEFAULT_MODBUS_PORT)
-        scan_interval = self._get_config_value(config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        host = get_config_value(config_entry, CONF_HOST)
+        port = get_config_value(config_entry, CONF_PORT, DEFAULT_MODBUS_PORT)
+        scan_interval = get_config_value(config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
             hass,
@@ -74,17 +75,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
 
         # Robust config loading (options priority, then data)
-        self.ultra_fast_enabled = self._get_config_value(config_entry, CONF_ULTRA_FAST_ENABLED, False)
-        self.fast_enabled = self._get_config_value(config_entry, CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
+        self.ultra_fast_enabled = get_config_value(config_entry, CONF_ULTRA_FAST_ENABLED, False)
+        self.fast_enabled = get_config_value(config_entry, CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
-        mqtt_host = self._get_config_value(config_entry, "mqtt_host", "")
-        mqtt_port = self._get_config_value(config_entry, "mqtt_port", DEFAULT_MQTT_PORT)
-        mqtt_user = self._get_config_value(config_entry, "mqtt_user", "")
-        mqtt_password = self._get_config_value(config_entry, "mqtt_password", "")
-        mqtt_topic_prefix = self._get_config_value(config_entry, CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
-        mqtt_publish_all = self._get_config_value(config_entry, CONF_MQTT_PUBLISH_ALL, False)
-        use_ha_mqtt = self._get_config_value(config_entry, CONF_USE_HA_MQTT, False)
+        mqtt_host = get_config_value(config_entry, "mqtt_host", "")
+        mqtt_port = get_config_value(config_entry, "mqtt_port", DEFAULT_MQTT_PORT)
+        mqtt_user = get_config_value(config_entry, "mqtt_user", "")
+        mqtt_password = get_config_value(config_entry, "mqtt_password", "")
+        mqtt_topic_prefix = get_config_value(config_entry, CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
+        mqtt_publish_all = get_config_value(config_entry, CONF_MQTT_PUBLISH_ALL, False)
+        use_ha_mqtt = get_config_value(config_entry, CONF_USE_HA_MQTT, False)
 
         _LOGGER.info(
             "SAJ Hub Initialized. Host: %s, Fast: %s, Ultra: %s, MQTT Prefix: '%s', MQTT Host: '%s'", 
@@ -150,10 +151,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.use_ha_mqtt = use_ha_mqtt
         
         self._init_setters()
-
-    def _get_config_value(self, config_entry: ConfigEntry, key: str, default: Any = None) -> Any:
-        """Get config value with fallback: options -> data -> default."""
-        return config_entry.options.get(key, config_entry.data.get(key, default))
 
     def _init_setters(self) -> None:
         """Initializes dynamic setters."""
