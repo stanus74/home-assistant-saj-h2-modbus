@@ -67,27 +67,33 @@
 
 ---
 
-### 1.3 Slot Entity Generation Utility
-**Aufwand:** 1 Stunde | **Priorität:** P1
+### 1.3 Slot Entity Generation Utility ✅ COMPLETED
+**Aufwand:** 1 Stunde | **Priorität:** P1 | **Status:** DONE
 
-- [ ] `utils.py` erweitern:
-  - [ ] Funktion `generate_slot_definitions(slot_type, count=7)` implementieren
-  - [ ] Number-Entities für day_mask und power_percent generieren
-  - [ ] Text-Entities für start_time und end_time generieren
-  - [ ] Rückgabe als Dict mit 'number' und 'text' Keys
-- [ ] `number.py` refactoren:
-  - [ ] Import hinzufügen
-  - [ ] 4 identische Loops (je ~40 Zeilen) entfernen
-  - [ ] Utility-Funktion nutzen für Charge/Discharge
-- [ ] `text.py` refactoren:
-  - [ ] Import hinzufügen
-  - [ ] 4 identische Loops entfernen
-  - [ ] Utility-Funktion nutzen
+- [x] `utils.py` erweitert:
+  - [x] Funktion `generate_slot_definitions(slot_type, count=7)` implementiert
+  - [x] Number-Entities für day_mask und power_percent generiert
+  - [x] Text-Entities für start_time und end_time generiert
+  - [x] Rückgabe als Dict mit 'number' und 'text' Keys
+- [x] `number.py` refactored:
+  - [x] Import hinzugefügt
+  - [x] 2 identische Loops (~76 Zeilen) entfernt
+  - [x] Utility-Funktion nutzt für Charge/Discharge
+- [x] `text.py` refactored:
+  - [x] Import hinzugefügt
+  - [x] 2 identische Loops (~50 Zeilen) entfernt
+  - [x] Utility-Funktion nutzt für Charge/Discharge
 
 **Akzeptanzkriterien:**
-- [ ] Alle 28 Slot-Entities werden korrekt erzeugt
-- [ ] ~120 Zeilen Code eliminiert
-- [ ] Entity-Namen und IDs unverändert
+- [x] Alle 28 Slot-Entities werden korrekt erzeugt (14 number + 14 text)
+- [x] ~126 Zeilen Code eliminiert
+- [x] Entity-Namen und IDs unverändert
+- [x] DRY Principle: Slot-Definitionen jetzt zentral in utils.py
+
+**Ergebnis:**
+- Neue `generate_slot_definitions()` Funktion in utils.py
+- ~126 Zeilen duplizierter Code entfernt aus number.py und text.py
+- Einfachere Wartung: Änderungen an Slot-Struktur nur an einer Stelle nötig
 
 ---
 

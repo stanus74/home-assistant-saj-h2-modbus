@@ -24,8 +24,12 @@
 - **Code Quality Improvements**:
   - Removed ~44 lines of duplicated `_get_config_value()` implementations
   - Consolidated all config value access through centralized utility function
+- **Slot Entity Generation Utility**: Refactored charge/discharge slot entity creation
+  - New `generate_slot_definitions()` function in `utils.py` generates all 28 slot entities (14 number + 14 text)
+  - Eliminated ~126 lines of duplicated loop code from `number.py` and `text.py`
+  - Centralized slot definition logic for easier maintenance and future changes
 
- - revert passive charge/discharge power to 100% (max input value 1100)
+  - revert passive charge/discharge power to 100% (max input value 1100)
 ---
 
 ## [v2.8.1] 

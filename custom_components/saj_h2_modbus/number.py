@@ -2,6 +2,7 @@ import logging
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from .const import DOMAIN
+from .utils import generate_slot_definitions
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -226,82 +227,38 @@ async def async_setup_entry(hass, entry, async_add_entities):
         )
         entities.append(entity)
 
-    # Add charge entities for indices 1-7
-    for i in range(1, 8):
-        prefix = str(i)
-        for desc in [
-            {
-                "key": f"charge{prefix}_day_mask",
-                "name": f"Charge{prefix} Day Mask",
-                "min": 0,
-                "max": 127,
-                "step": 1,
-                "default": 127,
-                "unit": None,
-                "setter": f"set_charge{prefix}_day_mask",
-            },
-            {
-                "key": f"charge{prefix}_power_percent",
-                "name": f"Charge{prefix} Power Percent",
-                "min": 0,
-                "max": 100,
-                "step": 1,
-                "default": 5,
-                "unit": "%",
-                "setter": f"set_charge{prefix}_power_percent",
-            },
-        ]:
-            entity = SajGenericNumberEntity(
-                hub=hub,
-                name=f"SAJ {desc['name']} (Input)",
-                unique_id=f"{hub.name}_{desc['key']}_input",
-                min_val=desc["min"],
-                max_val=desc["max"],
-                step=desc["step"],
-                default=desc["default"],
-                unit=desc["unit"],
-                set_method_name=desc["setter"],
-                device_info=device_info,
-            )
-            entities.append(entity)
+    # Add charge slot entities (1-7) using utility function
+    charge_definitions = generate_slot_definitions("charge")
+    for desc in charge_definitions["number"]:
+        entity = SajGenericNumberEntity(
+            hub=hub,
+            name=f"SAJ {desc['name']} (Input)",
+            unique_id=f"{hub.name}_{desc['key']}_input",
+            min_val=desc["min"],
+            max_val=desc["max"],
+            step=desc["step"],
+            default=desc["default"],
+            unit=desc["unit"],
+            set_method_name=desc["setter"],
+            device_info=device_info,
+        )
+        entities.append(entity)
 
-    # Add discharge entities for indices 1-7
-    for i in range(1, 8):
-        prefix = str(i)
-        for desc in [
-            {
-                "key": f"discharge{prefix}_day_mask",
-                "name": f"Discharge{prefix} Day Mask",
-                "min": 0,
-                "max": 127,
-                "step": 1,
-                "default": 127,
-                "unit": None,
-                "setter": f"set_discharge{prefix}_day_mask",
-            },
-            {
-                "key": f"discharge{prefix}_power_percent",
-                "name": f"Discharge{prefix} Power Percent",
-                "min": 0,
-                "max": 100,
-                "step": 1,
-                "default": 5,
-                "unit": "%",
-                "setter": f"set_discharge{prefix}_power_percent",
-            },
-        ]:
-            entity = SajGenericNumberEntity(
-                hub=hub,
-                name=f"SAJ {desc['name']} (Input)",
-                unique_id=f"{hub.name}_{desc['key']}_input",
-                min_val=desc["min"],
-                max_val=desc["max"],
-                step=desc["step"],
-                default=desc["default"],
-                unit=desc["unit"],
-                set_method_name=desc["setter"],
-                device_info=device_info,
-            )
-            entities.append(entity)
+    # Add discharge slot entities (1-7) using utility function
+    discharge_definitions = generate_slot_definitions("discharge")
+    for desc in discharge_definitions["number"]:
+        entity = SajGenericNumberEntity(
+            hub=hub,
+            name=f"SAJ {desc['name']} (Input)",
+            unique_id=f"{hub.name}_{desc['key']}_input",
+            min_val=desc["min"],
+            max_val=desc["max"],
+            step=desc["step"],
+            default=desc["default"],
+            unit=desc["unit"],
+            set_method_name=desc["setter"],
+            device_info=device_info,
+        )
+        entities.append(entity)
 
     async_add_entities(entities)
