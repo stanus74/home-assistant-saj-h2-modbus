@@ -5,6 +5,8 @@ import os
 import time
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
+import socket
+
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 from pymodbus.client import ModbusTcpClient
 
@@ -266,6 +268,10 @@ def _should_retry_modbus_error(e: Exception) -> bool:
     
     Includes ConnectionError to catch standard OS connection errors (like ConnectionResetError).
     """
+    # Treat low-level socket failures (e.g. Bad file descriptor) as retriable by default
+    if isinstance(e, (OSError, socket.error)):
+        return True
+
     return isinstance(e, (ConnectionException, ModbusIOException, ConnectionError))
 
 
@@ -293,13 +299,19 @@ async def _on_modbus_retry(
         e: The exception that triggered the retry
     """
     # Trigger reconnection for both pymodbus ConnectionException and standard ConnectionError
-    if isinstance(e, (ConnectionException, ConnectionError)):
+    if isinstance(e, (ConnectionException, ConnectionError, OSError)):
         logger.info("Connection lost during %s, attempting reconnect", operation_name)
         
         # Acquire lock to ensure we don't interfere with other tasks using the client
         async with lock:
             # Force close to ensure connected state is reset
             try:
+                if hasattr(client, "socket") and client.socket:
+                    try:
+                        fileno = client.socket.fileno()
+                    except Exception:
+                        fileno = "unknown"
+                    logger.debug("Closing Modbus socket (fd=%s) due to %s", fileno, e)
                 client.close()
             except Exception:
                 pass  # Ignore errors during close

@@ -1,13 +1,15 @@
-## [Unreleased]
+## [v2.8.2]
 
 ### New Features
 - **Duplicated Fast-Poll Entities**: Each fast-poll sensor now creates two entities:
-  - Normal entity (e.g., `sensor.saj_pvpower`): 60s updates **with** database recording
+  - Normal entity (e.g., `sensor.saj_pvpower`): normal (60s) updates **with** database recording
   - Fast variant (e.g., `sensor.saj_fast_pvpower`): 10s updates **without** database recording
   - Fast variants use `state_class = None` to prevent database flooding while maintaining live UI updates
   - Fast variants are always enabled by default, even if the normal entity is disabled
 - **Config Value Utility**: Centralized configuration value retrieval
+
   - New `utils.py` module with `get_config_value()` function
+  
   - Eliminates code duplication across `hub.py`, `__init__.py`, and `config_flow.py`
   - Single source of truth for config value retrieval (options → data → default)
 
