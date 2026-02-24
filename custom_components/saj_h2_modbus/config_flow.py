@@ -49,7 +49,7 @@ def host_valid(host):
 @callback
 def saj_modbus_entries(hass: HomeAssistant):
     """Return the hosts already configured."""
-    return {entry.data[CONF_HOST] for entry in hass.config_entries.async_entries(DOMAIN)}
+    return {get_config_value(entry, CONF_HOST) for entry in hass.config_entries.async_entries(DOMAIN)}
 
 class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """SAJ Modbus configflow."""
@@ -125,29 +125,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 merged[CONF_MQTT_HOST] = ""
 
             if not errors:
-                try:
-                    # Check if the integration is loaded before trying to update the hub
-                    if DOMAIN in self.hass.data and self.config_entry.entry_id in self.hass.data[DOMAIN]:
-                        hub = self.hass.data[DOMAIN][self.config_entry.entry_id]["hub"]
-                        await hub.update_connection_settings(
-                            merged[CONF_HOST],
-                            merged[CONF_PORT],
-                            merged.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-                            merged.get(CONF_FAST_ENABLED, False),
-                            merged.get(CONF_ULTRA_FAST_ENABLED, False),
-                            merged.get(CONF_MQTT_HOST, ""),
-                            merged.get(CONF_MQTT_PORT, 1883),
-                            merged.get(CONF_MQTT_USER, ""),
-                            merged.get(CONF_MQTT_PASSWORD, ""),
-                            merged[CONF_MQTT_TOPIC_PREFIX],
-                            merged[CONF_MQTT_PUBLISH_ALL],
-                            merged.get(CONF_USE_HA_MQTT, False),
-                        )
-                except Exception as e:
-                    _LOGGER.error("Error updating SAJ Modbus configuration: %s", e)
-                    # Do not return error form here. If the hub update fails (e.g. integration not running),
-                    # we still want to save the new configuration so it works on next reload.
-
                 return self.async_create_entry(title="", data=merged)
 
         return self.async_show_form(

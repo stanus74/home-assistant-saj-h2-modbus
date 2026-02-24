@@ -121,6 +121,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             0x3604: asyncio.Lock(),  # charging state + charge_time_enable mask
             0x3605: asyncio.Lock(),  # discharging state + discharge_time_enable mask
         }
+
+        # Read-modify-write locks for non-merge-locked registers.
+        # Important: do NOT use _write_lock as an outer lock for RMW, because
+        # _write_register()/try_write_registers() acquire _write_lock internally.
+        self._rmw_locks: Dict[int, asyncio.Lock] = {}
         
         # DEDICATED WRITE LOCK: Write operations have priority over read operations
         # This prevents write operations from waiting for read operations to complete
@@ -454,7 +459,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             )
             
             # Update Hub State
-            self.update_interval = timedelta(seconds=scan_interval)
+            new_interval = timedelta(seconds=int(scan_interval))
+            if self.update_interval != new_interval:
+                old_seconds = None
+                try:
+                    old_seconds = int(self.update_interval.total_seconds()) if self.update_interval else None
+                except Exception:
+                    old_seconds = None
+
+                self.update_interval = new_interval
+                _LOGGER.info("Updating scan interval: %s -> %ss", old_seconds, int(scan_interval))
+
+                # DataUpdateCoordinator does not guarantee automatic rescheduling when
+                # update_interval changes. Reschedule explicitly so Options changes take effect.
+                try:
+                    unsub = getattr(self, "_unsub_refresh", None)
+                    if unsub:
+                        unsub()
+                    schedule = getattr(self, "_schedule_refresh", None)
+                    if callable(schedule):
+                        schedule()
+                except Exception as e:
+                    _LOGGER.debug("Failed to reschedule coordinator after interval change: %s", e)
             
             self.fast_enabled = fast_enabled
             self.ultra_fast_enabled = ultra_fast_enabled
@@ -466,6 +492,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # Start loops independently based on flags
             if self.fast_enabled or self.ultra_fast_enabled:
                 await self.start_fast_updates()
+
+            # Apply config changes immediately (and prime next refresh scheduling)
+            await self.async_request_refresh()
 
         finally:
             self.updating_settings = False
@@ -542,7 +571,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         label: str = "merge write",
     ) -> tuple[bool, int]:
         """Read-modify-write with per-register lock to preserve shared bits."""
-        lock = self._merge_locks.get(address, self._write_lock)
+        lock = self._merge_locks.get(address)
+        if lock is None:
+            lock = self._rmw_locks.setdefault(address, asyncio.Lock())
         async with lock:
             current_regs = await self._read_registers(address, 1)
             if not current_regs:

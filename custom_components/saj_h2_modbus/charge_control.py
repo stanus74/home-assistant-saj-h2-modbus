@@ -303,18 +303,13 @@ class ChargeSettingHandler:
     async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str) -> None:
         """Ensures the time_enable bit is set for the given slot."""
         enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
-        
-        if enable_def["address"] in (0x3604, 0x3605):
-            addr = enable_def["address"]
-            def modifier(cur: int) -> int:
-                # Simple bitmask logic: Set the bit for this slot index
-                return cur | (1 << index)
-            success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
-        else:
-            def modifier(current_mask):
-                return current_mask | (1 << index)
 
-            success, new_mask = await self._modify_register(enable_def["address"], modifier, f"{label} time_enable")
+        addr = enable_def["address"]
+
+        def modifier(cur: int) -> int:
+            return cur | (1 << index)
+
+        success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
         if success:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
@@ -513,6 +508,7 @@ class ChargeSettingHandler:
 
         # Aufrufen
         await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
+
     async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
         """Write register with exponential backoff retry."""
         for attempt in range(1, MAX_HANDLER_RETRIES + 1):
@@ -531,14 +527,6 @@ class ChargeSettingHandler:
                 await asyncio.sleep(2 ** (attempt - 1))
         return False
 
-    async def _modify_register(self, address: int, modifier: Callable[[int], int], label: str) -> Tuple[bool, int]:
-        """Generic read-modify-write. Returns (success, new_value)."""
-        try:
-            return await self.hub.merge_write_register(address, modifier, label)
-        except Exception as e:
-            _LOGGER.error("Error modifying %s: %s", label, e)
-            return False, 0
-
     async def _update_day_mask_and_power(self, address: int, day_mask: Optional[int], power_percent: Optional[int], label: str) -> None:
         """Updates the day mask and power percentage using generic modifier."""
         def modifier(current_value):
@@ -556,7 +544,7 @@ class ChargeSettingHandler:
 
             return (new_day_mask << 8) | new_power_percent
 
-        success, new_value = await self._modify_register(address, modifier, f"{label} day_mask_power")
+        success, new_value = await self.hub.merge_write_register(address, modifier, f"{label} day_mask_power")
         if success:
             # Update cache
             self._update_cache({

@@ -6,11 +6,17 @@
   - [`custom_components/saj_h2_modbus/sensor.py`](custom_components/saj_h2_modbus/sensor.py)
 - **Pending State Cleanup**: Normalized pending flag cleanup for passive mode paths.
   - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Options Interval Apply**: Reschedule coordinator when `scan_interval` changes so options take effect immediately.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+- **RMW Locking**: `merge_write_register()` uses per-address locks for non-merge registers to avoid lock re-entry/deadlocks.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
 
 ### Changed
 - **Register RMW Consolidation**: Unified read-modify-write path via hub merge write to reduce duplication.
   - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
 - **Options Flow Simplification**: Removed direct entry data updates in options flow to avoid double-apply behavior.
+  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+- **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
 
 ## [v2.8.2]
