@@ -18,13 +18,7 @@
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
 - **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
-- **Code Cleanup**: Removed unused variables and standardized mixed German/English comments and MQTT warnings.
-  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
-  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
-  - [`custom_components/saj_h2_modbus/services.py`](custom_components/saj_h2_modbus/services.py)
-  - [`custom_components/saj_h2_modbus/modbus_utils.py`](custom_components/saj_h2_modbus/modbus_utils.py)
-  - [`custom_components/saj_h2_modbus/modbus_readers.py`](custom_components/saj_h2_modbus/modbus_readers.py)
-  - [`custom_components/saj_h2_modbus/__init__.py`](custom_components/saj_h2_modbus/__init__.py)
+
 
 ## [v2.8.2]
 
