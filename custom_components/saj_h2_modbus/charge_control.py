@@ -436,6 +436,12 @@ class ChargeSettingHandler:
 
     def _clear_pending_state(self, state_type: str) -> None:
         """Clear pending state for the given type."""
+        if state_type in ("charging", "discharging", "passive_mode"):
+            setattr(self.hub, f"_pending_{state_type}_state", None)
+            return
+        if state_type == "passive_charge_enable":
+            setattr(self.hub, "_pending_passive_mode_state", None)
+            return
         setattr(self.hub, f"_pending_{state_type}_state", None)
 
     # ========== HELPER METHODS ==========

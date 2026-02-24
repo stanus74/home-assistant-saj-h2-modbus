@@ -148,15 +148,25 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     def _handle_fast_update(self) -> None:
         """Handle fast update notification (10s interval)."""
         # Prevent processing if the entity has been removed or is disabled
-        if self._is_removed or not self.enabled:
-            _LOGGER.debug("Skipping fast update for %s (removed=%s, enabled=%s)", self._attr_name, self._is_removed, self.enabled)
+        is_enabled = True
+        if self.registry_entry is not None:
+            is_enabled = not self.registry_entry.disabled
+
+        if self._is_removed or not is_enabled:
+            _LOGGER.debug(
+                "Skipping fast update for %s (removed=%s, enabled=%s)",
+                self._attr_name,
+                self._is_removed,
+                is_enabled,
+            )
             return
 
         # This is ONLY called for sensors registered in FAST_POLL_SENSORS
         new_value = self._hub.inverter_data.get(self.entity_description.key)
 
         # Update if value changed OR force_update is enabled
-        if new_value != self._last_value or self.force_update:
+        force_update = bool(self._attr_force_update)
+        if new_value != self._last_value or force_update:
             self._last_value = new_value
             self.async_write_ha_state()
 
