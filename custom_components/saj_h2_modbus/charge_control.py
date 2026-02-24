@@ -534,17 +534,7 @@ class ChargeSettingHandler:
     async def _modify_register(self, address: int, modifier: Callable[[int], int], label: str) -> Tuple[bool, int]:
         """Generic read-modify-write. Returns (success, new_value)."""
         try:
-            regs = await self.hub._read_registers(address, 1)
-            if not regs:
-                return False, 0
-            
-            current_val = regs[0]
-            new_val = modifier(current_val)
-            
-            if new_val != current_val:
-                success = await self._write_register_with_backoff(address, new_val, label)
-                return success, new_val
-            return True, current_val # No change needed
+            return await self.hub.merge_write_register(address, modifier, label)
         except Exception as e:
             _LOGGER.error("Error modifying %s: %s", label, e)
             return False, 0

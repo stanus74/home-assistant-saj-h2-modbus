@@ -148,26 +148,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                     # Do not return error form here. If the hub update fails (e.g. integration not running),
                     # we still want to save the new configuration so it works on next reload.
 
-                updated_data = dict(self.config_entry.data)
-                for key in (
-                    CONF_HOST,
-                    CONF_PORT,
-                    CONF_SCAN_INTERVAL,
-                    CONF_FAST_ENABLED,
-                    CONF_ULTRA_FAST_ENABLED,
-                    CONF_MQTT_HOST,
-                    CONF_MQTT_PORT,
-                    CONF_MQTT_USER,
-                    CONF_MQTT_PASSWORD,
-                    CONF_MQTT_TOPIC_PREFIX,
-                    CONF_MQTT_PUBLISH_ALL,
-                    CONF_USE_HA_MQTT,
-                ):
-                    if key == CONF_MQTT_TOPIC_PREFIX:
-                        updated_data[key] = merged[CONF_MQTT_TOPIC_PREFIX] or updated_data.get(key, "saj")
-                    elif key in merged:
-                        updated_data[key] = merged[key]
-                self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
                 return self.async_create_entry(title="", data=merged)
 
         return self.async_show_form(

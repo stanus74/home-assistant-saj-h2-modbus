@@ -1,3 +1,18 @@
+## [Unreleased]
+
+### Fixed
+- **Runtime Safety**: Removed unsafe import-time type annotation and made fast-poll sensor updates HA-compatible.
+  - [`custom_components/saj_h2_modbus/__init__.py`](custom_components/saj_h2_modbus/__init__.py)
+  - [`custom_components/saj_h2_modbus/sensor.py`](custom_components/saj_h2_modbus/sensor.py)
+- **Pending State Cleanup**: Normalized pending flag cleanup for passive mode paths.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+
+### Changed
+- **Register RMW Consolidation**: Unified read-modify-write path via hub merge write to reduce duplication.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Options Flow Simplification**: Removed direct entry data updates in options flow to avoid double-apply behavior.
+  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+
 ## [v2.8.2]
 
 ### New Features
@@ -205,4 +220,3 @@ Go to *Apps → Home Assistant → Storage → Clear Cache and Data*.
   - `switch.py`: `is_on` property now checks BOTH registers (discharging_enabled > 0 AND AppMode == 1)
   - Removed blocking `asyncio.run_coroutine_threadsafe()` calls → Reads directly from cache (synchronous, fast)
   - No more "took 1.001 seconds" warnings
-
