@@ -15,15 +15,15 @@ from .const import Lock
 
 _LOGGER = logging.getLogger(__name__)
 
-# Set to True to enable detailed Modbus read attempt logging, False to disable
-# Entweder hier per DEBUG_READ_DEFAULT auf True setzen oder per Env `SAJ_DEBUG_MODBUS_READ=1`
+# Set to True to enable detailed Modbus read attempt logging, False to disable.
+# Either set DEBUG_READ_DEFAULT=True or use env `SAJ_DEBUG_MODBUS_READ=1`.
 DEBUG_READ_DEFAULT = False
 ENABLE_DETAILED_MODBUS_READ_LOGGING = (
     os.getenv("SAJ_DEBUG_MODBUS_READ", "0") == "1" or DEBUG_READ_DEFAULT
 )
 
-# Toggle für detailliertes Write-Logging
-# Entweder hier direkt auf True setzen oder per Env `SAJ_DEBUG_MODBUS_WRITE=1`
+# Toggle detailed Modbus write logging.
+# Either set DEBUG_WRITE_DEFAULT=True or use env `SAJ_DEBUG_MODBUS_WRITE=1`.
 DEBUG_WRITE_DEFAULT = False
 ENABLE_DETAILED_MODBUS_WRITE_LOGGING = (
     os.getenv("SAJ_DEBUG_MODBUS_WRITE", "0") == "1" or DEBUG_WRITE_DEFAULT

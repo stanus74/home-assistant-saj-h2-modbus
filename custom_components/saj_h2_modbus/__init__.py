@@ -119,7 +119,7 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
 
         hub = SAJModbusHub(
             hass,
-            entry,  # <-- Das gesamte ConfigEntry-Objekt übergeben
+            entry,  # Pass the full ConfigEntry object
         )
         hub.fast_enabled = fast_enabled
         

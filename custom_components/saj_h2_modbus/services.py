@@ -253,8 +253,10 @@ class MqttPublisher:
                 self._log_strategy(new_strategy, "MQTT Strategy Selected: Forced Home Assistant MQTT (use_ha_mqtt enabled)", "MQTT Strategy remains HA (use_ha_mqtt enabled)")
                 self.strategy = new_strategy
                 return
-            _LOGGER.warning("MQTT Strategy fallback: use_ha_mqtt aktiviert, aber HA MQTT Integration nicht geladen")
-            # Host leeren, damit wir nicht zurück auf Paho fallen
+            _LOGGER.warning(
+                "MQTT strategy fallback: use_ha_mqtt is enabled, but HA MQTT integration is not loaded"
+            )
+            # Clear host so we do not fall back to Paho
             self.host = ""
             clean_host = ""
 
@@ -268,8 +270,8 @@ class MqttPublisher:
         if self.host:
             if not PAHO_AVAILABLE:
                 _LOGGER.warning(
-                    "MQTT Strategy fallback: Host configured (%s) but paho-mqtt ist nicht installiert. "
-                    "Falle zurück auf HA-MQTT (falls vorhanden) oder deaktiviert.",
+                    "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
+                    "Falling back to HA MQTT (if available) or disabling MQTT.",
                     self.host,
                 )
             else:

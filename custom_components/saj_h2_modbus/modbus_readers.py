@@ -32,7 +32,7 @@ def _log_partial_errors(data_key: str, errors: List[str], log_level_on_error: in
     )
 
 # --- Static Decoding Maps ---
-# (Maps bleiben unverändert, um Platz zu sparen - sie sind korrekt)
+# (Maps are kept as-is; omitted here to save space.)
 
 REALTIME_DATA_MAP = [
     ("mpvmode", None), ("faultMsg0", "32u"), ("faultMsg1", "32u"),

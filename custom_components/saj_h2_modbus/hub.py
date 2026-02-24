@@ -142,7 +142,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_fast_start_cancel: Optional[Callable] = None
         self._pending_ultra_fast_start_cancel: Optional[Callable] = None
         self._fast_listeners: List[Callable] = []
-        self._fast_debug_log_next = 0.0
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
 
         self._inverter_static_data: Optional[Dict[str, Any]] = None

@@ -25,7 +25,6 @@ DEFAULT_POWER_PERCENT = 10
 
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
-HANDLER_RETRY_DELAY = 1.0  # seconds
 
 # --- Definitions for Pending Setter (Restored for compatibility) ---
 PENDING_FIELDS: List[tuple[str, str]] = (
@@ -488,15 +487,15 @@ class ChargeSettingHandler:
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
         """Update AppMode based on current charge/discharge states."""
-        
-        # Prüfen, ob Passive Mode aktiv ist
+
+        # Determine whether Passive Mode is active
         passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
-        
-        # Logik für AppMode:
-        # 3 = Passive (Priority 1)
-        # 1 = Force Charge/Discharge (Priority 2)
-        # 0 = Self Consumption (Priority 3)
-        
+
+        # AppMode logic:
+        # 3 = Passive (priority 1)
+        # 1 = Force Charge/Discharge (priority 2)
+        # 0 = Self Consumption (priority 3)
+
         desired_app_mode = 0  # Default
         
         if passive_active:
@@ -506,7 +505,7 @@ class ChargeSettingHandler:
         else:
             desired_app_mode = 0
 
-        # Aufrufen
+        # Apply
         await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
 
     async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
