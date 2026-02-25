@@ -577,54 +577,73 @@ def _decode_time_power_slots(data: DataDict, prefix: str, slots: int = 7) -> Non
             data[f"{prefix}{p}_power_percent"] = raw & 0xFF
 
 
+async def _read_schedule_data(
+    client: ModbusTcpClient,
+    lock: Lock,
+    *,
+    address: int,
+    count: int,
+    decode_map: List[tuple],
+    data_key: str,
+    prefix: str,
+    include_enable_flags: bool,
+) -> DataDict:
+    """Read schedule data and decode time/power slots."""
+    data, errors = await _read_modbus_data(
+        client,
+        lock,
+        address,
+        count,
+        decode_map,
+        data_key,
+        default_factor=1,
+    )
+    _log_partial_errors(data_key, errors, logging.ERROR)
+    if not data:
+        return {}
+    try:
+        _decode_time_power_slots(data, prefix)
+        if include_enable_flags:
+            # NOTE: These flags only reflect the bitmask (at least one slot planned).
+            # Whether charging is actually active depends on AppMode == 1.
+            data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
+            data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
+    except Exception as e:
+        _LOGGER.error("Error processing %s data: %s", data_key, e)
+        return {}
+    return data
+
+
 # ============================================================================
 # CHARGE AND DISCHARGE DATA READING
 # ============================================================================
 
 async def read_charge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads charge schedule data and decodes time/power slots."""
-    data, errors = await _read_modbus_data(
+    return await _read_schedule_data(
         client,
         lock,
-        0x3604,
-        23,
-        CHARGE_DATA_MAP,
-        "charge_data_extended",
-        default_factor=1,
+        address=0x3604,
+        count=23,
+        decode_map=CHARGE_DATA_MAP,
+        data_key="charge_data_extended",
+        prefix="charge",
+        include_enable_flags=True,
     )
-    _log_partial_errors("charge_data_extended", errors, logging.ERROR)
-    if data:
-        try:
-            _decode_time_power_slots(data, "charge")
-            # NOTE: These flags only reflect the bitmask (at least one slot planned).
-            # Whether charging is actually active depends on AppMode == 1.
-            data["charging_enabled"] = data.get("charge_time_enable", 0) > 0
-            data["discharging_enabled"] = data.get("discharge_time_enable", 0) > 0
-        except Exception as e:
-            _LOGGER.error("Error processing Charge data: %s", e)
-            return {}
-    return data
 
 
 async def read_discharge_data(client: ModbusTcpClient, lock: Lock) -> DataDict:
     """Reads discharge schedule data and decodes time/power slots."""
-    data, errors = await _read_modbus_data(
+    return await _read_schedule_data(
         client,
         lock,
-        0x361B,
-        21,
-        DISCHARGE_DATA_MAP,
-        "discharge_data",
-        default_factor=1,
+        address=0x361B,
+        count=21,
+        decode_map=DISCHARGE_DATA_MAP,
+        data_key="discharge_data",
+        prefix="discharge",
+        include_enable_flags=False,
     )
-    _log_partial_errors("discharge_data", errors, logging.ERROR)
-    if not data: return {}
-    try:
-        _decode_time_power_slots(data, "discharge")
-    except Exception as e:
-        _LOGGER.error("Error processing discharge data: %s", e)
-        return {}
-    return data
 
 
 # ============================================================================

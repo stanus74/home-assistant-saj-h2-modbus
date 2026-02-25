@@ -14,6 +14,10 @@
 ### Changed
 - **Register RMW Consolidation**: Unified read-modify-write path via hub merge write to reduce duplication.
   - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Charge Control Helpers**: Centralized integer coercion and write+cache flow for schedule and setting updates.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Schedule Readers**: Unified charge/discharge schedule decoding into a shared helper.
+  - [`custom_components/saj_h2_modbus/modbus_readers.py`](custom_components/saj_h2_modbus/modbus_readers.py)
 - **Options Flow Simplification**: Removed direct entry data updates in options flow to avoid double-apply behavior.
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
 - **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
