@@ -5,7 +5,7 @@ To avoid inconsistent system states caused by using the **InverterCard simultane
 
 ### 🔁 Cache Notice – Required After Updating the InverterCard:
 
-##### 📱 **For Home Assistant App Users (Smartphones):**
+### 📱 **For Home Assistant App Users (Smartphones):**
 
 The app uses an internal browser engine that caches JavaScript files.
 ➡️ You **must clear the app’s data and cache** via your **phone settings**:
