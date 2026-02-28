@@ -52,6 +52,7 @@ FAST_POLL_SENSORS = {
     "directionGrid", "directionOutput", "CT_GridPowerWatt",
     "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA", "totalgridPowerVA",
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
+    "pv1Power", "pv2Power",
 }
 
 CRITICAL_READER_GROUPS = {1, 2}
@@ -376,12 +377,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
             # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
             try:
-                result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                if ultra:
+                    result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                else:
+                    part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
+                    part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                    result = {**part_1, **part_2}
             except Exception as e:
                 _LOGGER.debug("Ultra-fast poll failed, attempting one retry: %s", e)
                 try:
                     # Immediate retry once
-                    result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                    if ultra:
+                        result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                    else:
+                        part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
+                        part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                        result = {**part_1, **part_2}
                 except Exception as retry_e:
                     # If retry also fails, skip the update cycle
                     _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
