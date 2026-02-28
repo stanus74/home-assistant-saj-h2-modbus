@@ -65,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Perform hub-specific unload first (stops fast coordinator, closes client)
-    hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
+    hub = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
     if hub is not None:
         try:
             await hub.async_unload_entry()
@@ -119,7 +119,7 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
 
         hub = SAJModbusHub(
             hass,
-            entry,  # <-- Das gesamte ConfigEntry-Objekt übergeben
+            entry,  # Pass the full ConfigEntry object
         )
         hub.fast_enabled = fast_enabled
         

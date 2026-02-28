@@ -1,3 +1,31 @@
+## [v2.8.3]
+
+### Fixed
+- **Runtime Safety**: Removed unsafe import-time type annotation and made fast-poll sensor updates HA-compatible.
+  - [`custom_components/saj_h2_modbus/__init__.py`](custom_components/saj_h2_modbus/__init__.py)
+  - [`custom_components/saj_h2_modbus/sensor.py`](custom_components/saj_h2_modbus/sensor.py)
+- **Pending State Cleanup**: Normalized pending flag cleanup for passive mode paths.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Options Interval Apply**: Reschedule coordinator when `scan_interval` changes so options take effect immediately.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+- **RMW Locking**: `merge_write_register()` uses per-address locks for non-merge registers to avoid lock re-entry/deadlocks.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+
+### Changed
+- **Register RMW Consolidation**: Unified read-modify-write path via hub merge write to reduce duplication.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Charge Control Helpers**: Centralized integer coercion and write+cache flow for schedule and setting updates.
+  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+- **Schedule Readers**: Unified charge/discharge schedule decoding into a shared helper.
+  - [`custom_components/saj_h2_modbus/modbus_readers.py`](custom_components/saj_h2_modbus/modbus_readers.py)
+- **Options Flow Simplification**: Removed direct entry data updates in options flow to avoid double-apply behavior.
+  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+- **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
+  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+- **Fast Poll Coverage**: Added `pv1Power`/`pv2Power` to 10s fast polling and included part 1 data in the fast loop.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+
+
 ## [v2.8.2]
 
 ### New Features
@@ -205,4 +233,3 @@ Go to *Apps → Home Assistant → Storage → Clear Cache and Data*.
   - `switch.py`: `is_on` property now checks BOTH registers (discharging_enabled > 0 AND AppMode == 1)
   - Removed blocking `asyncio.run_coroutine_threadsafe()` calls → Reads directly from cache (synchronous, fast)
   - No more "took 1.001 seconds" warnings
-

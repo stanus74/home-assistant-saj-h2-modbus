@@ -25,7 +25,6 @@ DEFAULT_POWER_PERCENT = 10
 
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
-HANDLER_RETRY_DELAY = 1.0  # seconds
 
 # --- Definitions for Pending Setter (Restored for compatibility) ---
 PENDING_FIELDS: List[tuple[str, str]] = (
@@ -218,6 +217,10 @@ class ChargeSettingHandler:
     async def _handle_simple_setting(self, payload: dict) -> None:
         key = payload.get("key")
         value = payload.get("value")
+
+        if not isinstance(key, str):
+            _LOGGER.error("Invalid simple setting key: %s", key)
+            return
         
         setting_def = MODBUS_ADDRESSES["simple_settings"].get(key)
         if not setting_def:
@@ -232,11 +235,10 @@ class ChargeSettingHandler:
 
         # charge_time_enable / discharge_time_enable are pure bitmasks (Bit 0-6 = Slot 1-7)
         if key in ("charge_time_enable", "discharge_time_enable"):
-            try:
-                mask_bits = int(value) & 0x7F  # Bits 0-6 = Slots 1-7
-            except (TypeError, ValueError):
-                _LOGGER.error("Invalid value for %s: %s", key, value)
+            mask_bits = self._coerce_int(value, key)
+            if mask_bits is None:
                 return
+            mask_bits &= 0x7F  # Bits 0-6 = Slots 1-7
 
             addr = setting_def["address"]
 
@@ -255,15 +257,17 @@ class ChargeSettingHandler:
                 self._update_cache(updates)
             return
 
-        try:
-            int_value = int(value)
-        except (ValueError, TypeError):
-            _LOGGER.error("Invalid value for %s: %s", key, value)
+        int_value = self._coerce_int(value, key)
+        if int_value is None:
             return
 
         # Write and update cache immediately
-        if await self._write_register_with_backoff(setting_def["address"], int_value, setting_def["label"]):
-            self._update_cache({key: int_value})
+        await self._write_and_cache(
+            setting_def["address"],
+            int_value,
+            setting_def["label"],
+            {key: int_value},
+        )
 
     async def _handle_slot_setting(self, mode_type: str, payload: dict) -> None:
         """Handles settings for a specific slot (charge/discharge)."""
@@ -281,9 +285,12 @@ class ChargeSettingHandler:
         if field in ["start", "end"]:
             reg_val = self._parse_time_to_register(value)
             if reg_val is not None:
-                if await self._write_register_with_backoff(slot_defs[field], reg_val, f"{label} {field}"):
-                    # Update cache
-                    self._update_cache({f"{label}_{field}": value})
+                await self._write_and_cache(
+                    slot_defs[field],
+                    reg_val,
+                    f"{label} {field}",
+                    {f"{label}_{field}": value},
+                )
             else:
                 _LOGGER.error("Invalid time format for %s %s: %s", label, field, value)
         
@@ -303,18 +310,13 @@ class ChargeSettingHandler:
     async def _ensure_slot_enabled(self, mode_type: str, index: int, label: str) -> None:
         """Ensures the time_enable bit is set for the given slot."""
         enable_def = MODBUS_ADDRESSES["time_enables"][mode_type]
-        
-        if enable_def["address"] in (0x3604, 0x3605):
-            addr = enable_def["address"]
-            def modifier(cur: int) -> int:
-                # Simple bitmask logic: Set the bit for this slot index
-                return cur | (1 << index)
-            success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
-        else:
-            def modifier(current_mask):
-                return current_mask | (1 << index)
 
-            success, new_mask = await self._modify_register(enable_def["address"], modifier, f"{label} time_enable")
+        addr = enable_def["address"]
+
+        def modifier(cur: int) -> int:
+            return cur | (1 << index)
+
+        success, new_mask = await self.hub.merge_write_register(addr, modifier, f"{label} time_enable")
         if success:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
@@ -365,7 +367,9 @@ class ChargeSettingHandler:
     async def _handle_passive_mode(self, value: Optional[int]) -> None:
         if value is None:
             return
-        desired_int = int(value)
+        desired_int = self._coerce_int(value, "passive_charge_enable")
+        if desired_int is None:
+            return
         
         addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
         try:
@@ -399,7 +403,7 @@ class ChargeSettingHandler:
             await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg, force=True)
         self._app_mode_before_passive = None
 
-    async def _handle_simple_passive_charge(self, value: int) -> None:
+    async def _handle_simple_passive_charge(self, value: Any) -> None:
         """Handle passive_charge_enable via number entity - NO AppMode change.
 
         This method only writes to register 0x3636 without changing AppMode.
@@ -409,19 +413,21 @@ class ChargeSettingHandler:
         Args:
             value: The desired value (0=Standby, 1=Discharge, 2=Charge)
         """
-        if value is None:
+        desired_int = self._coerce_int(value, "passive_charge_enable")
+        if desired_int is None:
             return
-
-        desired_int = int(value)
         addr = MODBUS_ADDRESSES["simple_settings"]["passive_charge_enable"]["address"]
 
         try:
-            if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
-                # Update cache immediately
-                self._update_cache({"passive_charge_enable": desired_int})
+            if await self._write_and_cache(
+                addr,
+                desired_int,
+                "passive charge enable",
+                {"passive_charge_enable": desired_int},
+            ):
                 _LOGGER.debug(
                     "Passive charge enable set to %s (no AppMode change)",
-                    desired_int
+                    desired_int,
                 )
         finally:
             self._clear_pending_state("passive_charge_enable")
@@ -436,6 +442,12 @@ class ChargeSettingHandler:
 
     def _clear_pending_state(self, state_type: str) -> None:
         """Clear pending state for the given type."""
+        if state_type in ("charging", "discharging", "passive_mode"):
+            setattr(self.hub, f"_pending_{state_type}_state", None)
+            return
+        if state_type == "passive_charge_enable":
+            setattr(self.hub, "_pending_passive_mode_state", None)
+            return
         setattr(self.hub, f"_pending_{state_type}_state", None)
 
     # ========== HELPER METHODS ==========
@@ -445,7 +457,28 @@ class ChargeSettingHandler:
         self.hub.inverter_data.update(updates)
         self.hub.async_set_updated_data(self.hub.inverter_data)
 
-    def _parse_time_to_register(self, time_str: str) -> Optional[int]:
+    def _coerce_int(self, value: Any, key: str) -> Optional[int]:
+        """Convert value to int with consistent logging on failure."""
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            _LOGGER.error("Invalid value for %s: %s", key, value)
+            return None
+
+    async def _write_and_cache(
+        self,
+        address: int,
+        value: int,
+        label: str,
+        updates: Dict[str, Any],
+    ) -> bool:
+        """Write a register and update cache on success."""
+        if await self._write_register_with_backoff(address, value, label):
+            self._update_cache(updates)
+            return True
+        return False
+
+    def _parse_time_to_register(self, time_str: Any) -> Optional[int]:
         """Validates and converts time string HH:MM to register value."""
         if not isinstance(time_str, str):
             _LOGGER.debug("Invalid time format: not a string: %s", time_str)
@@ -487,15 +520,15 @@ class ChargeSettingHandler:
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
         """Update AppMode based on current charge/discharge states."""
-        
-        # Prüfen, ob Passive Mode aktiv ist
+
+        # Determine whether Passive Mode is active
         passive_active = int(self.hub.inverter_data.get("passive_charge_enable", 0)) > 0
-        
-        # Logik für AppMode:
-        # 3 = Passive (Priority 1)
-        # 1 = Force Charge/Discharge (Priority 2)
-        # 0 = Self Consumption (Priority 3)
-        
+
+        # AppMode logic:
+        # 3 = Passive (priority 1)
+        # 1 = Force Charge/Discharge (priority 2)
+        # 0 = Self Consumption (priority 3)
+
         desired_app_mode = 0  # Default
         
         if passive_active:
@@ -505,8 +538,9 @@ class ChargeSettingHandler:
         else:
             desired_app_mode = 0
 
-        # Aufrufen
+        # Apply
         await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
+
     async def _write_register_with_backoff(self, address: int, value: int, label: str = "register") -> bool:
         """Write register with exponential backoff retry."""
         for attempt in range(1, MAX_HANDLER_RETRIES + 1):
@@ -525,24 +559,6 @@ class ChargeSettingHandler:
                 await asyncio.sleep(2 ** (attempt - 1))
         return False
 
-    async def _modify_register(self, address: int, modifier: Callable[[int], int], label: str) -> Tuple[bool, int]:
-        """Generic read-modify-write. Returns (success, new_value)."""
-        try:
-            regs = await self.hub._read_registers(address, 1)
-            if not regs:
-                return False, 0
-            
-            current_val = regs[0]
-            new_val = modifier(current_val)
-            
-            if new_val != current_val:
-                success = await self._write_register_with_backoff(address, new_val, label)
-                return success, new_val
-            return True, current_val # No change needed
-        except Exception as e:
-            _LOGGER.error("Error modifying %s: %s", label, e)
-            return False, 0
-
     async def _update_day_mask_and_power(self, address: int, day_mask: Optional[int], power_percent: Optional[int], label: str) -> None:
         """Updates the day mask and power percentage using generic modifier."""
         def modifier(current_value):
@@ -560,7 +576,7 @@ class ChargeSettingHandler:
 
             return (new_day_mask << 8) | new_power_percent
 
-        success, new_value = await self._modify_register(address, modifier, f"{label} day_mask_power")
+        success, new_value = await self.hub.merge_write_register(address, modifier, f"{label} day_mask_power")
         if success:
             # Update cache
             self._update_cache({
