@@ -16,12 +16,6 @@
 5.  **Connection caching** in `ModbusConnectionManager` (60s TTL).
 6.  **Parallel Execution**: Non-critical reader groups use independent locks, allowing `asyncio.gather` to execute Modbus requests concurrently where possible.
 
-**Recent Major Fixes (v2.8.x):**
-- ✅ **Slot Logic**: All charge/discharge slots (1-7) use a unified 7-bit mask in registers 0x3604/0x3605.
-- ✅ **Data Integrity**: `_read_modbus_data()` returns `(data, errors)` tuple, preventing total data loss on partial read failures.
-- ✅ **Write Guard**: Direct writes to 0x3604/0x3605 are blocked; use `merge_write_register()` to preserve shared bits.
-- ✅ **Lifecycle**: Fast listeners unregister cleanly; Charge queue drains on unload.
-- ✅ **AppMode**: Switches validate `AppMode == 1` for active charging/discharging state.
 
 ## Project Overview
 
@@ -270,44 +264,5 @@ export SAJ_DEBUG_MODBUS_WRITE=1
 - Check MQTT topic format: `{prefix}/inverter/{field_name}`
 - Verify register addresses are correct (firmware versions may differ)
 
-## Critical Gotchas
 
-**DO:**
-- ✅ Use `_merge_locks` for 0x3604/0x3605.
-- ✅ Check `PENDING_FIELDS` when modifying charge control entity names.
-- ✅ Ensure `AppMode` is handled when changing power states (Active=1, Passive=3).
-- ✅ Write `0` to 0x3604/0x3605 when disabling functionality to clear all slots.
 
-**DON'T:**
-- ❌ Block the event loop with synchronous Modbus calls (use executor).
-- ❌ Swallow `ReconnectionNeededError`.
-- ❌ Direct write to 0x3604/0x3605 without merge logic.
-
-## Known Issues
-
-1.  **Naming**: Some entities use camelCase instead of snake_case (legacy).
-2.  **Tests**: No automated test suite.
-3.  **Slot Logic**: Only 7 slots supported (firmware limit).
-4.  **Entity Optimization**: Rollback on write failure is not fully implemented (relies on next poll).
-
-## Reference Commands
-
-```bash
-# View integration logs (HA CLI)
-ha logs follow | grep saj_h2_modbus
-
-# Reload integration after code changes
-# (in HA Developer Tools -> Services -> Reload integration)
-```
-
-## Important Notes for AI Agents
-
-1.  **Always verify lock usage** - wrong lock causes race conditions or polling delays.
-2.  **Configuration-driven architecture** - favor adding entries to `_DATA_READ_CONFIG`.
-3.  **Test optimistic updates** - UI should reflect changes instantly.
-4.  **Register addresses are reverse-engineered**.
-5.  **Check PENDING_FIELDS mismatch first** if charge entities don't sync.
-6.  **Register 0x3604/0x3605 are slot masks**. Writing `0` clears all slots.
-7.  **Queue cleanup critical** - ensure `ChargeSettingHandler` is shutdown properly.
-8.  **ReconnectionNeededError bubbles up** - never swallow this exception.
-9.  **AppMode 3 is Passive Mode** - requires special handling in switches.
