@@ -1,4 +1,4 @@
-## [Unreleased]
+## [v2.8.3]
 
 ### Fixed
 - **Runtime Safety**: Removed unsafe import-time type annotation and made fast-poll sensor updates HA-compatible.
@@ -22,6 +22,8 @@
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
 - **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
   - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+- **Fast Poll Coverage**: Added `pv1Power`/`pv2Power` to 10s fast polling and included part 1 data in the fast loop.
+  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
 
 
 ## [v2.8.2]
