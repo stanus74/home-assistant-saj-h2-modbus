@@ -1,6 +1,8 @@
 from __future__ import annotations
 """SAJ Modbus Hub with optimized processing and fixed interval system."""
 import asyncio
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
@@ -56,6 +58,15 @@ FAST_POLL_SENSORS = {
 }
 
 CRITICAL_READER_GROUPS = {1, 2}
+
+_LOCK_ORDER = {
+    "merge": 0,
+    "slow": 1,
+    "fast": 1,
+    "ultra_fast": 1,
+    "write": 2,
+}
+_LOCK_STACK: ContextVar[tuple[str, ...]] = ContextVar("saj_lock_stack", default=())
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -547,6 +558,25 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         await self.connection.close()
         self._fast_listeners.clear()
 
+    @asynccontextmanager
+    async def _lock_order_guard(self, name: str):
+        """Track lock ordering to detect potential deadlocks in nested paths."""
+        stack = _LOCK_STACK.get()
+        if stack:
+            prev = stack[-1]
+            if _LOCK_ORDER.get(name, 99) < _LOCK_ORDER.get(prev, 99):
+                _LOGGER.warning(
+                    "Lock order warning: acquiring %s after %s (stack=%s)",
+                    name,
+                    prev,
+                    "->".join(stack),
+                )
+        token = _LOCK_STACK.set((*stack, name))
+        try:
+            yield
+        finally:
+            _LOCK_STACK.reset(token)
+
     # --- HELPERS ---
     
     async def _write_register(self, address: int, value: int, *, allow_merge_locked: bool = False) -> bool:
@@ -564,10 +594,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._write_in_progress = True
         self._write_done.clear()
         try:
-            client = await self.connection.get_client()
-            return await try_write_registers(
-                client, self._write_lock, 1, address, value
-            )
+            async with self._lock_order_guard("write"):
+                client = await self.connection.get_client()
+                return await try_write_registers(
+                    client, self._write_lock, 1, address, value
+                )
         finally:
             self._write_in_progress = False
             self._write_done.set()
@@ -584,10 +615,11 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Wait for any pending write operation
         await self._write_done.wait()
         
-        client = await self.connection.get_client()
-        return await try_read_registers(
-            client, self._slow_lock, 1, address, count
-        )
+        async with self._lock_order_guard("slow"):
+            client = await self.connection.get_client()
+            return await try_read_registers(
+                client, self._slow_lock, 1, address, count
+            )
 
     async def merge_write_register(
         self,
@@ -596,19 +628,20 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         label: str = "merge write",
     ) -> tuple[bool, int]:
         """Read-modify-write with per-register lock to preserve shared bits."""
-        lock = self._merge_locks.get(address)
-        if lock is None:
-            lock = self._rmw_locks.setdefault(address, asyncio.Lock())
-        async with lock:
-            current_regs = await self._read_registers(address, 1)
-            if not current_regs:
-                return False, 0
-            current = current_regs[0]
-            new_val = modifier(current)
-            if new_val == current:
-                return True, current
-            ok = await self._write_register(address, new_val, allow_merge_locked=True)
-            if ok:
-                _LOGGER.debug("%s: wrote merged value %s to 0x%04x", label, new_val, address)
-                return True, new_val
-            return False, current
+        async with self._lock_order_guard("merge"):
+            lock = self._merge_locks.get(address)
+            if lock is None:
+                lock = self._rmw_locks.setdefault(address, asyncio.Lock())
+            async with lock:
+                current_regs = await self._read_registers(address, 1)
+                if not current_regs:
+                    return False, 0
+                current = current_regs[0]
+                new_val = modifier(current)
+                if new_val == current:
+                    return True, current
+                ok = await self._write_register(address, new_val, allow_merge_locked=True)
+                if ok:
+                    _LOGGER.debug("%s: wrote merged value %s to 0x%04x", label, new_val, address)
+                    return True, new_val
+                return False, current

@@ -1,3 +1,10 @@
+## [v2.8.7]
+
+### Changed
+- **Lock Order Guard**: Added lock ordering warnings for nested Modbus access paths.
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.6]
 
 ### Changed
