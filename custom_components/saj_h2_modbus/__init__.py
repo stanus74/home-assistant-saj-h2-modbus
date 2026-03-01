@@ -15,7 +15,7 @@ from .const import (
     CONF_FAST_ENABLED,
 )
 from homeassistant.helpers import config_validation as cv
-from .utils import get_config_value
+from .utils import get_config_value, get_config_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,19 +85,36 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update options and restart fast updates if needed."""
     hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
     if hub is not None:
+        config = get_config_values(
+            entry,
+            {
+                CONF_HOST: None,
+                CONF_PORT: DEFAULT_PORT,
+                CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                CONF_FAST_ENABLED: False,
+                "ultra_fast_enabled": False,
+                "mqtt_host": "",
+                "mqtt_port": 1883,
+                "mqtt_user": "",
+                "mqtt_password": "",
+                "mqtt_topic_prefix": "saj",
+                "mqtt_publish_all": False,
+                "use_ha_mqtt": False,
+            },
+        )
         await hub.update_connection_settings(
-            host=get_config_value(entry, CONF_HOST),
-            port=get_config_value(entry, CONF_PORT, DEFAULT_PORT),
-            scan_interval=get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            fast_enabled=get_config_value(entry, CONF_FAST_ENABLED, False),
-            ultra_fast_enabled=get_config_value(entry, "ultra_fast_enabled", False),
-            mqtt_host=get_config_value(entry, "mqtt_host", ""),
-            mqtt_port=get_config_value(entry, "mqtt_port", 1883),
-            mqtt_user=get_config_value(entry, "mqtt_user", ""),
-            mqtt_password=get_config_value(entry, "mqtt_password", ""),
-            mqtt_topic_prefix=get_config_value(entry, "mqtt_topic_prefix", "saj"),
-            mqtt_publish_all=get_config_value(entry, "mqtt_publish_all", False),
-            use_ha_mqtt=get_config_value(entry, "use_ha_mqtt", False),
+            host=config[CONF_HOST],
+            port=config[CONF_PORT],
+            scan_interval=config[CONF_SCAN_INTERVAL],
+            fast_enabled=config[CONF_FAST_ENABLED],
+            ultra_fast_enabled=config["ultra_fast_enabled"],
+            mqtt_host=config["mqtt_host"],
+            mqtt_port=config["mqtt_port"],
+            mqtt_user=config["mqtt_user"],
+            mqtt_password=config["mqtt_password"],
+            mqtt_topic_prefix=config["mqtt_topic_prefix"],
+            mqtt_publish_all=config["mqtt_publish_all"],
+            use_ha_mqtt=config["use_ha_mqtt"],
         )
     else:
         # If hub doesn't exist, reload the entry to create it with new options

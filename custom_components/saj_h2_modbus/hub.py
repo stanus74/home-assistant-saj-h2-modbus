@@ -26,7 +26,7 @@ from .charge_control import (
     PENDING_FIELDS,
 )
 from .services import ModbusConnectionManager, MqttPublisher
-from .utils import get_config_value
+from .utils import get_config_value, get_config_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,10 +73,28 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
 
+        config = get_config_values(
+            config_entry,
+            {
+                CONF_HOST: None,
+                CONF_PORT: DEFAULT_MODBUS_PORT,
+                CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                CONF_ULTRA_FAST_ENABLED: False,
+                CONF_FAST_ENABLED: FAST_POLL_DEFAULT,
+                "mqtt_host": "",
+                "mqtt_port": DEFAULT_MQTT_PORT,
+                "mqtt_user": "",
+                "mqtt_password": "",
+                CONF_MQTT_TOPIC_PREFIX: DEFAULT_MQTT_TOPIC_PREFIX,
+                CONF_MQTT_PUBLISH_ALL: False,
+                CONF_USE_HA_MQTT: False,
+            },
+        )
+
         # Config extraction - Connection
-        host = get_config_value(config_entry, CONF_HOST)
-        port = get_config_value(config_entry, CONF_PORT, DEFAULT_MODBUS_PORT)
-        scan_interval = get_config_value(config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        host = config[CONF_HOST]
+        port = config[CONF_PORT]
+        scan_interval = config[CONF_SCAN_INTERVAL]
 
         super().__init__(
             hass,
@@ -87,17 +105,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         )
 
         # Robust config loading (options priority, then data)
-        self.ultra_fast_enabled = get_config_value(config_entry, CONF_ULTRA_FAST_ENABLED, False)
-        self.fast_enabled = get_config_value(config_entry, CONF_FAST_ENABLED, FAST_POLL_DEFAULT)
+        self.ultra_fast_enabled = config[CONF_ULTRA_FAST_ENABLED]
+        self.fast_enabled = config[CONF_FAST_ENABLED]
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
-        mqtt_host = get_config_value(config_entry, "mqtt_host", "")
-        mqtt_port = get_config_value(config_entry, "mqtt_port", DEFAULT_MQTT_PORT)
-        mqtt_user = get_config_value(config_entry, "mqtt_user", "")
-        mqtt_password = get_config_value(config_entry, "mqtt_password", "")
-        mqtt_topic_prefix = get_config_value(config_entry, CONF_MQTT_TOPIC_PREFIX, DEFAULT_MQTT_TOPIC_PREFIX)
-        mqtt_publish_all = get_config_value(config_entry, CONF_MQTT_PUBLISH_ALL, False)
-        use_ha_mqtt = get_config_value(config_entry, CONF_USE_HA_MQTT, False)
+        mqtt_host = config["mqtt_host"]
+        mqtt_port = config["mqtt_port"]
+        mqtt_user = config["mqtt_user"]
+        mqtt_password = config["mqtt_password"]
+        mqtt_topic_prefix = config[CONF_MQTT_TOPIC_PREFIX]
+        mqtt_publish_all = config[CONF_MQTT_PUBLISH_ALL]
+        use_ha_mqtt = config[CONF_USE_HA_MQTT]
 
         _LOGGER.info(
             "SAJ Hub Initialized. Host: %s, Fast: %s, Ultra: %s, MQTT Prefix: '%s', MQTT Host: '%s'", 

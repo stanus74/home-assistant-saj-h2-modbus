@@ -97,3 +97,8 @@ def get_config_value(entry: ConfigEntry, key: str, default: Any = None) -> Any:
         60
     """
     return entry.options.get(key, entry.data.get(key, default))
+
+
+def get_config_values(entry: ConfigEntry, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """Get multiple config values with fallback: options -> data -> default."""
+    return {key: get_config_value(entry, key, default) for key, default in defaults.items()}

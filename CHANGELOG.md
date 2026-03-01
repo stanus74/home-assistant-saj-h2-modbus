@@ -1,3 +1,12 @@
+## [v2.8.8]
+
+### Changed
+- **Config Cache**: Consolidated option/data lookups into a single cached read in hub and options update.
+  - `custom_components/saj_h2_modbus/hub.py`
+  - `custom_components/saj_h2_modbus/__init__.py`
+  - `custom_components/saj_h2_modbus/utils.py`
+
+
 ## [v2.8.7]
 
 ### Changed
