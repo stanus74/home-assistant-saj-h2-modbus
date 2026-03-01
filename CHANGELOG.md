@@ -1,3 +1,10 @@
+## [v2.8.6]
+
+### Changed
+- **Sequential Modbus Reads**: Enforced sequential reads for all reader groups to avoid parallel Modbus access.
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.5]
 
 ### Changed

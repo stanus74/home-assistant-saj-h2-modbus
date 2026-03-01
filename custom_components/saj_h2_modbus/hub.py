@@ -270,13 +270,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     except Exception as e:
                          _LOGGER.warning("Reader error: %s", e)
             else:
-                # Parallel - use shared slow lock for consistent access
-                tasks = [method(client, self._slow_lock) for method in group]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                for res in results:
-                    if isinstance(res, dict): new_cache.update(res)
-                    elif self._process_reader_result(res):
-                         await self.connection.reconnect()
+                # Sequential - enforce single Modbus read at a time
+                for method in group:
+                    try:
+                        res = await method(client, self._slow_lock)
+                        if isinstance(res, dict):
+                            new_cache.update(res)
+                    except ReconnectionNeededError:
+                        await self.connection.reconnect()
+                        raise
+                    except Exception as e:
+                        _LOGGER.warning("Reader error: %s", e)
 
         return new_cache
 
