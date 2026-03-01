@@ -1,3 +1,10 @@
+## [v2.8.5]
+
+### Changed
+- **Reader Lock Consistency**: Slow polling reader groups now share the same lock to avoid ad-hoc lock usage.
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.4]
 
 ### Fixed

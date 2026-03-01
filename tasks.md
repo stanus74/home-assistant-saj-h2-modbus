@@ -2,20 +2,20 @@
 
 ## 🔴 CRITICAL
 
-- [ ] Stale Client Reference / Cache-Race in `services.py`
-  - [ ] Cache-Prufung in den Lock verschieben
-  - [ ] `connected` Zustand vor Rueckgabe validieren
+- [x] Stale Client Reference / Cache-Race in `services.py`
+  - [x] Cache-Prufung in den Lock verschieben
+  - [x] `connected` Zustand vor Rueckgabe validieren
   - [ ] Tests fuer parallele `get_client()` Aufrufe unter Last
 
-- [ ] Ultra-Fast Polling vs Write-Operationen in `hub.py`
-  - [ ] Nachhol-Update nach Write implementieren
-  - [ ] Maximalen Warte-Timeout definieren
+- [x] Ultra-Fast Polling vs Write-Operationen in `hub.py`
+  - [x] Nachhol-Update nach Write implementieren
+  - [x] Maximalen Warte-Timeout definieren
   - [ ] Regressionstest fuer veraltete Echtzeitwerte
 
 ## 🟡 HIGH
 
-- [ ] Lock-Strategie konsolidieren (Parallel Reads)
-  - [ ] Einheitliche Locks pro Reader-Klasse definieren
+- [x] Lock-Strategie konsolidieren (Parallel Reads)
+  - [x] Einheitliche Locks pro Reader-Klasse definieren
   - [ ] Semaphore fuer Parallelisierungs-Limit evaluieren
   - [ ] Deadlock-Risiko bei verschachtelten Locks pruefen
 
