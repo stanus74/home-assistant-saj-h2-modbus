@@ -175,6 +175,16 @@ class ConnectionCache:
         """Invalidate the cached connection."""
         self._cached_client = None
         self._cache_expiry = 0.0
+
+    def cleanup_stale(self) -> bool:
+        """Invalidate cached client if expired or unhealthy."""
+        now = time.monotonic()
+        if self._cached_client is None:
+            return False
+        if now >= self._cache_expiry or not self._is_connection_healthy(now):
+            self.invalidate()
+            return True
+        return False
     
     def _is_connection_healthy(self, now: float) -> bool:
         """

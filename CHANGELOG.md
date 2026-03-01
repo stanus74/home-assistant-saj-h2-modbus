@@ -1,3 +1,12 @@
+## [v2.8.9]
+
+### Changed
+- **Cache Cleanup**: Periodic cleanup of stale Modbus cache entries and disconnected clients.
+  - `custom_components/saj_h2_modbus/modbus_utils.py`
+  - `custom_components/saj_h2_modbus/services.py`
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.8]
 
 ### Changed

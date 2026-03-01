@@ -133,6 +133,19 @@ class ModbusConnectionManager:
             except Exception as e:
                 _LOGGER.warning("Error closing Modbus client: %s", e)
 
+    async def cleanup_cache(self) -> None:
+        """Clean up stale cache entries and disconnected clients."""
+        async with self._connection_lock:
+            invalidated = self._connection_cache.cleanup_stale()
+            if invalidated and self._client is not None and not self._client.connected:
+                try:
+                    client_to_close = self._client
+                    self._client = None
+                    await self.hass.async_add_executor_job(client_to_close.close)
+                    _LOGGER.debug("Modbus client closed after cache cleanup")
+                except Exception as e:
+                    _LOGGER.warning("Error closing Modbus client after cleanup: %s", e)
+
     def update_config(self, host: str, port: int):
         """
         Updates connection parameters.

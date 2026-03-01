@@ -174,6 +174,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._cancel_ultra_fast_update = None
         self._pending_fast_start_cancel: Optional[Callable] = None
         self._pending_ultra_fast_start_cancel: Optional[Callable] = None
+        self._cache_cleanup_unsub = None
         self._fast_listeners: List[Callable] = []
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
 
@@ -188,6 +189,12 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self.use_ha_mqtt = use_ha_mqtt
         
         self._init_setters()
+
+        self._cache_cleanup_unsub = async_track_time_interval(
+            self.hass,
+            self._async_cleanup_cache,
+            timedelta(seconds=300),
+        )
 
     def _init_setters(self) -> None:
         """Initializes dynamic setters."""
@@ -568,6 +575,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def async_unload_entry(self) -> None:
         self._cleanup_fast_update_callbacks()
+        if self._cache_cleanup_unsub:
+            self._cache_cleanup_unsub()
+            self._cache_cleanup_unsub = None
         self.mqtt.stop()
         try:
             await self._setting_handler.shutdown()
@@ -575,6 +585,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Error during setting handler shutdown: %s", e)
         await self.connection.close()
         self._fast_listeners.clear()
+
+    async def _async_cleanup_cache(self, now=None) -> None:
+        """Periodically clean up stale connection cache entries."""
+        await self.connection.cleanup_cache()
 
     @asynccontextmanager
     async def _lock_order_guard(self, name: str):
