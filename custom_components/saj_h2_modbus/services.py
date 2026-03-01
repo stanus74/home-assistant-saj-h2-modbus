@@ -231,6 +231,7 @@ class MqttPublisher:
         self.use_ha_mqtt = use_ha_mqtt
         
         self.strategy = self.STRATEGY_NONE
+        self._strategy_cache_key = None
 
         # Internal Client
         self._paho_client = None
@@ -241,14 +242,29 @@ class MqttPublisher:
         self._last_no_connection_log = 0.0
         
         # Determine strategy immediately
-        self._determine_strategy()
+        self._determine_strategy(force=True)
         
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
             self._init_paho_client()
 
-    def _determine_strategy(self):
+    def _strategy_key(self) -> tuple:
+        """Compute strategy cache key based on relevant inputs."""
+        clean_host = (self.host or "").strip().lower()
+        ha_mqtt_loaded = "mqtt" in self.hass.config.components
+        return (
+            clean_host,
+            bool(self.use_ha_mqtt),
+            bool(ha_mqtt_loaded),
+            bool(PAHO_AVAILABLE),
+        )
+
+    def _determine_strategy(self, force: bool = False):
         """Decide once which MQTT strategy to use with minimal logging."""
+        cache_key = self._strategy_key()
+        if not force and cache_key == self._strategy_cache_key:
+            return
+        self._strategy_cache_key = cache_key
         # Clean up host input
         clean_host = (self.host or "").strip().lower()
 
@@ -389,9 +405,9 @@ class MqttPublisher:
         self._circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
         self._circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
 
-        # Re-evaluate strategy
+        # Re-evaluate strategy only when strategy inputs change
         prev_strategy = self.strategy
-        self._determine_strategy()
+        self._determine_strategy(force=False)
         strategy_changed = self.strategy != prev_strategy
 
         # Handle Strategy Switch or Config Change

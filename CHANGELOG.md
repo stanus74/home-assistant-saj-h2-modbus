@@ -1,3 +1,10 @@
+## [v2.9.0]
+
+### Changed
+- **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.9]
 
 ### Changed

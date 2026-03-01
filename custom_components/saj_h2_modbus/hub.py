@@ -372,8 +372,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def start_fast_updates(self) -> None:
         """Start fast update loops based on configuration."""
-        # Start the 10s Fast Loop if enabled (independent of Ultra)
-        if self.fast_enabled:
+        # Start the 10s Fast Loop only when Ultra is disabled
+        if self.fast_enabled and not self.ultra_fast_enabled:
             if self._cancel_fast_update:
                 self._cancel_fast_update()
                 self._cancel_fast_update = None
@@ -382,6 +382,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._pending_fast_start_cancel = None
 
             self._schedule_update_loop(FAST_UPDATE_INTERVAL, "_cancel_fast_update", False)
+        else:
+            if self._cancel_fast_update:
+                self._cancel_fast_update()
+                self._cancel_fast_update = None
+            if self._pending_fast_start_cancel:
+                self._pending_fast_start_cancel()
+                self._pending_fast_start_cancel = None
 
         # Start the 1s Ultra Loop independently if enabled
         if self.ultra_fast_enabled:
