@@ -132,6 +132,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # This prevents write operations from waiting for read operations to complete
         self._write_lock = asyncio.Lock()
         self._write_in_progress = False  # Flag for active write operation
+        self._write_done = asyncio.Event()
+        self._write_done.set()
+        self._ultra_fast_pending = False
         
         self.inverter_data: Dict[str, Any] = {}
         self.updating_settings = False
@@ -362,10 +365,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if not self.fast_enabled and not ultra:
             return
         
-        # Skip ultra-fast update if write operation is in progress
-        if ultra and self._write_in_progress:
-            _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
-            return
+        # Wait briefly for ongoing writes before ultra-fast update
+        if ultra and not self._write_done.is_set():
+            try:
+                await asyncio.wait_for(self._write_done.wait(), timeout=0.2)
+            except asyncio.TimeoutError:
+                self._ultra_fast_pending = True
+                _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
+                return
         
         try:
             client = await self.connection.get_client()
@@ -551,6 +558,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
         # Do not acquire the lock twice: try_write_registers already uses it.
         self._write_in_progress = True
+        self._write_done.clear()
         try:
             client = await self.connection.get_client()
             return await try_write_registers(
@@ -558,6 +566,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             )
         finally:
             self._write_in_progress = False
+            self._write_done.set()
+            if self._ultra_fast_pending and self.ultra_fast_enabled:
+                self._ultra_fast_pending = False
+                self.hass.async_create_task(self._async_update_fast(ultra=True))
 
     async def _read_registers(self, address: int, count: int) -> List[int]:
         """
@@ -566,8 +578,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         Waits for any pending write operation before reading.
         """
         # Wait for any pending write operation
-        while self._write_in_progress:
-            await asyncio.sleep(0.01)
+        await self._write_done.wait()
         
         client = await self.connection.get_client()
         return await try_read_registers(

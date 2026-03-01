@@ -1,3 +1,12 @@
+## [v2.8.4]
+
+### Fixed
+- **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.
+  - `custom_components/saj_h2_modbus/services.py`
+- **Write/Read Coordination**: Ultra-fast polling waits for writes and schedules a catch-up update; reads no longer busy-wait.
+  - `custom_components/saj_h2_modbus/hub.py`
+
+
 ## [v2.8.3]
 
 ### Fixed

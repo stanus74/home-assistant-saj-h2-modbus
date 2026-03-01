@@ -66,25 +66,19 @@ class ModbusConnectionManager:
         """
         Returns a connected client, establishing connection if needed.
         
-        PERFORMANCE OPTIMIZATION: Uses connection cache to reduce redundant
-        connection checks. Only acquires lock when cache is invalid.
+        Uses a single lock to ensure cache consistency and prevent
+        stale-client races under concurrent access.
         """
-        # PERFORMANCE OPTIMIZATION: Try to get cached client without lock first
-        cached_client = self._connection_cache.get_cached_client()
-        if cached_client is not None:
-            return cached_client
-        
-        # Cache miss - need to establish connection
         async with self._connection_lock:
-            # Double-check after acquiring lock (another task might have connected)
             cached_client = self._connection_cache.get_cached_client()
-            if cached_client is not None:
+            if cached_client is not None and cached_client.connected:
+                self._client = cached_client
                 return cached_client
             
             # Establish new connection
             self._client = await connect_if_needed(self._client, self._host, self._port)
             
-            # PERFORMANCE OPTIMIZATION: Cache the connected client
+            # Cache the connected client
             self._connection_cache.set_cached_client(self._client)
             
             return self._client
