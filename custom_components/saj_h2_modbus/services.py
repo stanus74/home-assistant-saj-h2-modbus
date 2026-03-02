@@ -354,6 +354,12 @@ class MqttPublisher:
             except Exception as e:
                 _LOGGER.error("Failed to init internal MQTT: %s", e)
 
+    async def _publish_paho(self, topic: str, payload: str) -> None:
+        """Publish via Paho client in executor."""
+        if not self._paho_client:
+            return
+        await self.hass.async_add_executor_job(self._paho_client.publish, topic, payload)
+
     def _on_paho_connect(self, client, userdata, flags, rc, *args):
         """Callback for Paho connection result."""
         # RC codes: 0=Success, 1=Protocol wrong, 2=ID rejected, 3=Server unavailable, 4=Bad user/pass, 5=Not authorized
@@ -484,7 +490,11 @@ class MqttPublisher:
                     return 
 
                 for key, payload in messages:
-                    self._paho_client.publish(f"{self.topic_prefix}/{key}", payload)
+                    await self._circuit_breaker.call(
+                        self._publish_paho,
+                        f"{self.topic_prefix}/{key}",
+                        payload,
+                    )
             except Exception as e:
                 _LOGGER.warning("Internal MQTT publish failed: %s", e)
 

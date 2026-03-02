@@ -1,50 +1,40 @@
+
+## [v2.9.1]
+
+### Fixed
+- **Fast Cache Safety**: Protect inverter cache updates and fast listener iteration against concurrent access.
+  - `custom_components/saj_h2_modbus/hub.py`
+- **Ultra-Fast Reconnect Handling**: Re-raise `ReconnectionNeededError` during fast poll retry path.
+  - `custom_components/saj_h2_modbus/hub.py`
+- **Paho Circuit Breaker**: Route internal MQTT publishes through the circuit breaker.
+  - `custom_components/saj_h2_modbus/services.py`
+
+
 ## [v2.9.0]
 
 ### Changed
 - **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.
   - `custom_components/saj_h2_modbus/hub.py`
 
-
-## [v2.8.9]
-
-### Changed
 - **Cache Cleanup**: Periodic cleanup of stale Modbus cache entries and disconnected clients.
   - `custom_components/saj_h2_modbus/modbus_utils.py`
   - `custom_components/saj_h2_modbus/services.py`
   - `custom_components/saj_h2_modbus/hub.py`
 
-
-## [v2.8.8]
-
-### Changed
 - **Config Cache**: Consolidated option/data lookups into a single cached read in hub and options update.
   - `custom_components/saj_h2_modbus/hub.py`
   - `custom_components/saj_h2_modbus/__init__.py`
   - `custom_components/saj_h2_modbus/utils.py`
 
-
-## [v2.8.7]
-
-### Changed
 - **Lock Order Guard**: Added lock ordering warnings for nested Modbus access paths.
   - `custom_components/saj_h2_modbus/hub.py`
 
-
-## [v2.8.6]
-
-### Changed
 - **Sequential Modbus Reads**: Enforced sequential reads for all reader groups to avoid parallel Modbus access.
   - `custom_components/saj_h2_modbus/hub.py`
 
-
-## [v2.8.5]
-
-### Changed
 - **Reader Lock Consistency**: Slow polling reader groups now share the same lock to avoid ad-hoc lock usage.
   - `custom_components/saj_h2_modbus/hub.py`
 
-
-## [v2.8.4]
 
 ### Fixed
 - **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.

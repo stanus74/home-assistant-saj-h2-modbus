@@ -175,8 +175,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._pending_fast_start_cancel: Optional[Callable] = None
         self._pending_ultra_fast_start_cancel: Optional[Callable] = None
         self._cache_cleanup_unsub = None
-        self._fast_listeners: List[Callable] = []
+        self._fast_listeners: set[Callable[[], None]] = set()
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
+        self._data_lock = asyncio.Lock()
 
         self._inverter_static_data: Optional[Dict[str, Any]] = None
         self._warned_missing_states: bool = False
@@ -244,7 +245,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             await self._setting_handler.process_pending()
 
             cache = await self._run_reader_methods(client)
-            self.inverter_data = cache
+            async with self._data_lock:
+                self.inverter_data = cache
 
             if self.mqtt.publish_all and self.inverter_data:
                 await self.mqtt.publish_data(self.inverter_data)
@@ -437,6 +439,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
                     part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
                     result = {**part_1, **part_2}
+            except ReconnectionNeededError:
+                await self.connection.reconnect()
+                raise
             except Exception as e:
                 _LOGGER.debug("Ultra-fast poll failed, attempting one retry: %s", e)
                 try:
@@ -447,6 +452,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
                         part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
                         result = {**part_1, **part_2}
+                except ReconnectionNeededError:
+                    await self.connection.reconnect()
+                    raise
                 except Exception as retry_e:
                     # If retry also fails, skip the update cycle
                     _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
@@ -457,13 +465,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 
                 if fast_data:
                     # Update inverter data with all fast data
-                    self.inverter_data.update(fast_data)
+                    async with self._data_lock:
+                        self.inverter_data.update(fast_data)
                     
                     await self.mqtt.publish_data(fast_data)
 
                     # Only the 10s loop should push to HA entities to avoid DB spam
                     if not ultra:
-                        for listener in self._fast_listeners:
+                        for listener in tuple(self._fast_listeners):
                             listener()
 
         except ReconnectionNeededError:
@@ -473,11 +482,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     @callback
     def async_add_fast_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
-        self._fast_listeners.append(update_callback)
+        self._fast_listeners.add(update_callback)
         @callback
         def remove_listener() -> None:
-            if update_callback in self._fast_listeners:
-                self._fast_listeners.remove(update_callback)
+            self._fast_listeners.discard(update_callback)
         return remove_listener
 
     # --- CONFIG & LIFECYCLE ---
