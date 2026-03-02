@@ -1,6 +1,4 @@
 
-## [v2.9.1]
-
 ### Fixed
 - **Fast Cache Safety**: Protect inverter cache updates and fast listener iteration against concurrent access.
   - `custom_components/saj_h2_modbus/hub.py`
@@ -8,9 +6,15 @@
   - `custom_components/saj_h2_modbus/hub.py`
 - **Paho Circuit Breaker**: Route internal MQTT publishes through the circuit breaker.
   - `custom_components/saj_h2_modbus/services.py`
+- **Write-Done Timeout**: `_read_registers` now uses a bounded `asyncio.wait_for` (5 s) on `_write_done` instead of an unbounded wait, preventing a theoretical infinite hang on write cancellation.
+  - `custom_components/saj_h2_modbus/hub.py`
+- **RMW Locks Bound Guard**: `merge_write_register` logs a WARNING when `_rmw_locks` exceeds 64 entries to surface unexpected register iteration bugs.
+  - `custom_components/saj_h2_modbus/hub.py`
 
+### Changed
+- **Remove dead `_write_in_progress` flag**: Flag was set/cleared in `_write_register` but never read anywhere – all write/read coordination already uses the `_write_done` asyncio Event. Removed to reduce misleading state.
+  - `custom_components/saj_h2_modbus/hub.py`
 
-## [v2.9.0]
 
 ### Changed
 - **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.

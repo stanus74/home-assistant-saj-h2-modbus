@@ -160,7 +160,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # DEDICATED WRITE LOCK: Write operations have priority over read operations
         # This prevents write operations from waiting for read operations to complete
         self._write_lock = asyncio.Lock()
-        self._write_in_progress = False  # Flag for active write operation
         self._write_done = asyncio.Event()
         self._write_done.set()
         self._ultra_fast_pending = False
@@ -638,7 +637,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             )
 
         # Do not acquire the lock twice: try_write_registers already uses it.
-        self._write_in_progress = True
         self._write_done.clear()
         try:
             async with self._lock_order_guard("write"):
@@ -647,7 +645,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     client, self._write_lock, 1, address, value
                 )
         finally:
-            self._write_in_progress = False
             self._write_done.set()
             if self._ultra_fast_pending and self.ultra_fast_enabled:
                 self._ultra_fast_pending = False
@@ -659,8 +656,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         Waits for any pending write operation before reading.
         """
-        # Wait for any pending write operation
-        await self._write_done.wait()
+        # Wait for any pending write operation – bounded to prevent infinite hang
+        # if _write_done is accidentally never set (defensive timeout).
+        try:
+            await asyncio.wait_for(self._write_done.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(
+                "_read_registers: _write_done not set after 5s – "
+                "proceeding anyway (write may have been cancelled)"
+            )
         
         async with self._lock_order_guard("slow"):
             client = await self.connection.get_client()
@@ -678,7 +682,16 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         async with self._lock_order_guard("merge"):
             lock = self._merge_locks.get(address)
             if lock is None:
-                lock = self._rmw_locks.setdefault(address, asyncio.Lock())
+                if address not in self._rmw_locks:
+                    # Guard against unbounded growth (should never exceed ~20 in practice)
+                    if len(self._rmw_locks) >= 64:
+                        _LOGGER.warning(
+                            "merge_write_register: _rmw_locks size exceeded 64 entries "
+                            "(address=0x%04x). Possible bug – check for unintended address iteration.",
+                            address,
+                        )
+                    self._rmw_locks[address] = asyncio.Lock()
+                lock = self._rmw_locks[address]
             async with lock:
                 current_regs = await self._read_registers(address, 1)
                 if not current_regs:
