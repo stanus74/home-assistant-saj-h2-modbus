@@ -33,6 +33,19 @@ class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
     pass
 
+# Global lock that serializes all reconnect attempts across polling loops.
+# Fast-Loop and Slow-Loop share the same ModbusTcpClient; without this lock
+# both loops would try to reconnect the same broken socket simultaneously,
+# causing cascading "Connection refused" errors in the logs.
+_RECONNECT_LOCK: asyncio.Lock = asyncio.Lock()
+
+# Event that is SET when no reconnect is running, CLEARED while one is in progress.
+# Coroutines that detect "another task is already reconnecting" wait on this event
+# so they retry their read only AFTER the reconnect has completed (success or failure),
+# instead of immediately retrying on a still-broken socket.
+_RECONNECT_DONE: asyncio.Event = asyncio.Event()
+_RECONNECT_DONE.set()  # Initially set: no reconnect in progress
+
 # Global Modbus config storage
 class ModbusGlobalConfig:
     host: Optional[str] = None
@@ -134,57 +147,61 @@ class ConnectionCache:
         self._last_health_check: float = 0.0
         self._health_check_interval: float = 30.0  # Check health every 30s
         self._connection_healthy: bool = True
-    
-    def get_cached_client(self) -> Optional[ModbusTcpClient]:
+        self._cache_lock = asyncio.Lock()  # Protects concurrent read-modify-write on cache state
+
+    def _do_invalidate(self) -> None:
+        """Internal invalidate without lock. Must be called while holding _cache_lock."""
+        self._cached_client = None
+        self._cache_expiry = 0.0
+
+    async def get_cached_client(self) -> Optional[ModbusTcpClient]:
         """
         Get cached client if still valid.
-        
-        PERFORMANCE OPTIMIZATION: Returns cached client without lock acquisition
-        if it's still valid and healthy.
         
         Returns:
             Cached client if valid, None otherwise
         """
-        now = time.monotonic()
-        
-        # Check if cache is still valid
-        if self._cached_client is not None and now < self._cache_expiry:
-            # Check if connection is healthy
-            if self._is_connection_healthy(now):
-                return self._cached_client
-            else:
-                # Connection not healthy, invalidate cache
-                self._cached_client = None
-                return None
-        
-        return None
-    
-    def set_cached_client(self, client: ModbusTcpClient) -> None:
+        async with self._cache_lock:
+            now = time.monotonic()
+
+            if self._cached_client is not None and now < self._cache_expiry:
+                if self._is_connection_healthy(now):
+                    return self._cached_client
+                else:
+                    # Connection not healthy, invalidate cache
+                    self._do_invalidate()
+                    return None
+
+            return None
+
+    async def set_cached_client(self, client: ModbusTcpClient) -> None:
         """
         Set cached client with TTL.
         
         Args:
             client: The client to cache
         """
-        self._cached_client = client
-        self._cache_expiry = time.monotonic() + self._cache_ttl
-        self._connection_healthy = True
-        self._last_health_check = time.monotonic()
-    
-    def invalidate(self) -> None:
-        """Invalidate the cached connection."""
-        self._cached_client = None
-        self._cache_expiry = 0.0
+        async with self._cache_lock:
+            self._cached_client = client
+            self._cache_expiry = time.monotonic() + self._cache_ttl
+            self._connection_healthy = True
+            self._last_health_check = time.monotonic()
 
-    def cleanup_stale(self) -> bool:
+    async def invalidate(self) -> None:
+        """Invalidate the cached connection."""
+        async with self._cache_lock:
+            self._do_invalidate()
+
+    async def cleanup_stale(self) -> bool:
         """Invalidate cached client if expired or unhealthy."""
-        now = time.monotonic()
-        if self._cached_client is None:
+        async with self._cache_lock:
+            now = time.monotonic()
+            if self._cached_client is None:
+                return False
+            if now >= self._cache_expiry or not self._is_connection_healthy(now):
+                self._do_invalidate()
+                return True
             return False
-        if now >= self._cache_expiry or not self._is_connection_healthy(now):
-            self.invalidate()
-            return True
-        return False
     
     def _is_connection_healthy(self, now: float) -> bool:
         """
@@ -222,6 +239,30 @@ async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int,
 async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
     """Creates a new client if needed and ensures it is connected."""
     return await _connect_client(client, host, port, _LOGGER, create_new=True)
+
+
+async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int) -> None:
+    """
+    Connect an existing ModbusTcpClient in-place (close if needed, then connect).
+
+    This is the ONLY correct way to reconnect under the single-client model:
+    the object is never replaced, so all polling loops continue referencing
+    the same socket after the reconnect completes.
+    """
+    if client.connected:
+        return
+    _LOGGER.debug("Connecting Modbus client to %s:%s", host, port)
+    try:
+        if ModbusGlobalConfig.hass:
+            await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
+        else:
+            client.connect()
+        if not client.connected:
+            raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
+        _LOGGER.info("ModbusTcpClient successfully connected to %s:%s", host, port)
+    except Exception as e:
+        _LOGGER.error("Error connecting client to %s:%s: %s", host, port, e)
+        raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
 
 # ============================================================================
 # RETRY LOGIC
@@ -291,47 +332,68 @@ async def _on_modbus_retry(
     port: int,
     logger: logging.Logger,
     operation_name: str,
-    lock: Lock,
+    _lock: Lock,  # kept for functools.partial compatibility; reconnect uses _RECONNECT_LOCK
     attempt: int,
     e: Exception
 ) -> None:
     """
     Handles retry logic for Modbus operations, including reconnection on connection errors.
-    
+
     Args:
         client: The Modbus client
         host: The host to connect to
         port: The port to connect to
         logger: Logger instance
         operation_name: Name of the operation being retried
-        lock: Lock for thread safety
+        _lock: Unused; kept so functools.partial in _create_retry_handlers binds correctly
         attempt: Current attempt number
         e: The exception that triggered the retry
     """
     # Trigger reconnection for both pymodbus ConnectionException and standard ConnectionError
     if isinstance(e, (ConnectionException, ConnectionError, OSError)):
         logger.info("Connection lost during %s, attempting reconnect", operation_name)
-        
-        # Acquire lock to ensure we don't interfere with other tasks using the client
-        async with lock:
-            # Force close to ensure connected state is reset
-            try:
-                if hasattr(client, "socket") and client.socket:
-                    try:
-                        fileno = client.socket.fileno()
-                    except Exception:
-                        fileno = "unknown"
-                    logger.debug("Closing Modbus socket (fd=%s) due to %s", fileno, e)
-                client.close()
-            except Exception:
-                pass  # Ignore errors during close
 
+        # Fast path: another coroutine is already inside _RECONNECT_LOCK doing the reconnect.
+        # Wait until that reconnect finishes (success or failure) before we retry our read,
+        # so we don't immediately hit a still-broken socket.
+        if _RECONNECT_LOCK.locked():
+            logger.debug("Reconnect for %s waiting for in-progress reconnect to finish", operation_name)
             try:
-                await _connect_client(client, host, port, logger, create_new=False)
-                logger.info("Reconnect during %s successful", operation_name)
-            except Exception as reconnect_error:
-                logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
-                # Do NOT raise here, let the backoff loop continue
+                await asyncio.wait_for(_RECONNECT_DONE.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("Reconnect wait timed out for %s, continuing anyway", operation_name)
+            return
+
+        # Signal that a reconnect is starting so concurrent tasks wait.
+        _RECONNECT_DONE.clear()
+        try:
+            async with _RECONNECT_LOCK:
+                # Double-checked: another coroutine may have already reconnected while we waited.
+                if client.connected:
+                    logger.debug("Reconnect for %s skipped – client already connected after lock", operation_name)
+                    return
+
+                # Force close to ensure connected state is reset
+                try:
+                    if hasattr(client, "socket") and client.socket:
+                        try:
+                            fileno = client.socket.fileno()
+                        except Exception:
+                            fileno = "unknown"
+                        logger.debug("Closing Modbus socket (fd=%s) due to %s", fileno, e)
+                    client.close()
+                except Exception:
+                    pass  # Ignore errors during close
+
+                try:
+                    await _connect_client_inplace(client, host, port)
+                    logger.info("Reconnect during %s successful", operation_name)
+                except Exception as reconnect_error:
+                    logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
+                    # Do NOT raise here, let the backoff loop continue
+        finally:
+            # Always unblock waiting tasks, whether reconnect succeeded or failed.
+            _RECONNECT_DONE.set()
 
 
 def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str, lock: Lock):
@@ -412,15 +474,25 @@ async def try_read_registers(
         _LOGGER.warning("[Modbus-Read] Retry %d after error: %s", attempt, e)
         await on_retry(attempt, e)
 
-    return await _retry_with_backoff(
-        func=read_once,
-        should_retry=should_retry,
-        retries=max_retries,
-        base_delay=base_delay,
-        cap=cap_delay,
-        on_retry=on_read_retry,
-        task_name="Modbus-Read"
-    )
+    try:
+        return await _retry_with_backoff(
+            func=read_once,
+            should_retry=should_retry,
+            retries=max_retries,
+            base_delay=base_delay,
+            cap=cap_delay,
+            on_retry=on_read_retry,
+            task_name="Modbus-Read"
+        )
+    except (ConnectionException, ConnectionError, OSError) as final_e:
+        # All retries exhausted on a connection-class error.
+        # _on_modbus_retry already tried to reconnect on each attempt without success.
+        # Convert to ReconnectionNeededError so _run_reader_methods can trigger a
+        # hub-level reconnect and abort the poll cycle instead of continuing to
+        # hammer the broken socket with every remaining reader group.
+        raise ReconnectionNeededError(
+            f"Modbus read failed after {max_retries} retries – connection lost: {final_e}"
+        ) from final_e
 
 
 async def try_write_registers(

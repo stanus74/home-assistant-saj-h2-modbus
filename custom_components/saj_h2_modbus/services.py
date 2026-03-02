@@ -15,7 +15,7 @@ except ImportError:
     PAHO_AVAILABLE = False
 
 from .modbus_utils import (
-    connect_if_needed,
+    _connect_client_inplace,
     set_modbus_config,
     ReconnectionNeededError,
     ConnectionCache
@@ -39,14 +39,17 @@ class ModbusConnectionManager:
         self.hass = hass
         self._host = host
         self._port = port
-        self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self._reconnecting = False
-        
-        # PERFORMANCE OPTIMIZATION: Connection cache to reduce overhead
-        # Cache client for 60 seconds to avoid repeated connection checks
+
+        # ONE client object, created once and reused for the entire lifetime.
+        # Reconnect = close() + connect() on this same object – never replaced.
+        # This guarantees that all polling loops always reference the same socket.
+        self._client: ModbusTcpClient = ModbusTcpClient(host=host, port=port, timeout=5)
+
+        # Connection cache to avoid repeated connection-state checks
         self._connection_cache = ConnectionCache(cache_ttl=60.0)
-        
+
         # Initial setup of global config for utils
         set_modbus_config(host, port, hass)
 
@@ -60,35 +63,29 @@ class ModbusConnectionManager:
 
     @property
     def connected(self) -> bool:
-        return self._client is not None and self._client.connected
+        return self._client.connected
 
     async def get_client(self) -> ModbusTcpClient:
         """
-        Returns a connected client, establishing connection if needed.
-        
-        Uses a single lock to ensure cache consistency and prevent
-        stale-client races under concurrent access.
+        Returns the single connected client, connecting it if needed.
+
+        Always returns the same ModbusTcpClient instance. Never creates a second one.
         """
         async with self._connection_lock:
-            cached_client = self._connection_cache.get_cached_client()
+            cached_client = await self._connection_cache.get_cached_client()
             if cached_client is not None and cached_client.connected:
-                self._client = cached_client
                 return cached_client
-            
-            # Establish new connection
-            self._client = await connect_if_needed(self._client, self._host, self._port)
-            
-            # Cache the connected client
-            self._connection_cache.set_cached_client(self._client)
-            
+
+            # (Re-)connect the one existing client object
+            await _connect_client_inplace(self._client, self._host, self._port)
+
+            await self._connection_cache.set_cached_client(self._client)
             return self._client
 
     async def reconnect(self) -> bool:
         """
-        Forces a reconnection.
-        
-        PERFORMANCE OPTIMIZATION: Invalidates cache on reconnect to ensure
-        fresh connection is used.
+        Forces a reconnection by closing and re-opening the single client socket.
+        Never creates a new ModbusTcpClient – always reuses the same object.
         """
         if self._reconnecting:
             return False
@@ -96,18 +93,13 @@ class ModbusConnectionManager:
         async with self._connection_lock:
             if self._reconnecting:
                 return False
-            
+
             self._reconnecting = True
             try:
-                # PERFORMANCE OPTIMIZATION: Invalidate cache before reconnect
-                self._connection_cache.invalidate()
-                
-                await self.close()
-                self._client = await connect_if_needed(None, self._host, self._port)
-                
-                # PERFORMANCE OPTIMIZATION: Cache the new connection
-                self._connection_cache.set_cached_client(self._client)
-                
+                await self._connection_cache.invalidate()
+                await self._close_socket()
+                await _connect_client_inplace(self._client, self._host, self._port)
+                await self._connection_cache.set_cached_client(self._client)
                 return True
             except Exception as e:
                 _LOGGER.error("Reconnection failed: %s", e)
@@ -115,36 +107,26 @@ class ModbusConnectionManager:
             finally:
                 self._reconnecting = False
 
+    async def _close_socket(self) -> None:
+        """Close the socket on the single client without destroying the client object."""
+        try:
+            await self.hass.async_add_executor_job(self._client.close)
+            _LOGGER.debug("Modbus socket closed")
+        except Exception as e:
+            _LOGGER.warning("Error closing Modbus socket: %s", e)
+
     async def close(self) -> None:
-        """
-        Safely closes the connection in an executor.
-        
-        PERFORMANCE OPTIMIZATION: Invalidates cache when closing connection.
-        """
-        if self._client:
-            try:
-                # PERFORMANCE OPTIMIZATION: Invalidate cache on close
-                self._connection_cache.invalidate()
-                
-                client_to_close = self._client
-                self._client = None
-                await self.hass.async_add_executor_job(client_to_close.close)
-                _LOGGER.debug("Modbus client closed")
-            except Exception as e:
-                _LOGGER.warning("Error closing Modbus client: %s", e)
+        """Close the socket. The client object itself is kept alive for reuse."""
+        await self._connection_cache.invalidate()
+        await self._close_socket()
 
     async def cleanup_cache(self) -> None:
-        """Clean up stale cache entries and disconnected clients."""
+        """Clean up stale cache entries and close socket if disconnected."""
         async with self._connection_lock:
-            invalidated = self._connection_cache.cleanup_stale()
-            if invalidated and self._client is not None and not self._client.connected:
-                try:
-                    client_to_close = self._client
-                    self._client = None
-                    await self.hass.async_add_executor_job(client_to_close.close)
-                    _LOGGER.debug("Modbus client closed after cache cleanup")
-                except Exception as e:
-                    _LOGGER.warning("Error closing Modbus client after cleanup: %s", e)
+            invalidated = await self._connection_cache.cleanup_stale()
+            if invalidated and not self._client.connected:
+                await self._close_socket()
+                _LOGGER.debug("Modbus socket closed after cache cleanup")
 
     def update_config(self, host: str, port: int):
         """
@@ -158,13 +140,9 @@ class ModbusConnectionManager:
             self._host = host
             self._port = port
             set_modbus_config(host, port, self.hass)
-            
-            # PERFORMANCE OPTIMIZATION: Invalidate cache on config change
-            self._connection_cache.invalidate()
-            
-            # Close active client so the next call re-connects with new settings
-            if self._client:
-                self.hass.async_create_task(self.close())
+
+            # Close active client so the next call re-connects with new settings.
+            self.hass.async_create_task(self.close())
 
 
 class MqttCircuitBreaker:

@@ -413,14 +413,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         if not self.fast_enabled and not ultra:
             return
         
-        # Wait briefly for ongoing writes before ultra-fast update
+        # Immediately skip ultra-fast update if a write operation is in progress.
+        # No wait: the write may take longer than the 1s poll interval, and
+        # blocking here would throw off the entire ultra-fast schedule.
+        # The pending flag ensures a catch-up update is triggered after the write.
         if ultra and not self._write_done.is_set():
-            try:
-                await asyncio.wait_for(self._write_done.wait(), timeout=0.2)
-            except asyncio.TimeoutError:
-                self._ultra_fast_pending = True
-                _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
-                return
+            self._ultra_fast_pending = True
+            _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
+            return
         
         try:
             client = await self.connection.get_client()
