@@ -33,6 +33,63 @@ class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
     pass
 
+
+class ModbusCircuitBreaker:
+    """Circuit breaker pattern for Modbus operations (reads/connect)."""
+
+    def __init__(self, failure_threshold: int = 3, timeout: int = 30):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+
+    async def call(
+        self,
+        func: Callable[..., Awaitable[Any]],
+        *args: Any,
+        should_trip: Optional[Callable[[Exception], bool]] = None,
+        **kwargs: Any,
+    ) -> Any:
+        now = time.monotonic()
+        if should_trip is None:
+            def should_trip(_: Exception) -> bool:
+                return True
+
+        if self.state == "OPEN":
+            if now - self.last_failure_time > self.timeout:
+                self.state = "HALF_OPEN"
+                _LOGGER.info("Modbus Circuit Breaker transitioning to HALF_OPEN")
+            else:
+                raise ConnectionError("Modbus Circuit Breaker is OPEN")
+
+        try:
+            result = await func(*args, **kwargs)
+            if self.state == "HALF_OPEN":
+                self.state = "CLOSED"
+                self.failure_count = 0
+                _LOGGER.info("Modbus Circuit Breaker transitioning to CLOSED")
+            return result
+        except Exception as e:
+            if should_trip(e):
+                self.failure_count += 1
+                self.last_failure_time = now
+                if self.failure_count >= self.failure_threshold:
+                    self.state = "OPEN"
+                    _LOGGER.warning(
+                        "Modbus Circuit Breaker OPEN after %s failures",
+                        self.failure_count,
+                    )
+            raise
+
+
+_MODBUS_CIRCUIT_BREAKER = ModbusCircuitBreaker()
+
+
+def get_modbus_circuit_breaker() -> ModbusCircuitBreaker:
+    """Return the shared Modbus circuit breaker instance."""
+    return _MODBUS_CIRCUIT_BREAKER
+
 # Global lock that serializes all reconnect attempts across polling loops.
 # Fast-Loop and Slow-Loop share the same ModbusTcpClient; without this lock
 # both loops would try to reconnect the same broken socket simultaneously,
@@ -326,6 +383,11 @@ def _should_retry_modbus_error(e: Exception) -> bool:
     return isinstance(e, (ConnectionException, ModbusIOException, ConnectionError))
 
 
+def _should_trip_circuit_breaker(e: Exception) -> bool:
+    """Trip CB only for connection-class failures (not protocol errors)."""
+    return isinstance(e, (ConnectionException, ConnectionError, OSError))
+
+
 async def _on_modbus_retry(
     client: ModbusTcpClient,
     host: str,
@@ -475,14 +537,19 @@ async def try_read_registers(
         await on_retry(attempt, e)
 
     try:
-        return await _retry_with_backoff(
+        operation = functools.partial(
+            _retry_with_backoff,
             func=read_once,
             should_retry=should_retry,
             retries=max_retries,
             base_delay=base_delay,
             cap=cap_delay,
             on_retry=on_read_retry,
-            task_name="Modbus-Read"
+            task_name="Modbus-Read",
+        )
+        return await get_modbus_circuit_breaker().call(
+            operation,
+            should_trip=_should_trip_circuit_breaker,
         )
     except (ConnectionException, ConnectionError, OSError) as final_e:
         # All retries exhausted on a connection-class error.

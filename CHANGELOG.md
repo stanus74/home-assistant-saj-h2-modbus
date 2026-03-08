@@ -1,5 +1,8 @@
 
 ### Fixed
+- **Modbus Circuit Breaker**: Add a shared circuit breaker for Modbus reads/connects to reduce repeated failure storms and improve recovery.
+  - `custom_components/saj_h2_modbus/modbus_utils.py`
+  - `custom_components/saj_h2_modbus/services.py`
 - **Fast Cache Safety**: Protect inverter cache updates and fast listener iteration against concurrent access.
   - `custom_components/saj_h2_modbus/hub.py`
 - **Ultra-Fast Reconnect Handling**: Re-raise `ReconnectionNeededError` during fast poll retry path.

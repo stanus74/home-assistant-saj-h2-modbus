@@ -3,22 +3,20 @@ import asyncio
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
+import importlib
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components import mqtt
 from pymodbus.client import ModbusTcpClient
 
-# Try to import paho-mqtt
-try:
-    import paho.mqtt.client as mqtt_client
-    PAHO_AVAILABLE = True
-except ImportError:
-    PAHO_AVAILABLE = False
+# paho-mqtt is imported lazily in an executor to avoid blocking the event loop
+PAHO_AVAILABLE = None  # None=unknown, True/False once attempted
 
 from .modbus_utils import (
     _connect_client_inplace,
     set_modbus_config,
     ReconnectionNeededError,
-    ConnectionCache
+    ConnectionCache,
+    get_modbus_circuit_breaker,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,11 +74,15 @@ class ModbusConnectionManager:
             if cached_client is not None and cached_client.connected:
                 return cached_client
 
-            # (Re-)connect the one existing client object
-            await _connect_client_inplace(self._client, self._host, self._port)
+            async def _connect_and_cache() -> ModbusTcpClient:
+                await _connect_client_inplace(self._client, self._host, self._port)
+                await self._connection_cache.set_cached_client(self._client)
+                return self._client
 
-            await self._connection_cache.set_cached_client(self._client)
-            return self._client
+            return await get_modbus_circuit_breaker().call(
+                _connect_and_cache,
+                should_trip=lambda e: isinstance(e, (ConnectionError, OSError)),
+            )
 
     async def reconnect(self) -> bool:
         """
@@ -214,6 +216,8 @@ class MqttPublisher:
         # Internal Client
         self._paho_client = None
         self._paho_started = False
+        self._paho_module = None
+        self._paho_available: Optional[bool] = None
         self._last_strategy_log = 0.0
         
         # Log throttling
@@ -224,7 +228,7 @@ class MqttPublisher:
         
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
-            self._init_paho_client()
+            self.hass.async_create_task(self._async_init_paho_client())
 
     def _strategy_key(self) -> tuple:
         """Compute strategy cache key based on relevant inputs."""
@@ -234,7 +238,7 @@ class MqttPublisher:
             clean_host,
             bool(self.use_ha_mqtt),
             bool(ha_mqtt_loaded),
-            bool(PAHO_AVAILABLE),
+            bool(self._paho_available is not False),
         )
 
     def _determine_strategy(self, force: bool = False):
@@ -269,7 +273,7 @@ class MqttPublisher:
         
         # 2. Priority: Manual Configuration (Paho) - Only if we have a valid-looking host
         if self.host:
-            if not PAHO_AVAILABLE:
+            if self._paho_available is False:
                 _LOGGER.warning(
                     "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
                     "Falling back to HA MQTT (if available) or disabling MQTT.",
@@ -311,26 +315,56 @@ class MqttPublisher:
         else:
             _LOGGER.debug(debug_msg)
 
-    def _init_paho_client(self):
+    async def _async_load_paho_module(self) -> bool:
+        """Load paho.mqtt.client in executor to avoid blocking the event loop."""
+        if self._paho_available is not None:
+            return bool(self._paho_available)
+
+        def _import_paho():
+            return importlib.import_module("paho.mqtt.client")
+
+        try:
+            self._paho_module = await self.hass.async_add_executor_job(_import_paho)
+            self._paho_available = True
+            return True
+        except ImportError:
+            self._paho_available = False
+            return False
+
+    async def _async_init_paho_client(self) -> None:
         """Initialize Paho client if configured."""
-        if PAHO_AVAILABLE and self.host:
-            try:
-                # Basic init
-                self._paho_client = mqtt_client.Client()
-                
-                # Setup Callbacks for Debugging
-                self._paho_client.on_connect = self._on_paho_connect
-                self._paho_client.on_disconnect = self._on_paho_disconnect
-                
-                # Auth
-                auth_status = "without Auth"
-                if self.user:
-                    self._paho_client.username_pw_set(self.user, self.password)
-                    auth_status = f"with Auth (User: {self.user})"
-                
-                _LOGGER.debug("Internal MQTT client initialized %s (waiting for connect)", auth_status)
-            except Exception as e:
-                _LOGGER.error("Failed to init internal MQTT: %s", e)
+        if not self.host:
+            return
+
+        if not await self._async_load_paho_module():
+            _LOGGER.warning(
+                "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
+                "Falling back to HA MQTT (if available) or disabling MQTT.",
+                self.host,
+            )
+            prev_strategy = self.strategy
+            self._determine_strategy(force=True)
+            if self.strategy != prev_strategy:
+                self.stop()
+            return
+
+        try:
+            # Basic init
+            self._paho_client = self._paho_module.Client()
+
+            # Setup Callbacks for Debugging
+            self._paho_client.on_connect = self._on_paho_connect
+            self._paho_client.on_disconnect = self._on_paho_disconnect
+
+            # Auth
+            auth_status = "without Auth"
+            if self.user:
+                self._paho_client.username_pw_set(self.user, self.password)
+                auth_status = f"with Auth (User: {self.user})"
+
+            _LOGGER.debug("Internal MQTT client initialized %s (waiting for connect)", auth_status)
+        except Exception as e:
+            _LOGGER.error("Failed to init internal MQTT: %s", e)
 
     async def _publish_paho(self, topic: str, payload: str) -> None:
         """Publish via Paho client in executor."""
@@ -398,7 +432,7 @@ class MqttPublisher:
         if self.strategy == self.STRATEGY_PAHO:
             if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
-                self._init_paho_client()
+                self.hass.async_create_task(self._async_init_paho_client())
         else:
             # If we switched away from Paho, stop it
             if prev_strategy == self.STRATEGY_PAHO:
