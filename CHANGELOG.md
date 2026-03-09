@@ -18,12 +18,18 @@ Improved stability and recovery with shared Modbus/MQTT circuit breaker plus saf
 - **RMW Locks Bound Guard**: `merge_write_register` logs a WARNING when `_rmw_locks` exceeds 64 entries to surface unexpected register iteration bugs.
   - `hub.py`
 
+
+- **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.
+  - `services.py`
+- **Write/Read Coordination**: Ultra-fast polling waits for writes and schedules a catch-up update; reads no longer busy-wait.
+  - `hub.py`
+
+
 ### Changed
 - **Remove dead `_write_in_progress` flag**: Flag was set/cleared in `_write_register` but never read anywhere – all write/read coordination already uses the `_write_done` asyncio Event. Removed to reduce misleading state.
   - `hub.py`
 
 
-### Changed
 - **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.
   - `hub.py`
 
@@ -46,12 +52,6 @@ Improved stability and recovery with shared Modbus/MQTT circuit breaker plus saf
 - **Reader Lock Consistency**: Slow polling reader groups now share the same lock to avoid ad-hoc lock usage.
   - `hub.py`
 
-
-### Fixed
-- **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.
-  - `services.py`
-- **Write/Read Coordination**: Ultra-fast polling waits for writes and schedules a catch-up update; reads no longer busy-wait.
-  - `hub.py`
 
 
 ## [v2.8.3]
