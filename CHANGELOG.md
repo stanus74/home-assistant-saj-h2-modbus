@@ -1,10 +1,5 @@
 [v.2.8.4]
 
-Improved stability and recovery with shared Modbus/MQTT circuit breaker plus safer cache handling
-ultra-fast polling now avoids read bursts and handles reconnect/write coordination more safely
-configuration and lock handling refined (cached option/data lookups, lock order guards, sequential reads, unified slow-lock). 
-
-
 ### Fixed
 - **Modbus Circuit Breaker**: Add a shared circuit breaker for Modbus reads/connects to reduce repeated failure storms and improve recovery.
   - `modbus_utils.py`
