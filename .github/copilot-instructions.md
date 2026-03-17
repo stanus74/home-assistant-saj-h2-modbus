@@ -6,22 +6,16 @@
 
 **Before modifying code, understand (see also `docs/architecture_overview.md`):**
 
-1.  **3-tier polling architecture** with separate asyncio locks (`_slow_lock`, `_fast_lock`, `_ultra_fast_lock`).
-    *   **Standard (60s)**: Sequential execution of all readers.
-    *   **Fast (10s)**: High-frequency sensors only.
+1.  **3-tier polling architecture** with separate asyncio locks (`_slow_lock`, `_fast_lock`, `_ultra_fast_lock`) plus a dedicated `_write_lock`.
+    *   **Standard (60s)**: Sequential execution of all readers using a unified slow lock.
+    *   **Fast (10s)**: High-frequency sensors only; disabled when ultra-fast is enabled.
     *   **Ultra-Fast (1s)**: MQTT-only, fire-and-forget, skipped during write operations.
 2.  **Configuration-driven** register parsing - add sensors via `_DATA_READ_CONFIG` dicts.
 3.  **Command queue pattern** for all writes - `ChargeSettingHandler` uses `asyncio.Queue` to serialize and prioritize writes over reads.
 4.  **Strategy pattern** for MQTT - prefers HA MQTT, falls back to paho-mqtt.
-5.  **Connection caching** in `ModbusConnectionManager` (60s TTL).
-6.  **Parallel Execution**: Non-critical reader groups use independent locks, allowing `asyncio.gather` to execute Modbus requests concurrently where possible.
+5.  **Connection caching** in `ModbusConnectionManager` (60s TTL) with serialized cache access.
+6.  **Circuit breaker** shared across Modbus reads/connect and MQTT publishing.
 
-**Recent Major Fixes (v2.8.x):**
-- ✅ **Slot Logic**: All charge/discharge slots (1-7) use a unified 7-bit mask in registers 0x3604/0x3605.
-- ✅ **Data Integrity**: `_read_modbus_data()` returns `(data, errors)` tuple, preventing total data loss on partial read failures.
-- ✅ **Write Guard**: Direct writes to 0x3604/0x3605 are blocked; use `merge_write_register()` to preserve shared bits.
-- ✅ **Lifecycle**: Fast listeners unregister cleanly; Charge queue drains on unload.
-- ✅ **AppMode**: Switches validate `AppMode == 1` for active charging/discharging state.
 
 ## Project Overview
 
@@ -40,8 +34,8 @@
 
 ### Multi-Level Polling System
 
-1.  **Standard (60s)**: Reads all data. Uses `_slow_lock`. Critical groups run sequentially; non-critical groups run in parallel using `asyncio.gather`.
-2.  **Fast (10s)**: Reads `FAST_POLL_SENSORS` only. Uses `_fast_lock`. Updates HA entities.
+1.  **Standard (60s)**: Reads all data. Uses `_slow_lock` and executes reader groups sequentially.
+2.  **Fast (10s)**: Reads `FAST_POLL_SENSORS` only. Uses `_fast_lock`. Updates HA entities. Disabled when ultra-fast is enabled.
 3.  **Ultra-Fast (1s)**: Reads `FAST_POLL_SENSORS`. Uses `_ultra_fast_lock`. Publishes to MQTT only. **Skipped if a write operation is in progress.**
 
 ### Component Responsibilities
@@ -55,7 +49,7 @@
 - Queues all commands (`CommandType`).
 - `process_queue` runs in background task.
 - Uses `_write_register_with_backoff` for reliability.
-- **Optimistic UI**: Updates `inverter_data` immediately after write command is queued/processed to give instant feedback.
+- **Optimistic UI**: Updates `inverter_data` immediately after a successful Modbus write to give instant feedback.
 
 **ModbusReader**:
 - `_read_modbus_data()`: Returns `new_data` dict and `errors` list. Even if some registers fail, valid data is returned.
@@ -162,9 +156,9 @@ def decode_time(value: int) -> str:
 **Bit masks (slots enable/disable):**
 ```python
 # charge_time_enable = 0x0F means slots 1,2,3,4 enabled
-# Bit 0 = charging state, Bits 1-6 = slot 1-7 enables, Bit 7 = reserved
-enable_slot_3 = (current_value | (1 << 3))  # Set bit 3
-disable_slot_3 = (current_value & ~(1 << 3))  # Clear bit 3
+# Bit 0 = slot 1, Bit 1 = slot 2, ..., Bit 6 = slot 7, Bit 7 reserved
+enable_slot_3 = (current_value | (1 << 2))  # Set bit for slot 3
+disable_slot_3 = (current_value & ~(1 << 2))  # Clear bit for slot 3
 ```
 
 **32-bit registers (energy totals):**
@@ -253,8 +247,8 @@ async def async_set_native_value(self, value):
 **Enable verbose logging:**
 ```bash
 # In terminal, set env vars:
-export SAJ_DEBUG_MODBUS_READ=1
-export SAJ_DEBUG_MODBUS_WRITE=1
+export DEBUG_MODBUS_READ=1
+export DEBUG_MODBUS_WRITE=1
 ```
 
 **Check in order:**
@@ -270,44 +264,4 @@ export SAJ_DEBUG_MODBUS_WRITE=1
 - Check MQTT topic format: `{prefix}/inverter/{field_name}`
 - Verify register addresses are correct (firmware versions may differ)
 
-## Critical Gotchas
 
-**DO:**
-- ✅ Use `_merge_locks` for 0x3604/0x3605.
-- ✅ Check `PENDING_FIELDS` when modifying charge control entity names.
-- ✅ Ensure `AppMode` is handled when changing power states (Active=1, Passive=3).
-- ✅ Write `0` to 0x3604/0x3605 when disabling functionality to clear all slots.
-
-**DON'T:**
-- ❌ Block the event loop with synchronous Modbus calls (use executor).
-- ❌ Swallow `ReconnectionNeededError`.
-- ❌ Direct write to 0x3604/0x3605 without merge logic.
-
-## Known Issues
-
-1.  **Naming**: Some entities use camelCase instead of snake_case (legacy).
-2.  **Tests**: No automated test suite.
-3.  **Slot Logic**: Only 7 slots supported (firmware limit).
-4.  **Entity Optimization**: Rollback on write failure is not fully implemented (relies on next poll).
-
-## Reference Commands
-
-```bash
-# View integration logs (HA CLI)
-ha logs follow | grep saj_h2_modbus
-
-# Reload integration after code changes
-# (in HA Developer Tools -> Services -> Reload integration)
-```
-
-## Important Notes for AI Agents
-
-1.  **Always verify lock usage** - wrong lock causes race conditions or polling delays.
-2.  **Configuration-driven architecture** - favor adding entries to `_DATA_READ_CONFIG`.
-3.  **Test optimistic updates** - UI should reflect changes instantly.
-4.  **Register addresses are reverse-engineered**.
-5.  **Check PENDING_FIELDS mismatch first** if charge entities don't sync.
-6.  **Register 0x3604/0x3605 are slot masks**. Writing `0` clears all slots.
-7.  **Queue cleanup critical** - ensure `ChargeSettingHandler` is shutdown properly.
-8.  **ReconnectionNeededError bubbles up** - never swallow this exception.
-9.  **AppMode 3 is Passive Mode** - requires special handling in switches.

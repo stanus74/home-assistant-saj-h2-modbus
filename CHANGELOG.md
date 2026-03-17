@@ -1,29 +1,82 @@
+[v.2.8.4]
+
+### Fixed
+- **Modbus Circuit Breaker**: Add a shared circuit breaker for Modbus reads/connects to reduce repeated failure storms and improve recovery.
+  - `modbus_utils.py`
+  - `services.py`
+- **Fast Cache Safety**: Protect inverter cache updates and fast listener iteration against concurrent access.
+  - `hub.py`
+- **Ultra-Fast Reconnect Handling**: Re-raise `ReconnectionNeededError` during fast poll retry path.
+  - `hub.py`
+- **Paho Circuit Breaker**: Route internal MQTT publishes through the circuit breaker.
+  - `services.py`
+- **Write-Done Timeout**: `_read_registers` now uses a bounded `asyncio.wait_for` (5 s) on `_write_done` instead of an unbounded wait, preventing a theoretical infinite hang on write cancellation.
+  - `hub.py`
+- **RMW Locks Bound Guard**: `merge_write_register` logs a WARNING when `_rmw_locks` exceeds 64 entries to surface unexpected register iteration bugs.
+  - `hub.py`
+
+
+- **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.
+  - `services.py`
+- **Write/Read Coordination**: Ultra-fast polling waits for writes and schedules a catch-up update; reads no longer busy-wait.
+  - `hub.py`
+
+
+### Changed
+- **Remove dead `_write_in_progress` flag**: Flag was set/cleared in `_write_register` but never read anywhere – all write/read coordination already uses the `_write_done` asyncio Event. Removed to reduce misleading state.
+  - `hub.py`
+
+
+- **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.
+  - `hub.py`
+
+- **Cache Cleanup**: Periodic cleanup of stale Modbus cache entries and disconnected clients.
+  - `modbus_utils.py`
+  - `services.py`
+  - `hub.py`
+
+- **Config Cache**: Consolidated option/data lookups into a single cached read in hub and options update.
+  - `hub.py`
+  - `__init__.py`
+  - `utils.py`
+
+- **Lock Order Guard**: Added lock ordering warnings for nested Modbus access paths.
+  - `hub.py`
+
+- **Sequential Modbus Reads**: Enforced sequential reads for all reader groups to avoid parallel Modbus access.
+  - `hub.py`
+
+- **Reader Lock Consistency**: Slow polling reader groups now share the same lock to avoid ad-hoc lock usage.
+  - `hub.py`
+
+
+
 ## [v2.8.3]
 
 ### Fixed
 - **Runtime Safety**: Removed unsafe import-time type annotation and made fast-poll sensor updates HA-compatible.
-  - [`custom_components/saj_h2_modbus/__init__.py`](custom_components/saj_h2_modbus/__init__.py)
-  - [`custom_components/saj_h2_modbus/sensor.py`](custom_components/saj_h2_modbus/sensor.py)
+  - `__init__.py`
+  - `sensor.py`
 - **Pending State Cleanup**: Normalized pending flag cleanup for passive mode paths.
-  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+  - `charge_control.py`
 - **Options Interval Apply**: Reschedule coordinator when `scan_interval` changes so options take effect immediately.
-  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+  - `hub.py`
 - **RMW Locking**: `merge_write_register()` uses per-address locks for non-merge registers to avoid lock re-entry/deadlocks.
-  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+  - `hub.py`
 
 ### Changed
 - **Register RMW Consolidation**: Unified read-modify-write path via hub merge write to reduce duplication.
-  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+  - `charge_control.py`
 - **Charge Control Helpers**: Centralized integer coercion and write+cache flow for schedule and setting updates.
-  - [`custom_components/saj_h2_modbus/charge_control.py`](custom_components/saj_h2_modbus/charge_control.py)
+  - `charge_control.py`
 - **Schedule Readers**: Unified charge/discharge schedule decoding into a shared helper.
-  - [`custom_components/saj_h2_modbus/modbus_readers.py`](custom_components/saj_h2_modbus/modbus_readers.py)
+  - `modbus_readers.py`
 - **Options Flow Simplification**: Removed direct entry data updates in options flow to avoid double-apply behavior.
-  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+  - `config_flow.py`
 - **Host Uniqueness Check**: Duplicate-host detection now respects values stored in options (options -> data).
-  - [`custom_components/saj_h2_modbus/config_flow.py`](custom_components/saj_h2_modbus/config_flow.py)
+  - `config_flow.py`
 - **Fast Poll Coverage**: Added `pv1Power`/`pv2Power` to 10s fast polling and included part 1 data in the fast loop.
-  - [`custom_components/saj_h2_modbus/hub.py`](custom_components/saj_h2_modbus/hub.py)
+  - `hub.py`
 
 
 ## [v2.8.2]

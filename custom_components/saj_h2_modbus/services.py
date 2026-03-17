@@ -3,22 +3,20 @@ import asyncio
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
+import importlib
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components import mqtt
 from pymodbus.client import ModbusTcpClient
 
-# Try to import paho-mqtt
-try:
-    import paho.mqtt.client as mqtt_client
-    PAHO_AVAILABLE = True
-except ImportError:
-    PAHO_AVAILABLE = False
+# paho-mqtt is imported lazily in an executor to avoid blocking the event loop
+PAHO_AVAILABLE = None  # None=unknown, True/False once attempted
 
 from .modbus_utils import (
-    connect_if_needed,
+    _connect_client_inplace,
     set_modbus_config,
     ReconnectionNeededError,
-    ConnectionCache
+    ConnectionCache,
+    get_modbus_circuit_breaker,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,14 +37,17 @@ class ModbusConnectionManager:
         self.hass = hass
         self._host = host
         self._port = port
-        self._client: Optional[ModbusTcpClient] = None
         self._connection_lock = asyncio.Lock()
         self._reconnecting = False
-        
-        # PERFORMANCE OPTIMIZATION: Connection cache to reduce overhead
-        # Cache client for 60 seconds to avoid repeated connection checks
+
+        # ONE client object, created once and reused for the entire lifetime.
+        # Reconnect = close() + connect() on this same object – never replaced.
+        # This guarantees that all polling loops always reference the same socket.
+        self._client: ModbusTcpClient = ModbusTcpClient(host=host, port=port, timeout=5)
+
+        # Connection cache to avoid repeated connection-state checks
         self._connection_cache = ConnectionCache(cache_ttl=60.0)
-        
+
         # Initial setup of global config for utils
         set_modbus_config(host, port, hass)
 
@@ -60,41 +61,33 @@ class ModbusConnectionManager:
 
     @property
     def connected(self) -> bool:
-        return self._client is not None and self._client.connected
+        return self._client.connected
 
     async def get_client(self) -> ModbusTcpClient:
         """
-        Returns a connected client, establishing connection if needed.
-        
-        PERFORMANCE OPTIMIZATION: Uses connection cache to reduce redundant
-        connection checks. Only acquires lock when cache is invalid.
+        Returns the single connected client, connecting it if needed.
+
+        Always returns the same ModbusTcpClient instance. Never creates a second one.
         """
-        # PERFORMANCE OPTIMIZATION: Try to get cached client without lock first
-        cached_client = self._connection_cache.get_cached_client()
-        if cached_client is not None:
-            return cached_client
-        
-        # Cache miss - need to establish connection
         async with self._connection_lock:
-            # Double-check after acquiring lock (another task might have connected)
-            cached_client = self._connection_cache.get_cached_client()
-            if cached_client is not None:
+            cached_client = await self._connection_cache.get_cached_client()
+            if cached_client is not None and cached_client.connected:
                 return cached_client
-            
-            # Establish new connection
-            self._client = await connect_if_needed(self._client, self._host, self._port)
-            
-            # PERFORMANCE OPTIMIZATION: Cache the connected client
-            self._connection_cache.set_cached_client(self._client)
-            
-            return self._client
+
+            async def _connect_and_cache() -> ModbusTcpClient:
+                await _connect_client_inplace(self._client, self._host, self._port)
+                await self._connection_cache.set_cached_client(self._client)
+                return self._client
+
+            return await get_modbus_circuit_breaker().call(
+                _connect_and_cache,
+                should_trip=lambda e: isinstance(e, (ConnectionError, OSError)),
+            )
 
     async def reconnect(self) -> bool:
         """
-        Forces a reconnection.
-        
-        PERFORMANCE OPTIMIZATION: Invalidates cache on reconnect to ensure
-        fresh connection is used.
+        Forces a reconnection by closing and re-opening the single client socket.
+        Never creates a new ModbusTcpClient – always reuses the same object.
         """
         if self._reconnecting:
             return False
@@ -102,18 +95,13 @@ class ModbusConnectionManager:
         async with self._connection_lock:
             if self._reconnecting:
                 return False
-            
+
             self._reconnecting = True
             try:
-                # PERFORMANCE OPTIMIZATION: Invalidate cache before reconnect
-                self._connection_cache.invalidate()
-                
-                await self.close()
-                self._client = await connect_if_needed(None, self._host, self._port)
-                
-                # PERFORMANCE OPTIMIZATION: Cache the new connection
-                self._connection_cache.set_cached_client(self._client)
-                
+                await self._connection_cache.invalidate()
+                await self._close_socket()
+                await _connect_client_inplace(self._client, self._host, self._port)
+                await self._connection_cache.set_cached_client(self._client)
                 return True
             except Exception as e:
                 _LOGGER.error("Reconnection failed: %s", e)
@@ -121,23 +109,26 @@ class ModbusConnectionManager:
             finally:
                 self._reconnecting = False
 
+    async def _close_socket(self) -> None:
+        """Close the socket on the single client without destroying the client object."""
+        try:
+            await self.hass.async_add_executor_job(self._client.close)
+            _LOGGER.debug("Modbus socket closed")
+        except Exception as e:
+            _LOGGER.warning("Error closing Modbus socket: %s", e)
+
     async def close(self) -> None:
-        """
-        Safely closes the connection in an executor.
-        
-        PERFORMANCE OPTIMIZATION: Invalidates cache when closing connection.
-        """
-        if self._client:
-            try:
-                # PERFORMANCE OPTIMIZATION: Invalidate cache on close
-                self._connection_cache.invalidate()
-                
-                client_to_close = self._client
-                self._client = None
-                await self.hass.async_add_executor_job(client_to_close.close)
-                _LOGGER.debug("Modbus client closed")
-            except Exception as e:
-                _LOGGER.warning("Error closing Modbus client: %s", e)
+        """Close the socket. The client object itself is kept alive for reuse."""
+        await self._connection_cache.invalidate()
+        await self._close_socket()
+
+    async def cleanup_cache(self) -> None:
+        """Clean up stale cache entries and close socket if disconnected."""
+        async with self._connection_lock:
+            invalidated = await self._connection_cache.cleanup_stale()
+            if invalidated and not self._client.connected:
+                await self._close_socket()
+                _LOGGER.debug("Modbus socket closed after cache cleanup")
 
     def update_config(self, host: str, port: int):
         """
@@ -151,13 +142,9 @@ class ModbusConnectionManager:
             self._host = host
             self._port = port
             set_modbus_config(host, port, self.hass)
-            
-            # PERFORMANCE OPTIMIZATION: Invalidate cache on config change
-            self._connection_cache.invalidate()
-            
-            # Close active client so the next call re-connects with new settings
-            if self._client:
-                self.hass.async_create_task(self.close())
+
+            # Close active client so the next call re-connects with new settings.
+            self.hass.async_create_task(self.close())
 
 
 class MqttCircuitBreaker:
@@ -224,24 +211,42 @@ class MqttPublisher:
         self.use_ha_mqtt = use_ha_mqtt
         
         self.strategy = self.STRATEGY_NONE
+        self._strategy_cache_key = None
 
         # Internal Client
         self._paho_client = None
         self._paho_started = False
+        self._paho_module = None
+        self._paho_available: Optional[bool] = None
         self._last_strategy_log = 0.0
         
         # Log throttling
         self._last_no_connection_log = 0.0
         
         # Determine strategy immediately
-        self._determine_strategy()
+        self._determine_strategy(force=True)
         
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
-            self._init_paho_client()
+            self.hass.async_create_task(self._async_init_paho_client())
 
-    def _determine_strategy(self):
+    def _strategy_key(self) -> tuple:
+        """Compute strategy cache key based on relevant inputs."""
+        clean_host = (self.host or "").strip().lower()
+        ha_mqtt_loaded = "mqtt" in self.hass.config.components
+        return (
+            clean_host,
+            bool(self.use_ha_mqtt),
+            bool(ha_mqtt_loaded),
+            bool(self._paho_available is not False),
+        )
+
+    def _determine_strategy(self, force: bool = False):
         """Decide once which MQTT strategy to use with minimal logging."""
+        cache_key = self._strategy_key()
+        if not force and cache_key == self._strategy_cache_key:
+            return
+        self._strategy_cache_key = cache_key
         # Clean up host input
         clean_host = (self.host or "").strip().lower()
 
@@ -268,7 +273,7 @@ class MqttPublisher:
         
         # 2. Priority: Manual Configuration (Paho) - Only if we have a valid-looking host
         if self.host:
-            if not PAHO_AVAILABLE:
+            if self._paho_available is False:
                 _LOGGER.warning(
                     "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
                     "Falling back to HA MQTT (if available) or disabling MQTT.",
@@ -310,26 +315,62 @@ class MqttPublisher:
         else:
             _LOGGER.debug(debug_msg)
 
-    def _init_paho_client(self):
+    async def _async_load_paho_module(self) -> bool:
+        """Load paho.mqtt.client in executor to avoid blocking the event loop."""
+        if self._paho_available is not None:
+            return bool(self._paho_available)
+
+        def _import_paho():
+            return importlib.import_module("paho.mqtt.client")
+
+        try:
+            self._paho_module = await self.hass.async_add_executor_job(_import_paho)
+            self._paho_available = True
+            return True
+        except ImportError:
+            self._paho_available = False
+            return False
+
+    async def _async_init_paho_client(self) -> None:
         """Initialize Paho client if configured."""
-        if PAHO_AVAILABLE and self.host:
-            try:
-                # Basic init
-                self._paho_client = mqtt_client.Client()
-                
-                # Setup Callbacks for Debugging
-                self._paho_client.on_connect = self._on_paho_connect
-                self._paho_client.on_disconnect = self._on_paho_disconnect
-                
-                # Auth
-                auth_status = "without Auth"
-                if self.user:
-                    self._paho_client.username_pw_set(self.user, self.password)
-                    auth_status = f"with Auth (User: {self.user})"
-                
-                _LOGGER.debug("Internal MQTT client initialized %s (waiting for connect)", auth_status)
-            except Exception as e:
-                _LOGGER.error("Failed to init internal MQTT: %s", e)
+        if not self.host:
+            return
+
+        if not await self._async_load_paho_module():
+            _LOGGER.warning(
+                "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
+                "Falling back to HA MQTT (if available) or disabling MQTT.",
+                self.host,
+            )
+            prev_strategy = self.strategy
+            self._determine_strategy(force=True)
+            if self.strategy != prev_strategy:
+                self.stop()
+            return
+
+        try:
+            # Basic init
+            self._paho_client = self._paho_module.Client()
+
+            # Setup Callbacks for Debugging
+            self._paho_client.on_connect = self._on_paho_connect
+            self._paho_client.on_disconnect = self._on_paho_disconnect
+
+            # Auth
+            auth_status = "without Auth"
+            if self.user:
+                self._paho_client.username_pw_set(self.user, self.password)
+                auth_status = f"with Auth (User: {self.user})"
+
+            _LOGGER.debug("Internal MQTT client initialized %s (waiting for connect)", auth_status)
+        except Exception as e:
+            _LOGGER.error("Failed to init internal MQTT: %s", e)
+
+    async def _publish_paho(self, topic: str, payload: str) -> None:
+        """Publish via Paho client in executor."""
+        if not self._paho_client:
+            return
+        await self.hass.async_add_executor_job(self._paho_client.publish, topic, payload)
 
     def _on_paho_connect(self, client, userdata, flags, rc, *args):
         """Callback for Paho connection result."""
@@ -382,16 +423,16 @@ class MqttPublisher:
         self._circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
         self._circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
 
-        # Re-evaluate strategy
+        # Re-evaluate strategy only when strategy inputs change
         prev_strategy = self.strategy
-        self._determine_strategy()
+        self._determine_strategy(force=False)
         strategy_changed = self.strategy != prev_strategy
 
         # Handle Strategy Switch or Config Change
         if self.strategy == self.STRATEGY_PAHO:
             if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
-                self._init_paho_client()
+                self.hass.async_create_task(self._async_init_paho_client())
         else:
             # If we switched away from Paho, stop it
             if prev_strategy == self.STRATEGY_PAHO:
@@ -461,7 +502,11 @@ class MqttPublisher:
                     return 
 
                 for key, payload in messages:
-                    self._paho_client.publish(f"{self.topic_prefix}/{key}", payload)
+                    await self._circuit_breaker.call(
+                        self._publish_paho,
+                        f"{self.topic_prefix}/{key}",
+                        payload,
+                    )
             except Exception as e:
                 _LOGGER.warning("Internal MQTT publish failed: %s", e)
 
