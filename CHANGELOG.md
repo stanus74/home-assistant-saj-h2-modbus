@@ -1,6 +1,8 @@
 [v.2.8.4]
 
-Improved stability and recovery with shared Modbus/MQTT circuit breaker plus safer cache handling; ultra-fast polling now avoids read bursts and handles reconnect/write coordination more safely; configuration and lock handling refined (cached option/data lookups, lock order guards, sequential reads, unified slow-lock). 
+Improved stability and recovery with shared Modbus/MQTT circuit breaker plus safer cache handling
+ultra-fast polling now avoids read bursts and handles reconnect/write coordination more safely
+configuration and lock handling refined (cached option/data lookups, lock order guards, sequential reads, unified slow-lock). 
 
 
 ### Fixed

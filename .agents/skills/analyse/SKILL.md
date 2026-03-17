@@ -55,10 +55,13 @@ Antworte immer auf Deutsch, es sei denn, der Nutzer fragt explizit auf Englisch.
 ```
 custom_components/saj_modbus/
 ├── __init__.py          # Entry Point, Coordinator Setup
-├── coordinator.py       # Data Update Coordinator, Polling-Logik
-├── modbus_controller.py # Modbus Kommunikation
+├── modbus_utils.py      # Modbus Kommunikation
 ├── sensor.py            # Sensor Entity Definitionen
 └── const.py             # Konstanten, Register-Definitionen
+└── hub.py
+└── charge_control.py
+└── services.py
+   
 ```
 
 ---
