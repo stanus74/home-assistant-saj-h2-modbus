@@ -26,7 +26,7 @@ from .charge_control import (
     PENDING_FIELDS,
 )
 from .services import ModbusConnectionManager, MqttPublisher
-from .utils import get_config_value, get_config_values
+from .utils import get_config_value, get_config_values, create_logged_task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,8 +56,6 @@ FAST_POLL_SENSORS = {
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
     "pv1Power", "pv2Power",
 }
-
-CRITICAL_READER_GROUPS = {1, 2}
 
 _LOCK_ORDER = {
     "merge": 0,
@@ -215,7 +213,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         setattr(self, f"_pending_{state_attr}", value)
         self.async_set_updated_data(self.inverter_data)
         getattr(self._setting_handler, handler_method)(value)
-        self.hass.async_create_task(self.process_pending_now())
+        create_logged_task(self.hass, self.process_pending_now(), logger=_LOGGER)
 
     async def _set_charging_state(self, value: bool) -> None:
         self._set_power_state(value, "charging_state", "set_charging_state")
@@ -293,31 +291,17 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
         ]
 
-        for group_idx, group in enumerate(reader_groups, 1):
-            if group_idx in CRITICAL_READER_GROUPS:
-                # Sequential - use slow lock for critical groups
-                for method in group:
-                    try:
-                        res = await method(client, self._slow_lock)
-                        if isinstance(res, dict):
-                            new_cache.update(res)
-                    except ReconnectionNeededError:
-                        await self.connection.reconnect()
-                        raise
-                    except Exception as e:
-                         _LOGGER.warning("Reader error: %s", e)
-            else:
-                # Sequential - enforce single Modbus read at a time
-                for method in group:
-                    try:
-                        res = await method(client, self._slow_lock)
-                        if isinstance(res, dict):
-                            new_cache.update(res)
-                    except ReconnectionNeededError:
-                        await self.connection.reconnect()
-                        raise
-                    except Exception as e:
-                        _LOGGER.warning("Reader error: %s", e)
+        for group in reader_groups:
+            for method in group:
+                try:
+                    res = await method(client, self._slow_lock)
+                    if isinstance(res, dict):
+                        new_cache.update(res)
+                except ReconnectionNeededError:
+                    await self.connection.reconnect()
+                    raise
+                except Exception as e:
+                    _LOGGER.warning("Reader %s error: %s", method.__name__, e)
 
         return new_cache
 
@@ -424,7 +408,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         try:
             client = await self.connection.get_client()
-            
+
+            # TOCTOU guard: a write may have started while we awaited get_client().
+            # Re-check _write_done before touching the Modbus socket.
+            if ultra and not self._write_done.is_set():
+                self._ultra_fast_pending = True
+                _LOGGER.debug("Skipping ultra-fast update after get_client – write in progress")
+                return
+
             # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode
             # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
             lock = self._ultra_fast_lock if ultra else self._fast_lock
@@ -439,10 +430,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
                     result = {**part_1, **part_2}
             except ReconnectionNeededError:
-                await self.connection.reconnect()
                 raise
             except Exception as e:
-                _LOGGER.debug("Ultra-fast poll failed, attempting one retry: %s", e)
+                _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
                 try:
                     # Immediate retry once
                     if ultra:
@@ -452,7 +442,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
                         result = {**part_1, **part_2}
                 except ReconnectionNeededError:
-                    await self.connection.reconnect()
                     raise
                 except Exception as retry_e:
                     # If retry also fails, skip the update cycle
@@ -461,7 +450,14 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             
             if result:
                 fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
-                
+
+                if not fast_data:
+                    _LOGGER.warning(
+                        "Fast poll: result contained no matching sensor keys "
+                        "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
+                        len(result),
+                    )
+
                 if fast_data:
                     # Update inverter data with all fast data
                     async with self._data_lock:
@@ -473,6 +469,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                     if not ultra:
                         for listener in tuple(self._fast_listeners):
                             listener()
+            else:
+                _LOGGER.warning(
+                    "Fast poll returned an empty result – skipping update cycle"
+                )
 
         except ReconnectionNeededError:
             await self.connection.reconnect()
@@ -648,7 +648,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             self._write_done.set()
             if self._ultra_fast_pending and self.ultra_fast_enabled:
                 self._ultra_fast_pending = False
-                self.hass.async_create_task(self._async_update_fast(ultra=True))
+                create_logged_task(self.hass, self._async_update_fast(ultra=True), logger=_LOGGER)
 
     async def _read_registers(self, address: int, count: int) -> List[int]:
         """

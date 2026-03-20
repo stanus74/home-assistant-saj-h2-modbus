@@ -1,4 +1,33 @@
-[v.2.8.4]
+## [v2.8.5]
+
+### Fixed
+- **Cache Update Lock Safety** (`charge_control.py`): `_update_cache()` is now `async` and  
+  always acquires `_data_lock` before writing to `inverter_data`; all 7 call sites updated.
+  Direct dict write in `_set_app_mode` likewise wrapped in `_data_lock`.  
+  Prevents race condition between write operations and the slow/fast poll loops (F11).
+- **Double Reconnect in Fast Poll** (`hub.py`): v2.8.4 added `raise` in the inner
+  `except ReconnectionNeededError` handlers, but the preceding `await reconnect()` call
+  remained, causing a double-reconnect on every fast-poll error.
+  These redundant `reconnect()` calls are now removed; only the outer handler reconnects (F12).
+- **TOCTOU Write/Ultra-Fast Conflict** (`hub.py`): v2.8.4 added a `_write_done` check
+  *before* `get_client()`. However, a write could still start during the `await get_client()`
+  coroutine, leaving the socket exposed. A second guard immediately after
+  `await get_client()` closes this race window (F19).
+- **Unhandled Background Task Exceptions** (`utils.py`, `hub.py`, `services.py`):  
+  Introduced `create_logged_task()` helper that wraps `hass.async_create_task()` with a  
+  done-callback logging any unhandled exception (incl. full stack trace).  
+  Replaced all 5 bare `async_create_task()` calls in `hub.py` and `services.py` (F18).
+- **Silent Empty Fast Poll Results** (`hub.py`): Added `WARNING` log when the fast poll  
+  returns an empty result dict, and a separate warning when none of the returned keys  
+  match `FAST_POLL_SENSORS` (F4).
+
+### Changed
+- **Remove dead `CRITICAL_READER_GROUPS` code** (`hub.py`): The `if group_idx in CRITICAL_READER_GROUPS` /  
+  `else` branches in `_run_reader_methods()` were identical; collapsed into a single loop.  
+  `CRITICAL_READER_GROUPS` constant removed. Reader error log now includes `method.__name__` (F6/F15).
+
+
+## [v2.8.4]
 
 ### Fixed
 - **Modbus Circuit Breaker**: Add a shared circuit breaker for Modbus reads/connects to reduce repeated failure storms and improve recovery.
@@ -14,8 +43,6 @@
   - `hub.py`
 - **RMW Locks Bound Guard**: `merge_write_register` logs a WARNING when `_rmw_locks` exceeds 64 entries to surface unexpected register iteration bugs.
   - `hub.py`
-
-
 - **Connection Cache Race**: Serialize client cache access to avoid stale Modbus clients under concurrent load.
   - `services.py`
 - **Write/Read Coordination**: Ultra-fast polling waits for writes and schedules a catch-up update; reads no longer busy-wait.
@@ -25,8 +52,6 @@
 ### Changed
 - **Remove dead `_write_in_progress` flag**: Flag was set/cleared in `_write_register` but never read anywhere – all write/read coordination already uses the `_write_done` asyncio Event. Removed to reduce misleading state.
   - `hub.py`
-
-
 - **Ultra-Fast Mode**: Disable 10s fast polling when 1s ultra-fast mode is enabled to avoid read bursts.
   - `hub.py`
 

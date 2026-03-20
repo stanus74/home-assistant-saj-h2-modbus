@@ -1,6 +1,9 @@
 """Utility functions for SAJ H2 Modbus integration."""
+import asyncio
+import logging
 from typing import Any, Optional, Dict, List
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
 
 def generate_slot_definitions(slot_type: str, count: int = 7) -> Dict[str, List[Dict]]:
@@ -102,3 +105,26 @@ def get_config_value(entry: ConfigEntry, key: str, default: Any = None) -> Any:
 def get_config_values(entry: ConfigEntry, defaults: Dict[str, Any]) -> Dict[str, Any]:
     """Get multiple config values with fallback: options -> data -> default."""
     return {key: get_config_value(entry, key, default) for key, default in defaults.items()}
+
+
+def create_logged_task(
+    hass: HomeAssistant,
+    coro,
+    *,
+    logger: logging.Logger,
+) -> asyncio.Task:
+    """Schedule a coroutine as a background HA task and log any unhandled exception."""
+    task = hass.async_create_task(coro)
+
+    def _log_exception(t: asyncio.Task) -> None:
+        if not t.cancelled():
+            exc = t.exception()
+            if exc is not None:
+                logger.error(
+                    "Background task raised an unhandled exception: %s",
+                    exc,
+                    exc_info=exc,
+                )
+
+    task.add_done_callback(_log_exception)
+    return task

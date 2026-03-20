@@ -18,6 +18,7 @@ from .modbus_utils import (
     ConnectionCache,
     get_modbus_circuit_breaker,
 )
+from .utils import create_logged_task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ class ModbusConnectionManager:
             set_modbus_config(host, port, self.hass)
 
             # Close active client so the next call re-connects with new settings.
-            self.hass.async_create_task(self.close())
+            create_logged_task(self.hass, self.close(), logger=_LOGGER)
 
 
 class MqttCircuitBreaker:
@@ -228,7 +229,7 @@ class MqttPublisher:
         
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
-            self.hass.async_create_task(self._async_init_paho_client())
+            create_logged_task(self.hass, self._async_init_paho_client(), logger=_LOGGER)
 
     def _strategy_key(self) -> tuple:
         """Compute strategy cache key based on relevant inputs."""
@@ -432,7 +433,7 @@ class MqttPublisher:
         if self.strategy == self.STRATEGY_PAHO:
             if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
-                self.hass.async_create_task(self._async_init_paho_client())
+                create_logged_task(self.hass, self._async_init_paho_client(), logger=_LOGGER)
         else:
             # If we switched away from Paho, stop it
             if prev_strategy == self.STRATEGY_PAHO:

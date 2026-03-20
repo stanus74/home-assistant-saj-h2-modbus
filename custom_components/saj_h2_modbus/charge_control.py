@@ -254,7 +254,7 @@ class ChargeSettingHandler:
                     updates["charging_enabled"] = is_enabled
                 else:
                     updates["discharging_enabled"] = is_enabled
-                self._update_cache(updates)
+                await self._update_cache(updates)
             return
 
         int_value = self._coerce_int(value, key)
@@ -320,7 +320,7 @@ class ChargeSettingHandler:
         if success:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
-            self._update_cache({key: new_mask})
+            await self._update_cache({key: new_mask})
 
     async def _handle_power_state(self, state_type: str, value: bool) -> None:
         """Handles charging or discharging state changes generically."""
@@ -348,7 +348,7 @@ class ChargeSettingHandler:
 
             if write_success:
                 # Update cache immediately so entities reflect new state
-                self._update_cache({f"{state_type}_enabled": write_value})
+                await self._update_cache({f"{state_type}_enabled": write_value})
 
                 # Update AppMode logic after cache reflects current state
                 chg, dchg = self._get_power_states()
@@ -375,7 +375,7 @@ class ChargeSettingHandler:
         try:
             if await self._write_register_with_backoff(addr, desired_int, "passive charge enable"):
                 # Update cache immediately
-                self._update_cache({"passive_charge_enable": desired_int})
+                await self._update_cache({"passive_charge_enable": desired_int})
 
                 if desired_int > 0:
                     await self._activate_passive_mode()
@@ -452,9 +452,10 @@ class ChargeSettingHandler:
 
     # ========== HELPER METHODS ==========
 
-    def _update_cache(self, updates: Dict[str, Any]) -> None:
-        """Update hub inverter_data and notify listeners."""
-        self.hub.inverter_data.update(updates)
+    async def _update_cache(self, updates: Dict[str, Any]) -> None:
+        """Update hub inverter_data and notify listeners (acquires _data_lock)."""
+        async with self.hub._data_lock:
+            self.hub.inverter_data.update(updates)
         self.hub.async_set_updated_data(self.hub.inverter_data)
 
     def _coerce_int(self, value: Any, key: str) -> Optional[int]:
@@ -474,7 +475,7 @@ class ChargeSettingHandler:
     ) -> bool:
         """Write a register and update cache on success."""
         if await self._write_register_with_backoff(address, value, label):
-            self._update_cache(updates)
+            await self._update_cache(updates)
             return True
         return False
 
@@ -511,10 +512,9 @@ class ChargeSettingHandler:
         
         addr = MODBUS_ADDRESSES["simple_settings"]["app_mode"]["address"]
         if await self._write_register_with_backoff(addr, desired_app_mode, f"AppMode ({reason})"):
-            # Update cache
-            self.hub.inverter_data["AppMode"] = desired_app_mode
-            
-            # Only notify if value actually changed
+            # Update cache (lock-protected); only notify HA when value actually changed
+            async with self.hub._data_lock:
+                self.hub.inverter_data["AppMode"] = desired_app_mode
             if current_app_mode != desired_app_mode:
                 self.hub.async_set_updated_data(self.hub.inverter_data)
 
@@ -579,7 +579,7 @@ class ChargeSettingHandler:
         success, new_value = await self.hub.merge_write_register(address, modifier, f"{label} day_mask_power")
         if success:
             # Update cache
-            self._update_cache({
+            await self._update_cache({
                 f"{label}_day_mask": (new_value >> 8) & 0xFF,
                 f"{label}_power_percent": new_value & 0xFF
             })
