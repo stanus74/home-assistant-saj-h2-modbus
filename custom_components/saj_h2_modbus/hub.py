@@ -303,6 +303,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         if isinstance(res, dict):
                             new_cache.update(res)
                     except ReconnectionNeededError:
+                        await self.connection.notify_error()
                         await self.connection.reconnect()
                         raise
                     except Exception as e:
@@ -485,6 +486,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 )
 
         except ReconnectionNeededError:
+            await self.connection.notify_error()
             await self.connection.reconnect()
         except Exception as e:
             _LOGGER.warning("Fast update failed: %s", e)

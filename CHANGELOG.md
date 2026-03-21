@@ -1,4 +1,4 @@
-## [v2.8.6]
+## [v2.8.5]
 
 ### Changed
 - **Per-Instance Circuit Breaker** (`modbus_utils.py`, `services.py`, `hub.py`):  
@@ -10,9 +10,15 @@
   `_async_update_fast`, `_read_registers`).  
   Effect: a tripped breaker for one failing inverter no longer blocks reads/connects  
   for a second independently configured inverter (F13).
+- **Connection Cache TTL optimised** (`modbus_utils.py`, `services.py`, `hub.py`):  
+  Reduced `ConnectionCache` default TTL from 60 s to 30 s and health-check interval  
+  from 30 s to 5 s for faster detection of silent disconnects.  
+  Added `notify_error()` to `ConnectionCache` and `ModbusConnectionManager`: sets  
+  `_cache_expiry = 0` immediately so concurrent tasks no longer receive the stale  
+  cached client during the window between a read failure and `reconnect()` completing.  
+  `hub.py` calls `notify_error()` before every `reconnect()` call (F5).
 
 
-## [v2.8.5]
 
 ### Fixed
 - **Cache Update Lock Safety** (`charge_control.py`): `_update_cache()` is now `async` and  

@@ -202,7 +202,7 @@ class ConnectionCache:
     reconnection attempts by caching the client for a configurable TTL.
     """
     
-    def __init__(self, cache_ttl: float = 60.0):
+    def __init__(self, cache_ttl: float = 30.0):
         """
         Initialize connection cache.
         
@@ -213,7 +213,7 @@ class ConnectionCache:
         self._cache_expiry: float = 0.0
         self._cache_ttl: float = cache_ttl
         self._last_health_check: float = 0.0
-        self._health_check_interval: float = 30.0  # Check health every 30s
+        self._health_check_interval: float = 5.0  # Check health every 5s
         self._connection_healthy: bool = True
         self._cache_lock = asyncio.Lock()  # Protects concurrent read-modify-write on cache state
 
@@ -259,6 +259,17 @@ class ConnectionCache:
         """Invalidate the cached connection."""
         async with self._cache_lock:
             self._do_invalidate()
+
+    async def notify_error(self) -> None:
+        """Mark cache as immediately expired after a connection error.
+
+        Faster than invalidate(): skips acquiring the lock for the expiry
+        reset so concurrent tasks stop receiving the stale client right away.
+        The next get_cached_client() call will fall through to a fresh connect.
+        """
+        async with self._cache_lock:
+            self._cache_expiry = 0.0
+            self._connection_healthy = False
 
     async def cleanup_stale(self) -> bool:
         """Invalidate cached client if expired or unhealthy."""

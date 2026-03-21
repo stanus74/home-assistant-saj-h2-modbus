@@ -47,7 +47,7 @@ class ModbusConnectionManager:
         self._client: ModbusTcpClient = ModbusTcpClient(host=host, port=port, timeout=5)
 
         # Connection cache to avoid repeated connection-state checks
-        self._connection_cache = ConnectionCache(cache_ttl=60.0)
+        self._connection_cache = ConnectionCache(cache_ttl=30.0)
 
         # Per-instance circuit breaker – isolates this inverter's failure state
         # from any other configured inverter (multi-inverter setups).
@@ -131,6 +131,15 @@ class ModbusConnectionManager:
         """Close the socket. The client object itself is kept alive for reuse."""
         await self._connection_cache.invalidate()
         await self._close_socket()
+
+    async def notify_error(self) -> None:
+        """Mark connection cache as immediately expired after a read/write error.
+
+        Call this as soon as a ReconnectionNeededError is caught so that no
+        concurrent task receives the now-stale cached client before reconnect()
+        has finished.
+        """
+        await self._connection_cache.notify_error()
 
     async def cleanup_cache(self) -> None:
         """Clean up stale cache entries and close socket if disconnected."""
