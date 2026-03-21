@@ -1,6 +1,7 @@
 from __future__ import annotations
 """SAJ Modbus Hub with optimized processing and fixed interval system."""
 import asyncio
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import logging
@@ -57,6 +58,9 @@ FAST_POLL_SENSORS = {
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
     "pv1Power", "pv2Power",
 }
+
+# TTL for static inverter data (serial, firmware, model). Re-read after this many seconds.
+_STATIC_DATA_TTL = 3600.0
 
 _LOCK_ORDER = {
     "merge": 0,
@@ -154,7 +158,8 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         # Read-modify-write locks for non-merge-locked registers.
         # Important: do NOT use _write_lock as an outer lock for RMW, because
         # _write_register()/try_write_registers() acquire _write_lock internally.
-        self._rmw_locks: Dict[int, asyncio.Lock] = {}
+        # OrderedDict enables LRU eviction: oldest (front) entry is dropped first.
+        self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
         
         # DEDICATED WRITE LOCK: Write operations have priority over read operations
         # This prevents write operations from waiting for read operations to complete
@@ -178,6 +183,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._data_lock = asyncio.Lock()
 
         self._inverter_static_data: Optional[Dict[str, Any]] = None
+        self._inverter_static_data_loaded_at: Optional[float] = None
         self._warned_missing_states: bool = False
 
         # Charge Control
@@ -272,15 +278,21 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             new_cache: Dict[str, Any] = {}
 
-            # Load Static Data once
-            if self._inverter_static_data is None:
+            # Load Static Data – refresh after TTL expires (default 1 h).
+            _static_expired = (
+                self._inverter_static_data_loaded_at is None
+                or (time.monotonic() - self._inverter_static_data_loaded_at) > _STATIC_DATA_TTL
+            )
+            if _static_expired:
                 try:
                     self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
                         client, self._slow_lock  # Use slow lock for static data
                     )
+                    self._inverter_static_data_loaded_at = time.monotonic()
                 except Exception as e:
                     _LOGGER.error("Failed to load static data: %s", e)
                     self._inverter_static_data = {}
+                    self._inverter_static_data_loaded_at = time.monotonic()
 
             if self._inverter_static_data:
                 new_cache.update(self._inverter_static_data)
@@ -427,25 +439,15 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode
             # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
             lock = self._ultra_fast_lock if ultra else self._fast_lock
+            lock_name = "ultra_fast" if ultra else "fast"
 
             # Activate per-instance circuit breaker for this fast-poll read session.
             _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
+            async with self._lock_order_guard(lock_name):
             
-            # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
-            # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
-            try:
-                if ultra:
-                    result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                else:
-                    part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
-                    part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                    result = {**part_1, **part_2}
-            except ReconnectionNeededError:
-                raise
-            except Exception as e:
-                _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
+                # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
+                # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
                 try:
-                    # Immediate retry once
                     if ultra:
                         result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
                     else:
@@ -454,36 +456,48 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                         result = {**part_1, **part_2}
                 except ReconnectionNeededError:
                     raise
-                except Exception as retry_e:
-                    # If retry also fails, skip the update cycle
-                    _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
-                    return
-            
-            if result:
-                fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+                except Exception as e:
+                    _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
+                    try:
+                        # Immediate retry once
+                        if ultra:
+                            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                        else:
+                            part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
+                            part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                            result = {**part_1, **part_2}
+                    except ReconnectionNeededError:
+                        raise
+                    except Exception as retry_e:
+                        # If retry also fails, skip the update cycle
+                        _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
+                        return
 
-                if not fast_data:
+                if result:
+                    fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+
+                    if not fast_data:
+                        _LOGGER.warning(
+                            "Fast poll: result contained no matching sensor keys "
+                            "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
+                            len(result),
+                        )
+
+                    if fast_data:
+                        # Update inverter data with all fast data
+                        async with self._data_lock:
+                            self.inverter_data.update(fast_data)
+
+                        await self.mqtt.publish_data(fast_data)
+
+                        # Only the 10s loop should push to HA entities to avoid DB spam
+                        if not ultra:
+                            for listener in tuple(self._fast_listeners):
+                                listener()
+                else:
                     _LOGGER.warning(
-                        "Fast poll: result contained no matching sensor keys "
-                        "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
-                        len(result),
+                        "Fast poll returned an empty result – skipping update cycle"
                     )
-
-                if fast_data:
-                    # Update inverter data with all fast data
-                    async with self._data_lock:
-                        self.inverter_data.update(fast_data)
-                    
-                    await self.mqtt.publish_data(fast_data)
-
-                    # Only the 10s loop should push to HA entities to avoid DB spam
-                    if not ultra:
-                        for listener in tuple(self._fast_listeners):
-                            listener()
-            else:
-                _LOGGER.warning(
-                    "Fast poll returned an empty result – skipping update cycle"
-                )
 
         except ReconnectionNeededError:
             await self.connection.notify_error()
@@ -696,14 +710,27 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             lock = self._merge_locks.get(address)
             if lock is None:
                 if address not in self._rmw_locks:
-                    # Guard against unbounded growth (should never exceed ~20 in practice)
+                    # Hard LRU cap: evict the oldest unlocked entry before adding a new one.
+                    # Should never exceed ~20 entries in normal operation.
                     if len(self._rmw_locks) >= 64:
-                        _LOGGER.warning(
-                            "merge_write_register: _rmw_locks size exceeded 64 entries "
-                            "(address=0x%04x). Possible bug – check for unintended address iteration.",
-                            address,
-                        )
+                        for evict_addr, evict_lock in self._rmw_locks.items():
+                            if not evict_lock.locked():
+                                del self._rmw_locks[evict_addr]
+                                _LOGGER.debug(
+                                    "merge_write_register: evicted RMW lock for 0x%04x "
+                                    "(LRU, capacity=64)",
+                                    evict_addr,
+                                )
+                                break
+                        else:
+                            _LOGGER.warning(
+                                "merge_write_register: _rmw_locks at 64 entries and all "
+                                "currently locked (address=0x%04x) – possible bug.",
+                                address,
+                            )
                     self._rmw_locks[address] = asyncio.Lock()
+                # Move to end so this entry is considered most-recently-used.
+                self._rmw_locks.move_to_end(address)
                 lock = self._rmw_locks[address]
             async with lock:
                 current_regs = await self._read_registers(address, 1)

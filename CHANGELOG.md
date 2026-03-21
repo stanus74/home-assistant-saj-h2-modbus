@@ -1,6 +1,26 @@
 ## [v2.8.5]
 
 ### Changed
+- **Lock-Order Guards for Fast/Ultra-Fast poll** (`hub.py`): `_async_update_fast()` lacked
+  a `_lock_order_guard` context, so nested lock acquisitions in the fast/ultra-fast path
+  were invisible to the deadlock-detection mechanism.
+  Added `async with self._lock_order_guard("fast" | "ultra_fast")` wrapping the read
+  and result-processing block, consistent with the existing `"slow"` guard in
+  `_run_reader_methods()` and `"write"` guard in `_write_register()` (F8).
+- **`_rmw_locks` hard LRU cap** (`hub.py`): The dynamic RMW lock dict was guarded only by
+  a `WARNING` log when reaching 64 entries; the dict continued to grow unboundedly.
+  Changed to `OrderedDict` and added LRU eviction: when the capacity limit is reached,
+  the oldest unlocked entry is removed before inserting the new address.
+  Every cache hit calls `move_to_end()` to track recency.
+  If all 64 entries happen to be locked simultaneously, a `WARNING` is emitted instead
+  of evicting an in-use lock (F7).
+- **Static Inverter Data TTL** (`hub.py`): `_inverter_static_data` (serial number, firmware
+  version, model) was loaded only once and held indefinitely. A `_STATIC_DATA_TTL = 3600 s`
+  constant and a `_inverter_static_data_loaded_at` monotonic timestamp are introduced.
+  The cache is now refreshed every hour, picking up firmware updates or inverter
+  replacements without requiring a Home Assistant restart.
+  On read failure the timestamp is still recorded, so the next retry is deferred by 1 h
+  instead of hammering the bus every 60 s (F3).
 - **Per-Instance Circuit Breaker** (`modbus_utils.py`, `services.py`, `hub.py`):  
   The global `_MODBUS_CIRCUIT_BREAKER` module singleton is replaced by a per-instance  
   `_circuit_breaker` member on `ModbusConnectionManager`.  
@@ -17,7 +37,6 @@
   `_cache_expiry = 0` immediately so concurrent tasks no longer receive the stale  
   cached client during the window between a read failure and `reconnect()` completing.  
   `hub.py` calls `notify_error()` before every `reconnect()` call (F5).
-
 
 
 ### Fixed
