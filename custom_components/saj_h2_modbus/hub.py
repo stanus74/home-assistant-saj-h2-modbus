@@ -56,6 +56,10 @@ FAST_POLL_SENSORS = {
     "directionGrid", "directionOutput", "CT_GridPowerWatt",
     "CT_GridPowerVA", "CT_PVPowerWatt", "CT_PVPowerVA", "totalgridPowerVA",
     "TotalInvPowerVA", "BackupTotalLoadPowerWatt", "BackupTotalLoadPowerVA",
+    # pv1Power/pv2Power come from read_additional_modbus_data_1_part_1.
+    # That function is read in the 10 s fast loop (non-ultra) but NOT in the
+    # 1 s ultra-fast loop (which only reads part_2). These keys therefore
+    # update at 10 s in fast mode and at 60 s in ultra-fast mode.
     "pv1Power", "pv2Power",
 }
 
@@ -70,6 +74,18 @@ _LOCK_ORDER = {
     "write": 2,
 }
 _LOCK_STACK: ContextVar[tuple[str, ...]] = ContextVar("saj_lock_stack", default=())
+
+# All reader groups executed sequentially in the 60 s slow poll.
+# Defined once at module level to avoid re-creating the list on every cycle (F16).
+_READER_GROUPS = [
+    [modbus_readers.read_modbus_realtime_data],
+    [modbus_readers.read_additional_modbus_data_1_part_1, modbus_readers.read_additional_modbus_data_1_part_2],
+    [modbus_readers.read_additional_modbus_data_2_part_1, modbus_readers.read_additional_modbus_data_2_part_2],
+    [modbus_readers.read_additional_modbus_data_3, modbus_readers.read_additional_modbus_data_3_2, modbus_readers.read_additional_modbus_data_4],
+    [modbus_readers.read_battery_data, modbus_readers.read_inverter_phase_data, modbus_readers.read_offgrid_output_data],
+    [modbus_readers.read_side_net_data, modbus_readers.read_passive_battery_data, modbus_readers.read_meter_a_data],
+    [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
+]
 
 
 class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
@@ -260,16 +276,6 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error("Update cycle failed: %s", err)
             raise
 
-    def _process_reader_result(self, result: Any) -> bool:
-        """Process a reader result and update cache if valid. Returns True if reconnection needed."""
-        if isinstance(result, dict):
-            return False
-        elif isinstance(result, ReconnectionNeededError):
-            return True
-        elif isinstance(result, Exception):
-            _LOGGER.warning("Reader error: %s", result)
-        return False
-
     async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
         """Executes all readers using the provided client."""
         # Activate the per-instance circuit breaker for the entire read session.
@@ -297,18 +303,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             if self._inverter_static_data:
                 new_cache.update(self._inverter_static_data)
 
-            # Reader groups (Same definition as original)
-            reader_groups = [
-                [modbus_readers.read_modbus_realtime_data],
-                [modbus_readers.read_additional_modbus_data_1_part_1, modbus_readers.read_additional_modbus_data_1_part_2],
-                [modbus_readers.read_additional_modbus_data_2_part_1, modbus_readers.read_additional_modbus_data_2_part_2],
-                [modbus_readers.read_additional_modbus_data_3, modbus_readers.read_additional_modbus_data_3_2, modbus_readers.read_additional_modbus_data_4],
-                [modbus_readers.read_battery_data, modbus_readers.read_inverter_phase_data, modbus_readers.read_offgrid_output_data],
-                [modbus_readers.read_side_net_data, modbus_readers.read_passive_battery_data, modbus_readers.read_meter_a_data],
-                [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
-            ]
-
-            for group in reader_groups:
+            for group in _READER_GROUPS:
                 for method in group:
                     try:
                         res = await method(client, self._slow_lock)

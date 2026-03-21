@@ -6,8 +6,23 @@
   with the Modbus read while a write might still be using the socket.
   Now raises `RuntimeError` instead, propagating the error to the caller so the read
   is cleanly aborted rather than risking a corrupted Modbus frame (F10).
+- **Dead code removed** (`hub.py`, `modbus_utils.py`):
+  - `hub.py`: `_process_reader_result()` was never called after the reader loop
+    was refactored; method deleted (F14).
+  - `modbus_utils.py`: `ensure_client_connected()` and `connect_if_needed()` were
+    "backward compatibility wrappers" with no remaining callers; both functions
+    and their section comment deleted (F14).
 
 ### Changed
+- **`reader_groups` promoted to module constant** (`hub.py`): The 7-element reader-group
+  list was re-created as a local variable on every 60 s slow-poll cycle.
+  Moved to a module-level constant `_READER_GROUPS`; `_run_reader_methods()` now
+  iterates the shared constant instead (F16).
+- **Document `pv1Power`/`pv2Power` update frequency** (`hub.py`): Added a comment
+  in `FAST_POLL_SENSORS` clarifying that these two keys are populated by
+  `read_additional_modbus_data_1_part_1` (read in the 10 s fast loop) but not
+  in the 1 s ultra-fast loop (which only reads `part_2`). They therefore update
+  at 10 s in fast mode and at 60 s in ultra-fast mode (F17).
 - **Lock-Order Guards for Fast/Ultra-Fast poll** (`hub.py`): `_async_update_fast()` lacked
   a `_lock_order_guard` context, so nested lock acquisitions in the fast/ultra-fast path
   were invisible to the deadlock-detection mechanism.

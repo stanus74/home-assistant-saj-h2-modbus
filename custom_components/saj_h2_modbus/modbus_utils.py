@@ -309,17 +309,6 @@ class ConnectionCache:
         return False
 
 
-# Backward compatibility wrappers - these maintain the original function signatures
-async def ensure_client_connected(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger) -> None:
-    """Ensures the Modbus client is connected, attempting to connect if not."""
-    await _connect_client(client, host, port, logger, create_new=False)
-
-
-async def connect_if_needed(client: Optional[ModbusTcpClient], host: str, port: int) -> ModbusTcpClient:
-    """Creates a new client if needed and ensures it is connected."""
-    return await _connect_client(client, host, port, _LOGGER, create_new=True)
-
-
 async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int) -> None:
     """
     Connect an existing ModbusTcpClient in-place (close if needed, then connect).
