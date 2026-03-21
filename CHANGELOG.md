@@ -1,3 +1,17 @@
+## [v2.8.6]
+
+### Changed
+- **Per-Instance Circuit Breaker** (`modbus_utils.py`, `services.py`, `hub.py`):  
+  The global `_MODBUS_CIRCUIT_BREAKER` module singleton is replaced by a per-instance  
+  `_circuit_breaker` member on `ModbusConnectionManager`.  
+  A `ContextVar` (`_CIRCUIT_BREAKER_CTX`) propagates the active breaker through the  
+  coroutine call chain (readers, `try_read_registers`) without changing all function  
+  signatures. Hub.py sets the ContextVar at each read entry point (`_run_reader_methods`,  
+  `_async_update_fast`, `_read_registers`).  
+  Effect: a tripped breaker for one failing inverter no longer blocks reads/connects  
+  for a second independently configured inverter (F13).
+
+
 ## [v2.8.5]
 
 ### Fixed

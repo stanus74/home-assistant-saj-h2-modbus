@@ -20,6 +20,7 @@ from .modbus_utils import (
     try_read_registers,
     try_write_registers,
     ReconnectionNeededError,
+    _CIRCUIT_BREAKER_CTX,
 )
 from .charge_control import (
     ChargeSettingHandler,
@@ -265,45 +266,51 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
         """Executes all readers using the provided client."""
-        new_cache: Dict[str, Any] = {}
-        
-        # Load Static Data once
-        if self._inverter_static_data is None:
-            try:
-                self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
-                    client, self._slow_lock  # Use slow lock for static data
-                )
-            except Exception as e:
-                _LOGGER.error("Failed to load static data: %s", e)
-                self._inverter_static_data = {}
-        
-        if self._inverter_static_data:
-            new_cache.update(self._inverter_static_data)
+        # Activate the per-instance circuit breaker for the entire read session.
+        # All downstream try_read_registers() calls pick this up via the ContextVar.
+        cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
+        try:
+            new_cache: Dict[str, Any] = {}
 
-        # Reader groups (Same definition as original)
-        reader_groups = [
-            [modbus_readers.read_modbus_realtime_data],
-            [modbus_readers.read_additional_modbus_data_1_part_1, modbus_readers.read_additional_modbus_data_1_part_2],
-            [modbus_readers.read_additional_modbus_data_2_part_1, modbus_readers.read_additional_modbus_data_2_part_2],
-            [modbus_readers.read_additional_modbus_data_3, modbus_readers.read_additional_modbus_data_3_2, modbus_readers.read_additional_modbus_data_4],
-            [modbus_readers.read_battery_data, modbus_readers.read_inverter_phase_data, modbus_readers.read_offgrid_output_data],
-            [modbus_readers.read_side_net_data, modbus_readers.read_passive_battery_data, modbus_readers.read_meter_a_data],
-            [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
-        ]
-
-        for group in reader_groups:
-            for method in group:
+            # Load Static Data once
+            if self._inverter_static_data is None:
                 try:
-                    res = await method(client, self._slow_lock)
-                    if isinstance(res, dict):
-                        new_cache.update(res)
-                except ReconnectionNeededError:
-                    await self.connection.reconnect()
-                    raise
+                    self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
+                        client, self._slow_lock  # Use slow lock for static data
+                    )
                 except Exception as e:
-                    _LOGGER.warning("Reader %s error: %s", method.__name__, e)
+                    _LOGGER.error("Failed to load static data: %s", e)
+                    self._inverter_static_data = {}
 
-        return new_cache
+            if self._inverter_static_data:
+                new_cache.update(self._inverter_static_data)
+
+            # Reader groups (Same definition as original)
+            reader_groups = [
+                [modbus_readers.read_modbus_realtime_data],
+                [modbus_readers.read_additional_modbus_data_1_part_1, modbus_readers.read_additional_modbus_data_1_part_2],
+                [modbus_readers.read_additional_modbus_data_2_part_1, modbus_readers.read_additional_modbus_data_2_part_2],
+                [modbus_readers.read_additional_modbus_data_3, modbus_readers.read_additional_modbus_data_3_2, modbus_readers.read_additional_modbus_data_4],
+                [modbus_readers.read_battery_data, modbus_readers.read_inverter_phase_data, modbus_readers.read_offgrid_output_data],
+                [modbus_readers.read_side_net_data, modbus_readers.read_passive_battery_data, modbus_readers.read_meter_a_data],
+                [modbus_readers.read_charge_data, modbus_readers.read_discharge_data],
+            ]
+
+            for group in reader_groups:
+                for method in group:
+                    try:
+                        res = await method(client, self._slow_lock)
+                        if isinstance(res, dict):
+                            new_cache.update(res)
+                    except ReconnectionNeededError:
+                        await self.connection.reconnect()
+                        raise
+                    except Exception as e:
+                        _LOGGER.warning("Reader %s error: %s", method.__name__, e)
+
+            return new_cache
+        finally:
+            _CIRCUIT_BREAKER_CTX.reset(cb_token)
 
     # --- FAST POLLING ---
 
@@ -419,6 +426,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode
             # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
             lock = self._ultra_fast_lock if ultra else self._fast_lock
+
+            # Activate per-instance circuit breaker for this fast-poll read session.
+            _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
             
             # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
             # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
@@ -668,6 +678,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         
         async with self._lock_order_guard("slow"):
             client = await self.connection.get_client()
+            _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
             return await try_read_registers(
                 client, self._slow_lock, 1, address, count
             )

@@ -3,6 +3,7 @@ import functools
 import logging
 import os
 import time
+from contextvars import ContextVar
 from typing import Any, Awaitable, Callable, List, Optional, Union
 
 import socket
@@ -83,12 +84,22 @@ class ModbusCircuitBreaker:
             raise
 
 
-_MODBUS_CIRCUIT_BREAKER = ModbusCircuitBreaker()
+# Module-level default used when no per-instance circuit breaker is active
+# (e.g. during tests or direct calls outside of hub context).
+_DEFAULT_CIRCUIT_BREAKER = ModbusCircuitBreaker()
+
+# ContextVar that carries the per-ModbusConnectionManager circuit breaker
+# through the coroutine call chain without changing every function signature.
+# Set by SAJModbusHub before calling any reader; resets automatically when
+# the enclosing asyncio task finishes.
+_CIRCUIT_BREAKER_CTX: ContextVar[Optional[ModbusCircuitBreaker]] = ContextVar(
+    "saj_modbus_circuit_breaker", default=None
+)
 
 
 def get_modbus_circuit_breaker() -> ModbusCircuitBreaker:
-    """Return the shared Modbus circuit breaker instance."""
-    return _MODBUS_CIRCUIT_BREAKER
+    """Return the active per-instance circuit breaker, or the module-level default."""
+    return _CIRCUIT_BREAKER_CTX.get() or _DEFAULT_CIRCUIT_BREAKER
 
 # Global lock that serializes all reconnect attempts across polling loops.
 # Fast-Loop and Slow-Loop share the same ModbusTcpClient; without this lock

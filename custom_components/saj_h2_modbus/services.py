@@ -16,7 +16,7 @@ from .modbus_utils import (
     set_modbus_config,
     ReconnectionNeededError,
     ConnectionCache,
-    get_modbus_circuit_breaker,
+    ModbusCircuitBreaker,
 )
 from .utils import create_logged_task
 
@@ -49,6 +49,10 @@ class ModbusConnectionManager:
         # Connection cache to avoid repeated connection-state checks
         self._connection_cache = ConnectionCache(cache_ttl=60.0)
 
+        # Per-instance circuit breaker – isolates this inverter's failure state
+        # from any other configured inverter (multi-inverter setups).
+        self._circuit_breaker = ModbusCircuitBreaker()
+
         # Initial setup of global config for utils
         set_modbus_config(host, port, hass)
 
@@ -63,6 +67,11 @@ class ModbusConnectionManager:
     @property
     def connected(self) -> bool:
         return self._client.connected
+
+    @property
+    def circuit_breaker(self) -> ModbusCircuitBreaker:
+        """Per-instance circuit breaker for this inverter connection."""
+        return self._circuit_breaker
 
     async def get_client(self) -> ModbusTcpClient:
         """
@@ -80,7 +89,7 @@ class ModbusConnectionManager:
                 await self._connection_cache.set_cached_client(self._client)
                 return self._client
 
-            return await get_modbus_circuit_breaker().call(
+            return await self._circuit_breaker.call(
                 _connect_and_cache,
                 should_trip=lambda e: isinstance(e, (ConnectionError, OSError)),
             )
