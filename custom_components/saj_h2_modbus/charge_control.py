@@ -255,6 +255,9 @@ class ChargeSettingHandler:
                 else:
                     updates["discharging_enabled"] = is_enabled
                 await self._update_cache(updates)
+                # Sync AppMode: enabling any slot requires AppMode=1 (Force Charge/Discharge)
+                chg, dchg = self._get_power_states()
+                await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg)
             return
 
         int_value = self._coerce_int(value, key)
