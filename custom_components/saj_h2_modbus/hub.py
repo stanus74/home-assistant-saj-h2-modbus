@@ -687,9 +687,9 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             await asyncio.wait_for(self._write_done.wait(), timeout=5.0)
         except asyncio.TimeoutError:
-            _LOGGER.warning(
-                "_read_registers: _write_done not set after 5s – "
-                "proceeding anyway (write may have been cancelled)"
+            raise RuntimeError(
+                "_read_registers: _write_done not set after 5 s – "
+                "write operation appears stuck"
             )
         
         async with self._lock_order_guard("slow"):

@@ -1,5 +1,12 @@
 ## [v2.8.5]
 
+### Fixed
+- **`_write_done` timeout raises instead of proceeding** (`hub.py`): `_read_registers()`
+  caught `asyncio.TimeoutError` after the 5 s `_write_done` guard and silently continued
+  with the Modbus read while a write might still be using the socket.
+  Now raises `RuntimeError` instead, propagating the error to the caller so the read
+  is cleanly aborted rather than risking a corrupted Modbus frame (F10).
+
 ### Changed
 - **Lock-Order Guards for Fast/Ultra-Fast poll** (`hub.py`): `_async_update_fast()` lacked
   a `_lock_order_guard` context, so nested lock acquisitions in the fast/ultra-fast path
