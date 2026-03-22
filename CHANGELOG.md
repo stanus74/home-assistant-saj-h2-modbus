@@ -30,7 +30,7 @@ Exceptions in Background-Tasks verschwanden lautlos. Neuer `create_logged_task()
 - **Connection Cache TTL** verkürzt: 60 s → 30 s, Health-Check-Interval 30 s → 5 s – stille Verbindungsabbrüche werden schneller erkannt
 - **LRU-Limit für interne RMW-Locks** tatsächlich durchgesetzt (vorher nur WARNING-Log)
 - **Lock-Order-Guard** deckt jetzt auch Fast/Ultra-Fast-Polling ab – potenzielle Deadlocks werden früher erkannt
-- Toten Code entfernt: `_process_reader_result()`, `ensure_client_connected()`, `connect_if_needed()`
+
 ### Fixed
 - **`_write_done` timeout raises instead of proceeding** (`hub.py`): `_read_registers()`
   caught `asyncio.TimeoutError` after the 5 s `_write_done` guard and silently continued
