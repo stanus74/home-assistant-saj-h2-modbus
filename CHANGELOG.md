@@ -2,34 +2,34 @@
 
 ---
 
-## Release v2.8.5 – Stabilität & Code-Qualität
+## Release v2.8.5 – Stability & Code Quality
 
-Diese Version schließt mehrere potenzielle Datenkorruptions- und Race-Condition-Probleme und verbessert die Robustheit des gesamten Polling-Systems.
+This version closes multiple potential data corruption and race condition issues and improves the robustness of the entire polling system.
 
-### Wichtigste Fixes
+### Key Fixes
 
-**Datenkorruption bei Schreib-/Lese-Konflikten verhindert**
-Ein Timeout beim Warten auf das Ende einer Schreiboperation führte bisher dazu, dass ein Modbus-Lesevorgang trotzdem gestartet wurde – möglicherweise während der Socket noch von einem Write belegt war. Der Lesevorgang wird jetzt abgebrochen statt fortzufahren.
+**Data Corruption from Write/Read Conflicts Prevented**
+A timeout while waiting for a write operation to complete previously allowed a Modbus read to start anyway – potentially while the socket was still occupied by a write. The read is now aborted instead of proceeding.
 
-**Race Condition bei Cache-Updates behoben**
-`_update_cache()` in `charge_control.py` schrieb ohne Lock in `inverter_data`. Das konnte zu inkonsistenten Zuständen führen, wenn gleichzeitig Slow- oder Fast-Poll liefen. Alle 7 Aufrufstellen verwenden jetzt `_data_lock`.
+**Race Condition in Cache Updates Fixed**
+`_update_cache()` in `charge_control.py` was writing to `inverter_data` without a lock. This could cause inconsistent states when slow or fast polls were running concurrently. All 7 call sites now use `_data_lock`.
 
-**Doppelter Reconnect im Fast-Poll entfernt**
-Bei jedem Fehler im Fast-Poll wurde `reconnect()` zweimal aufgerufen – einmal intern und einmal im äußeren Handler. Das Verhalten ist jetzt korrekt.
+**Double Reconnect in Fast Poll Removed**
+Every error in fast poll was calling `reconnect()` twice – once internally and once in the outer handler. This behavior is now correct.
 
-**TOCTOU-Lücke beim Ultra-Fast/Write-Konflikt geschlossen**
-Ein Write konnte genau während `await get_client()` starten und den Socket belegen. Ein zweiter Guard direkt nach `get_client()` schließt dieses Zeitfenster.
+**TOCTOU Gap in Ultra-Fast/Write Conflict Closed**
+A write could start exactly during `await get_client()` and occupy the socket. A second guard immediately after `get_client()` closes this timing window.
 
-**Unbehandelte Background-Task-Fehler sichtbar gemacht**
-Exceptions in Background-Tasks verschwanden lautlos. Neuer `create_logged_task()`-Helper loggt alle Fehler inkl. vollständigem Stack-Trace.
+**Unhandled Background Task Errors Now Visible**
+Exceptions in background tasks disappeared silently. New `create_logged_task()` helper logs all errors including full stack trace.
 
-### Weitere Verbesserungen
+### Further Improvements
 
-- **Statische Inverterdaten (Seriennummer, Firmware) werden stündlich neu gelesen** – Änderungen nach einem Firmware-Update werden ohne HA-Neustart übernommen
-- **Pro-Instanz Circuit Breaker**: Ein fehlgeschlagener Inverter blockiert jetzt nicht mehr den zweiten parallel konfigurierten Inverter
-- **Connection Cache TTL** verkürzt: 60 s → 30 s, Health-Check-Interval 30 s → 5 s – stille Verbindungsabbrüche werden schneller erkannt
-- **LRU-Limit für interne RMW-Locks** tatsächlich durchgesetzt (vorher nur WARNING-Log)
-- **Lock-Order-Guard** deckt jetzt auch Fast/Ultra-Fast-Polling ab – potenzielle Deadlocks werden früher erkannt
+- **Static Inverter Data (Serial Number, Firmware) Refreshed Hourly** – Changes after a firmware update are picked up without HA restart
+- **Per-Instance Circuit Breaker**: A failed inverter no longer blocks a second independently configured inverter
+- **Connection Cache TTL** reduced: 60 s → 30 s, health-check interval 30 s → 5 s – silent disconnects are detected faster
+- **LRU Limit for Internal RMW Locks** now enforced (previously only WARNING log)
+- **Lock-Order Guard** now covers fast/ultra-fast polling – potential deadlocks are detected earlier
 
 ### Fixed
 - **`_write_done` timeout raises instead of proceeding** (`hub.py`): `_read_registers()`
