@@ -1,5 +1,5 @@
-from __future__ import annotations
 """SAJ Modbus Hub with optimized processing and fixed interval system."""
+from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
@@ -7,7 +7,7 @@ from contextvars import ContextVar
 import logging
 import time
 from typing import Optional, Any, Dict, List, Callable
-from datetime import timedelta, datetime
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.config_entries import ConfigEntry
 
-from .const import DOMAIN, CONF_FAST_ENABLED
+from .const import CONF_FAST_ENABLED
 from . import modbus_readers
 from .modbus_utils import (
     try_read_registers,
@@ -28,7 +28,7 @@ from .charge_control import (
     PENDING_FIELDS,
 )
 from .services import ModbusConnectionManager, MqttPublisher
-from .utils import get_config_value, get_config_values, create_logged_task
+from .utils import get_config_values, create_logged_task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -526,10 +526,10 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         use_ha_mqtt: bool = False,
     ) -> None:
         """Update connection settings. Full signature restored to support positional arguments."""
-        if self.updating_settings: return
+        if self.updating_settings:
+            return
         self.updating_settings = True
         try:
-            prev_strategy = self.mqtt.strategy
             # Update Services
             self.connection.update_config(host, port)
             

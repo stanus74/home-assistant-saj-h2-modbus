@@ -2,23 +2,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional, Any, Dict, List, Callable
+from typing import Optional, Any, Dict, Callable
 import importlib
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.components import mqtt
 from pymodbus.client import ModbusTcpClient
-
-# paho-mqtt is imported lazily in an executor to avoid blocking the event loop
-PAHO_AVAILABLE = None  # None=unknown, True/False once attempted
 
 from .modbus_utils import (
     _connect_client_inplace,
     set_modbus_config,
-    ReconnectionNeededError,
     ConnectionCache,
     ModbusCircuitBreaker,
 )
 from .utils import create_logged_task
+
+# paho-mqtt is imported lazily in an executor to avoid blocking the event loop
+PAHO_AVAILABLE = None  # None=unknown, True/False once attempted
 
 _LOGGER = logging.getLogger(__name__)
 

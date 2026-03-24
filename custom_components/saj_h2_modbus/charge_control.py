@@ -4,9 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Any, List, Dict, Tuple, Callable, TYPE_CHECKING
-
-from .const import DOMAIN
+from typing import Optional, Any, List, Dict, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .hub import SAJModbusHub

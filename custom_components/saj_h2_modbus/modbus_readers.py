@@ -1,7 +1,6 @@
-import asyncio
 import logging
 import struct
-from typing import Dict, Any, List, Optional, TypeAlias
+from typing import Dict, Any, List, TypeAlias
 from pymodbus.client import ModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
 
@@ -569,8 +568,10 @@ def _decode_time_power_slots(data: DataDict, prefix: str, slots: int = 7) -> Non
     for i in range(slots):
         p = "" if i == 0 else str(i + 1)
         k_start, k_end, k_raw = f"{prefix}{p}_start_time", f"{prefix}{p}_end_time", f"{prefix}{p}_power_raw"
-        if k_start in data: data[k_start] = decode_time(data[k_start])
-        if k_end in data: data[k_end] = decode_time(data[k_end])
+        if k_start in data:
+            data[k_start] = decode_time(data[k_start])
+        if k_end in data:
+            data[k_end] = decode_time(data[k_end])
         if k_raw in data:
             raw = data.pop(k_raw)
             data[f"{prefix}{p}_day_mask"] = (raw >> 8) & 0xFF

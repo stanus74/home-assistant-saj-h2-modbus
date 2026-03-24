@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
@@ -16,6 +17,9 @@ from .const import (
 )
 from homeassistant.helpers import config_validation as cv
 from .utils import get_config_value, get_config_values
+
+if TYPE_CHECKING:
+    from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
