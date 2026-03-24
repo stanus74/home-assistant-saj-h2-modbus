@@ -1,10 +1,12 @@
+"""Low-level Modbus TCP utilities, retry logic, and connection caching."""
+from __future__ import annotations
 import asyncio
 import functools
 import logging
 import os
 import time
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, List, Optional, Union
+from typing import Any, Awaitable, Callable
 
 import socket
 
@@ -49,7 +51,7 @@ class ModbusCircuitBreaker:
         self,
         func: Callable[..., Awaitable[Any]],
         *args: Any,
-        should_trip: Optional[Callable[[Exception], bool]] = None,
+        should_trip: Callable[[Exception], bool] | None = None,
         **kwargs: Any,
     ) -> Any:
         now = time.monotonic()
@@ -92,7 +94,7 @@ _DEFAULT_CIRCUIT_BREAKER = ModbusCircuitBreaker()
 # through the coroutine call chain without changing every function signature.
 # Set by SAJModbusHub before calling any reader; resets automatically when
 # the enclosing asyncio task finishes.
-_CIRCUIT_BREAKER_CTX: ContextVar[Optional[ModbusCircuitBreaker]] = ContextVar(
+_CIRCUIT_BREAKER_CTX: ContextVar[ModbusCircuitBreaker | None] = ContextVar(
     "saj_modbus_circuit_breaker", default=None
 )
 
@@ -116,9 +118,9 @@ _RECONNECT_DONE.set()  # Initially set: no reconnect in progress
 
 # Global Modbus config storage
 class ModbusGlobalConfig:
-    host: Optional[str] = None
-    port: Optional[int] = None
-    hass: Optional[Any] = None
+    host: str | None = None
+    port: int | None = None
+    hass: Any | None = None
 
 def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
     ModbusGlobalConfig.host = host
@@ -209,7 +211,7 @@ class ConnectionCache:
         Args:
             cache_ttl: Time to live for cached connections in seconds
         """
-        self._cached_client: Optional[ModbusTcpClient] = None
+        self._cached_client: ModbusTcpClient | None = None
         self._cache_expiry: float = 0.0
         self._cache_ttl: float = cache_ttl
         self._last_health_check: float = 0.0
@@ -222,7 +224,7 @@ class ConnectionCache:
         self._cached_client = None
         self._cache_expiry = 0.0
 
-    async def get_cached_client(self) -> Optional[ModbusTcpClient]:
+    async def get_cached_client(self) -> ModbusTcpClient | None:
         """
         Get cached client if still valid.
         
@@ -352,7 +354,7 @@ async def _retry_with_backoff(
     retries: int,
     base_delay: float,
     cap: float,
-    on_retry: Optional[Callable[[int, Exception], Awaitable[None]]] = None,
+    on_retry: Callable[[int, Exception], Awaitable[None]] | None = None,
     task_name: str = "Task"
 ) -> Any:
     last_exception: Exception
@@ -515,7 +517,7 @@ async def try_read_registers(
     max_retries: int = DEFAULT_READ_RETRIES,
     base_delay: float = DEFAULT_READ_BASE_DELAY,
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
-) -> List[int]:
+) -> list[int]:
     host = ModbusGlobalConfig.host
     port = ModbusGlobalConfig.port
     if host is None or port is None:
@@ -578,7 +580,7 @@ async def try_write_registers(
     lock: Lock,
     unit: int,
     address: int,
-    values: Union[int, List[int]],
+    values: int | list[int],
     max_retries: int = DEFAULT_WRITE_RETRIES,
     base_delay: float = DEFAULT_WRITE_BASE_DELAY,
     cap_delay: float = DEFAULT_WRITE_CAP_DELAY,

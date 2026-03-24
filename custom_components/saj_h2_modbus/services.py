@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Optional, Any, Dict, Callable
+from typing import Any, Callable
 import importlib
 from homeassistant.core import HomeAssistant
 from homeassistant.components import mqtt
@@ -235,7 +235,7 @@ class MqttPublisher:
         self._paho_client = None
         self._paho_started = False
         self._paho_module = None
-        self._paho_available: Optional[bool] = None
+        self._paho_available: bool | None = None
         self._last_strategy_log = 0.0
         
         # Log throttling
@@ -456,7 +456,7 @@ class MqttPublisher:
             if prev_strategy == self.STRATEGY_PAHO:
                 self.stop()
 
-    async def publish_data(self, data: Dict[str, Any], force: bool = False) -> None:
+    async def publish_data(self, data: dict[str, Any], force: bool = False) -> None:
         """Publishes dictionary data to MQTT based on selected strategy."""
         if not data or self.strategy == self.STRATEGY_NONE:
             return

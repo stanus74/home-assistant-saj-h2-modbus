@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import logging
 import time
-from typing import Optional, Any, Dict, List, Callable
+from typing import Any, Callable
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant, callback, CoreState
@@ -88,7 +88,7 @@ _READER_GROUPS = [
 ]
 
 
-class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
+class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
 
@@ -166,7 +166,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._slow_lock = asyncio.Lock()        # For 60s slow polling
 
         # Merge locks for shared state/mask registers
-        self._merge_locks: Dict[int, asyncio.Lock] = {
+        self._merge_locks: dict[int, asyncio.Lock] = {
             0x3604: asyncio.Lock(),  # charging state + charge_time_enable mask
             0x3605: asyncio.Lock(),  # discharging state + discharge_time_enable mask
         }
@@ -184,22 +184,22 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         self._write_done.set()
         self._ultra_fast_pending = False
         
-        self.inverter_data: Dict[str, Any] = {}
+        self.inverter_data: dict[str, Any] = {}
         self.updating_settings = False
         
         # Fast Poll State
         self._fast_unsub = None
         self._cancel_fast_update = None
         self._cancel_ultra_fast_update = None
-        self._pending_fast_start_cancel: Optional[Callable] = None
-        self._pending_ultra_fast_start_cancel: Optional[Callable] = None
+        self._pending_fast_start_cancel: Callable | None = None
+        self._pending_ultra_fast_start_cancel: Callable | None = None
         self._cache_cleanup_unsub = None
         self._fast_listeners: set[Callable[[], None]] = set()
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
         self._data_lock = asyncio.Lock()
 
-        self._inverter_static_data: Optional[Dict[str, Any]] = None
-        self._inverter_static_data_loaded_at: Optional[float] = None
+        self._inverter_static_data: dict[str, Any] | None = None
+        self._inverter_static_data_loaded_at: float | None = None
         self._warned_missing_states: bool = False
 
         # Charge Control
@@ -244,7 +244,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
     async def _set_discharging_state(self, value: bool) -> None:
         self._set_power_state(value, "discharging_state", "set_discharging_state")
 
-    async def _set_passive_mode(self, value: Optional[int]) -> None:
+    async def _set_passive_mode(self, value: int | None) -> None:
         self._set_power_state(value, "passive_mode_state", "set_passive_mode")
 
     async def process_pending_now(self) -> None:
@@ -257,7 +257,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
 
     # --- COORDINATOR METHODS ---
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Regular poll cycle (slow)."""
         try:
             client = await self.connection.get_client() # Ensure connected
@@ -276,13 +276,13 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.error("Update cycle failed: %s", err)
             raise
 
-    async def _run_reader_methods(self, client: Any) -> Dict[str, Any]:
+    async def _run_reader_methods(self, client: Any) -> dict[str, Any]:
         """Executes all readers using the provided client."""
         # Activate the per-instance circuit breaker for the entire read session.
         # All downstream try_read_registers() calls pick this up via the ContextVar.
         cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
         try:
-            new_cache: Dict[str, Any] = {}
+            new_cache: dict[str, Any] = {}
 
             # Load Static Data – refresh after TTL expires (default 1 h).
             _static_expired = (
@@ -521,7 +521,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
         mqtt_port: int = 1883,
         mqtt_user: str = "",
         mqtt_password: str = "",
-        mqtt_topic_prefix: Optional[str] = None,
+        mqtt_topic_prefix: str | None = None,
         mqtt_publish_all: bool = False,
         use_ha_mqtt: bool = False,
     ) -> None:
@@ -671,7 +671,7 @@ class SAJModbusHub(DataUpdateCoordinator[Dict[str, Any]]):
                 self._ultra_fast_pending = False
                 create_logged_task(self.hass, self._async_update_fast(ultra=True), logger=_LOGGER)
 
-    async def _read_registers(self, address: int, count: int) -> List[int]:
+    async def _read_registers(self, address: int, count: int) -> list[int]:
         """
         Helper for charge_control.py to read via connection service.
         

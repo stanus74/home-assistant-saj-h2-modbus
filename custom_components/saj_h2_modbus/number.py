@@ -1,6 +1,12 @@
+"""SAJ H2 Modbus number entities."""
+from __future__ import annotations
 import logging
+from typing import Any
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .utils import generate_slot_definitions
 
@@ -174,7 +180,18 @@ class SajNumberEntity(NumberEntity):
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, hub, name, unique_id, min_val, max_val, step, default, device_info, unit=None):
+    def __init__(
+        self,
+        hub: Any,
+        name: str,
+        unique_id: str,
+        min_val: float,
+        max_val: float,
+        step: float,
+        default: float,
+        device_info: dict,
+        unit: str | None = None,
+    ) -> None:
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
@@ -186,16 +203,28 @@ class SajNumberEntity(NumberEntity):
         self._attr_device_info = device_info
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | None:
         return self._attr_native_value
 
 class SajGenericNumberEntity(SajNumberEntity):
     """Generic class for SAJ number entities."""
-    def __init__(self, hub, name, unique_id, min_val, max_val, step, default, device_info, unit=None, set_method_name=None):
+    def __init__(
+        self,
+        hub: Any,
+        name: str,
+        unique_id: str,
+        min_val: float,
+        max_val: float,
+        step: float,
+        default: float,
+        device_info: dict,
+        unit: str | None = None,
+        set_method_name: str | None = None,
+    ) -> None:
         super().__init__(hub, name, unique_id, min_val, max_val, step, default, device_info, unit)
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
 
-    async def async_set_native_value(self, value):
+    async def async_set_native_value(self, value: float) -> None:
         val = int(value)
         if not self._attr_native_min_value <= val <= self._attr_native_max_value:
             _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
@@ -205,7 +234,7 @@ class SajGenericNumberEntity(SajNumberEntity):
             await self.set_method(val)
         self.async_write_ha_state()
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ number entities."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
