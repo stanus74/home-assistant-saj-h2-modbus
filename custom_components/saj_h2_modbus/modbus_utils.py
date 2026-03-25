@@ -37,15 +37,27 @@ class ReconnectionNeededError(Exception):
     pass
 
 
-class ModbusCircuitBreaker:
-    """Circuit breaker pattern for Modbus operations (reads/connect)."""
+class CircuitBreaker:
+    """Generic circuit breaker pattern for protecting against cascading failures.
 
-    def __init__(self, failure_threshold: int = 3, timeout: int = 30):
+    States:
+        CLOSED:    Normal operation; failures are counted.
+        OPEN:      Failure threshold exceeded; calls are rejected immediately.
+        HALF_OPEN: Testing whether the service has recovered.
+    """
+
+    def __init__(
+        self,
+        failure_threshold: int = 3,
+        timeout: int = 30,
+        name: str = "CircuitBreaker",
+    ) -> None:
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count = 0
         self.last_failure_time = 0.0
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self._name = name
 
     async def call(
         self,
@@ -54,6 +66,15 @@ class ModbusCircuitBreaker:
         should_trip: Callable[[Exception], bool] | None = None,
         **kwargs: Any,
     ) -> Any:
+        """Execute *func* through the circuit breaker.
+
+        Args:
+            func: Async callable to protect.
+            *args: Positional arguments forwarded to *func*.
+            should_trip: Optional predicate; the breaker only opens when this
+                returns True for the raised exception.  Defaults to always-trip.
+            **kwargs: Keyword arguments forwarded to *func*.
+        """
         now = time.monotonic()
         if should_trip is None:
             def should_trip(_: Exception) -> bool:
@@ -62,16 +83,16 @@ class ModbusCircuitBreaker:
         if self.state == "OPEN":
             if now - self.last_failure_time > self.timeout:
                 self.state = "HALF_OPEN"
-                _LOGGER.info("Modbus Circuit Breaker transitioning to HALF_OPEN")
+                _LOGGER.info("%s Circuit Breaker transitioning to HALF_OPEN", self._name)
             else:
-                raise ConnectionError("Modbus Circuit Breaker is OPEN")
+                raise ConnectionError(f"{self._name} Circuit Breaker is OPEN")
 
         try:
             result = await func(*args, **kwargs)
             if self.state == "HALF_OPEN":
                 self.state = "CLOSED"
                 self.failure_count = 0
-                _LOGGER.info("Modbus Circuit Breaker transitioning to CLOSED")
+                _LOGGER.info("%s Circuit Breaker transitioning to CLOSED", self._name)
             return result
         except Exception as e:
             if should_trip(e):
@@ -80,10 +101,18 @@ class ModbusCircuitBreaker:
                 if self.failure_count >= self.failure_threshold:
                     self.state = "OPEN"
                     _LOGGER.warning(
-                        "Modbus Circuit Breaker OPEN after %s failures",
+                        "%s Circuit Breaker OPEN after %s failures",
+                        self._name,
                         self.failure_count,
                     )
             raise
+
+
+class ModbusCircuitBreaker(CircuitBreaker):
+    """Circuit breaker pattern for Modbus operations (reads/connect)."""
+
+    def __init__(self, failure_threshold: int = 3, timeout: int = 30) -> None:
+        super().__init__(failure_threshold, timeout, "Modbus")
 
 
 # Module-level default used when no per-instance circuit breaker is active

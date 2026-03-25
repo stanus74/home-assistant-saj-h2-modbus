@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Callable
+from typing import Any
 import importlib
 from homeassistant.core import HomeAssistant
 from homeassistant.components import mqtt
@@ -12,6 +12,7 @@ from .modbus_utils import (
     _connect_client_inplace,
     set_modbus_config,
     ConnectionCache,
+    CircuitBreaker,
     ModbusCircuitBreaker,
 )
 from .utils import create_logged_task
@@ -165,40 +166,11 @@ class ModbusConnectionManager:
             create_logged_task(self.hass, self.close(), logger=_LOGGER)
 
 
-class MqttCircuitBreaker:
+class MqttCircuitBreaker(CircuitBreaker):
     """Circuit breaker pattern for MQTT publishing."""
 
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
-        self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.failure_count = 0
-        self.last_failure_time = 0.0
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-
-    async def call(self, func: Callable, *args, **kwargs) -> Any:
-        now = time.monotonic()
-
-        if self.state == "OPEN":
-            if now - self.last_failure_time > self.timeout:
-                self.state = "HALF_OPEN"
-                _LOGGER.info("MQTT Circuit Breaker transitioning to HALF_OPEN")
-            else:
-                raise ConnectionError("MQTT Circuit Breaker is OPEN")
-
-        try:
-            result = await func(*args, **kwargs)
-            if self.state == "HALF_OPEN":
-                self.state = "CLOSED"
-                self.failure_count = 0
-                _LOGGER.info("MQTT Circuit Breaker transitioning to CLOSED")
-            return result
-        except Exception as e:
-            self.failure_count += 1
-            self.last_failure_time = now
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-                _LOGGER.warning(f"MQTT Circuit Breaker OPEN after {self.failure_count} failures")
-            raise e
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60) -> None:
+        super().__init__(failure_threshold, timeout, "MQTT")
 
 
 class MqttPublisher:
