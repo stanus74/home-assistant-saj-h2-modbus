@@ -158,9 +158,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         # Log which strategy was picked
         _LOGGER.info("SAJ MQTT Strategy initialized: %s", self.mqtt.strategy)
 
-        # State & Locks
+        self._init_locks()
+        self._init_fast_poll_state()
+        self._init_charge_control(use_ha_mqtt)
+
+    def _init_locks(self) -> None:
+        """Initialise all asyncio locks and synchronisation primitives."""
         # PERFORMANCE OPTIMIZATION: Separate locks for different polling intervals
-        # This reduces lock contention between ultra fast (1s), fast (10s), and slow (60s) loops
+        # to reduce contention between ultra-fast (1s), fast (10s) and slow (60s) loops.
         self._ultra_fast_lock = asyncio.Lock()  # For 1s ultra fast polling
         self._fast_lock = asyncio.Lock()        # For 10s fast polling
         self._slow_lock = asyncio.Lock()        # For 60s slow polling
@@ -176,18 +181,19 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         # _write_register()/try_write_registers() acquire _write_lock internally.
         # OrderedDict enables LRU eviction: oldest (front) entry is dropped first.
         self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
-        
-        # DEDICATED WRITE LOCK: Write operations have priority over read operations
-        # This prevents write operations from waiting for read operations to complete
+
+        # DEDICATED WRITE LOCK: Write operations have priority over read operations.
         self._write_lock = asyncio.Lock()
         self._write_done = asyncio.Event()
         self._write_done.set()
         self._ultra_fast_pending = False
-        
+
         self.inverter_data: dict[str, Any] = {}
         self.updating_settings = False
-        
-        # Fast Poll State
+        self._data_lock = asyncio.Lock()
+
+    def _init_fast_poll_state(self) -> None:
+        """Initialise fast/ultra-fast polling callback handles and listener registry."""
         self._fast_unsub = None
         self._cancel_fast_update = None
         self._cancel_ultra_fast_update = None
@@ -196,19 +202,19 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._cache_cleanup_unsub = None
         self._fast_listeners: set[Callable[[], None]] = set()
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
-        self._data_lock = asyncio.Lock()
 
         self._inverter_static_data: dict[str, Any] | None = None
         self._inverter_static_data_loaded_at: float | None = None
         self._warned_missing_states: bool = False
 
-        # Charge Control
+    def _init_charge_control(self, use_ha_mqtt: bool) -> None:
+        """Initialise charge/discharge control handler, setters and cache cleanup timer."""
         self._pending_charging_state = None
         self._pending_discharging_state = None
         self._pending_passive_mode_state = None
         self._setting_handler = ChargeSettingHandler(self)
         self.use_ha_mqtt = use_ha_mqtt
-        
+
         self._init_setters()
 
         self._cache_cleanup_unsub = async_track_time_interval(
