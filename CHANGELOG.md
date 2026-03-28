@@ -1,3 +1,46 @@
+## [v2.8.6]
+
+---
+
+## Release v2.8.6 – Code Quality & Refactoring
+
+This version contains only internal code quality improvements. No new features, no behaviour changes, no user-visible impact.
+
+### Refactoring
+
+**Lint Errors Eliminated (Phase A)**
+All 40 Ruff lint errors resolved across 7 files: module-level docstring moved before `from __future__` in `hub.py` (21× E402), 8 unused imports removed (F401), undefined name `SAJModbusHub` in `__init__.py` fixed via `TYPE_CHECKING` block (F821), inline `if`/return statements split (E701), unused variable removed (F841).
+
+**Legacy Typing Modernised (Phase B)**
+Replaced `Optional[X]`, `Dict[K,V]`, `List[X]`, `Union[X,Y]` from `typing` with native Python 3.10+ builtins (`X | None`, `dict`, `list`, `X | Y`) in `hub.py`, `charge_control.py`, `modbus_utils.py` and `services.py`.
+
+**Type Hints Added to `number.py` (Phase C)**
+`number.py` was the only file with 0% type hint coverage. All 5 functions/methods now fully annotated including the HA platform signature (`HomeAssistant`, `ConfigEntry`, `AddEntitiesCallback`).
+
+**Generic `CircuitBreaker` Base Class (Phase E)**
+Extracted shared circuit breaker logic (~40 duplicate lines) into a single `CircuitBreaker` base class in `modbus_utils.py`. `ModbusCircuitBreaker` and `MqttCircuitBreaker` are now slim two-line subclasses with unchanged defaults and identical runtime behaviour. Also fixes an f-string log call to use `%s` format.
+
+**`hub.__init__()` Split into Focused Helpers (Phase F)**
+The 126-line `__init__` has been reduced to ~74 lines by extracting three private methods:
+- `_init_locks()` — all `asyncio.Lock` / `Event` / `OrderedDict` objects
+- `_init_fast_poll_state()` — fast/ultra-fast callback handles and listener registry
+- `_init_charge_control()` — `ChargeSettingHandler`, pending states, setters, cache cleanup timer
+
+**`_async_update_fast()` Split into Focused Helpers (Phase G)**
+The 97-line monolithic fast-poll method has been refactored into three single-responsibility helpers:
+- `_run_fast_modbus_read(client, lock, ultra)` — Modbus read with one-shot retry; returns `None` on double failure
+- `_publish_fast_mqtt(fast_data)` — delegates MQTT publishing
+- `_notify_fast_listeners()` — notifies HA entity callbacks (10 s loop only)
+
+`_async_update_fast()` is now a lean ~45-line orchestrator. No behaviour changes.
+
+### Internal
+- No register addresses changed
+- No polling intervals changed
+- No external API surface changed
+
+---
+
 ## [v2.8.5]
 
 ---

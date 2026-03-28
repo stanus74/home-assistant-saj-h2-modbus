@@ -407,17 +407,61 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
             self._schedule_update_loop(ULTRA_FAST_UPDATE_INTERVAL, "_cancel_ultra_fast_update", True)
 
-    async def _async_update_fast(self, now=None, ultra: bool = False) -> None:
+    async def _run_fast_modbus_read(
+        self, client: Any, lock: asyncio.Lock, ultra: bool
+    ) -> dict[str, Any] | None:
+        """Execute Modbus read with one-shot retry for fast poll cycle.
+
+        Returns the raw result dict, an empty dict if the device returned
+        nothing, or None if both the initial attempt and the retry failed
+        (already logged; caller should skip the update cycle).
+        ReconnectionNeededError is always re-raised for hub-level handling.
         """
-        Perform fast update of sensor data with performance optimizations.
-        
+        try:
+            if ultra:
+                return await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+            part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
+            part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+            return {**part_1, **part_2}
+        except ReconnectionNeededError:
+            raise
+        except Exception as e:
+            _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
+            try:
+                if ultra:
+                    return await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
+                part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
+                return {**part_1, **part_2}
+            except ReconnectionNeededError:
+                raise
+            except Exception as retry_e:
+                _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
+                return None
+
+    async def _publish_fast_mqtt(self, fast_data: dict[str, Any]) -> None:
+        """Publish fast-poll sensor values to MQTT."""
+        await self.mqtt.publish_data(fast_data)
+
+    def _notify_fast_listeners(self) -> None:
+        """Notify HA entity listeners about updated fast-poll sensor data.
+
+        Only called from the 10 s loop – not from ultra-fast (1 s) mode –
+        to avoid flooding the HA recorder database.
+        """
+        for listener in tuple(self._fast_listeners):
+            listener()
+
+    async def _async_update_fast(self, now=None, ultra: bool = False) -> None:
+        """Perform fast update of sensor data with performance optimizations.
+
         PERFORMANCE OPTIMIZATIONS:
         1. Separate locks for ultra fast vs fast modes - reduces lock contention
         2. Skip ultra-fast update if write operation is in progress
         """
         if not self.fast_enabled and not ultra:
             return
-        
+
         # Immediately skip ultra-fast update if a write operation is in progress.
         # No wait: the write may take longer than the 1s poll interval, and
         # blocking here would throw off the entire ultra-fast schedule.
@@ -426,7 +470,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             self._ultra_fast_pending = True
             _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
             return
-        
+
         try:
             client = await self.connection.get_client()
 
@@ -437,68 +481,39 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Skipping ultra-fast update after get_client – write in progress")
                 return
 
-            # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode
-            # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s)
+            # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode.
+            # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s).
             lock = self._ultra_fast_lock if ultra else self._fast_lock
             lock_name = "ultra_fast" if ultra else "fast"
 
             # Activate per-instance circuit breaker for this fast-poll read session.
             _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
             async with self._lock_order_guard(lock_name):
-            
-                # FAIL-FAST RETRY LOGIC FOR ULTRA-FAST POLL
-                # If a read fails, immediately retry once. If the retry also fails, skip the update cycle.
-                try:
-                    if ultra:
-                        result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                    else:
-                        part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
-                        part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                        result = {**part_1, **part_2}
-                except ReconnectionNeededError:
-                    raise
-                except Exception as e:
-                    _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
-                    try:
-                        # Immediate retry once
-                        if ultra:
-                            result = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                        else:
-                            part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(client, lock)
-                            part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(client, lock)
-                            result = {**part_1, **part_2}
-                    except ReconnectionNeededError:
-                        raise
-                    except Exception as retry_e:
-                        # If retry also fails, skip the update cycle
-                        _LOGGER.debug("Ultra-fast poll retry failed, skipping update cycle: %s", retry_e)
-                        return
+                result = await self._run_fast_modbus_read(client, lock, ultra)
+                if result is None:
+                    return  # both attempts failed, already logged
 
-                if result:
-                    fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+                if not result:
+                    _LOGGER.warning("Fast poll returned an empty result – skipping update cycle")
+                    return
 
-                    if not fast_data:
-                        _LOGGER.warning(
-                            "Fast poll: result contained no matching sensor keys "
-                            "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
-                            len(result),
-                        )
-
-                    if fast_data:
-                        # Update inverter data with all fast data
-                        async with self._data_lock:
-                            self.inverter_data.update(fast_data)
-
-                        await self.mqtt.publish_data(fast_data)
-
-                        # Only the 10s loop should push to HA entities to avoid DB spam
-                        if not ultra:
-                            for listener in tuple(self._fast_listeners):
-                                listener()
-                else:
+                fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+                if not fast_data:
                     _LOGGER.warning(
-                        "Fast poll returned an empty result – skipping update cycle"
+                        "Fast poll: result contained no matching sensor keys "
+                        "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
+                        len(result),
                     )
+                    return
+
+                async with self._data_lock:
+                    self.inverter_data.update(fast_data)
+
+                await self._publish_fast_mqtt(fast_data)
+
+                # Only the 10s loop should push to HA entities to avoid DB spam.
+                if not ultra:
+                    self._notify_fast_listeners()
 
         except ReconnectionNeededError:
             await self.connection.notify_error()
