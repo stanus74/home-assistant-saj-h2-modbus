@@ -15,7 +15,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.config_entries import ConfigEntry
 
-from .const import CONF_FAST_ENABLED
+from .const import (
+    CONF_FAST_ENABLED,
+    CONF_ULTRA_FAST_ENABLED,
+    CONF_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_PUBLISH_ALL,
+    CONF_USE_HA_MQTT,
+    DEFAULT_CONFIG_SCHEMA,
+)
 from . import modbus_readers
 from .modbus_utils import (
     try_read_registers,
@@ -32,19 +39,9 @@ from .utils import get_config_values, create_logged_task
 
 _LOGGER = logging.getLogger(__name__)
 
-# Config Defaults
+# Hub-local config defaults
 FAST_POLL_DEFAULT = False
 ADVANCED_LOGGING = False
-CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
-CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
-CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
-CONF_USE_HA_MQTT = "use_ha_mqtt"
-
-# Constants
-DEFAULT_MODBUS_PORT = 502
-DEFAULT_SCAN_INTERVAL = 60
-DEFAULT_MQTT_PORT = 1883
-DEFAULT_MQTT_TOPIC_PREFIX = "saj"
 FAST_UPDATE_INTERVAL = 10
 ULTRA_FAST_UPDATE_INTERVAL = 1
 STARTUP_DELAY_RUNNING = 1
@@ -92,23 +89,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
 
-        config = get_config_values(
-            config_entry,
-            {
-                CONF_HOST: None,
-                CONF_PORT: DEFAULT_MODBUS_PORT,
-                CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                CONF_ULTRA_FAST_ENABLED: False,
-                CONF_FAST_ENABLED: FAST_POLL_DEFAULT,
-                "mqtt_host": "",
-                "mqtt_port": DEFAULT_MQTT_PORT,
-                "mqtt_user": "",
-                "mqtt_password": "",
-                CONF_MQTT_TOPIC_PREFIX: DEFAULT_MQTT_TOPIC_PREFIX,
-                CONF_MQTT_PUBLISH_ALL: False,
-                CONF_USE_HA_MQTT: False,
-            },
-        )
+        config = get_config_values(config_entry, DEFAULT_CONFIG_SCHEMA)
 
         # Config extraction - Connection
         host = config[CONF_HOST]

@@ -26,6 +26,10 @@ The 126-line `__init__` has been reduced to ~74 lines by extracting three privat
 - `_init_fast_poll_state()` — fast/ultra-fast callback handles and listener registry
 - `_init_charge_control()` — `ChargeSettingHandler`, pending states, setters, cache cleanup timer
 
+**`DEFAULT_CONFIG_SCHEMA` Constant Extracted (Phase I)**
+The 12-key config-defaults dict was duplicated verbatim in `hub.__init__()` and `async_update_options()` in `__init__.py` (with minor inconsistencies: raw strings vs. constants, `1883` vs. `DEFAULT_MQTT_PORT`). Both are now replaced by a single `DEFAULT_CONFIG_SCHEMA: dict[str, Any]` constant in `const.py`.
+Also moved from `hub.py` to `const.py`: `CONF_ULTRA_FAST_ENABLED`, `CONF_MQTT_TOPIC_PREFIX`, `CONF_MQTT_PUBLISH_ALL`, `CONF_USE_HA_MQTT`, `DEFAULT_MQTT_PORT`, `DEFAULT_MQTT_TOPIC_PREFIX`. Removed local redefinitions of `DEFAULT_MODBUS_PORT` and `DEFAULT_SCAN_INTERVAL` that duplicated existing `const.py` values.
+
 **`_determine_strategy()` Refactored into Pure Helpers (Phase H)**
 Extracted two single-responsibility helpers from the 60-line strategy method in `services.py`:
 - `_is_ha_mqtt_available()` — single source of truth for HA MQTT component check (was duplicated inline)

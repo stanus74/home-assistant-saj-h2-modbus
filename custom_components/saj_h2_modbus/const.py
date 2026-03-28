@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Literal, TypeAlias
+from typing import Any, Optional, Literal, TypeAlias
 from dataclasses import dataclass
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -7,6 +7,9 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import (
+    CONF_HOST,
+    CONF_PORT,
+    CONF_SCAN_INTERVAL,
     UnitOfApparentPower,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
@@ -28,6 +31,33 @@ DEFAULT_PORT = 502
 CONF_SAJ_HUB = "saj_hub"
 CONF_FAST_ENABLED = "fast_enabled"
 ATTR_MANUFACTURER = "SAJ Electric"
+
+# MQTT / polling config keys
+CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
+CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
+CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
+CONF_USE_HA_MQTT = "use_ha_mqtt"
+
+# MQTT defaults
+DEFAULT_MQTT_PORT = 1883
+DEFAULT_MQTT_TOPIC_PREFIX = "saj"
+
+# Single source of truth for configuration defaults used by hub.__init__ and
+# async_update_options.  Pass directly to get_config_values(); it is read-only.
+DEFAULT_CONFIG_SCHEMA: dict[str, Any] = {
+    CONF_HOST: None,
+    CONF_PORT: DEFAULT_PORT,
+    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+    CONF_ULTRA_FAST_ENABLED: False,
+    CONF_FAST_ENABLED: False,
+    "mqtt_host": "",
+    "mqtt_port": DEFAULT_MQTT_PORT,
+    "mqtt_user": "",
+    "mqtt_password": "",
+    CONF_MQTT_TOPIC_PREFIX: DEFAULT_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_PUBLISH_ALL: False,
+    CONF_USE_HA_MQTT: False,
+}
 
 
 @dataclass
