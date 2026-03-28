@@ -26,6 +26,13 @@ The 126-line `__init__` has been reduced to ~74 lines by extracting three privat
 - `_init_fast_poll_state()` — fast/ultra-fast callback handles and listener registry
 - `_init_charge_control()` — `ChargeSettingHandler`, pending states, setters, cache cleanup timer
 
+**`_determine_strategy()` Refactored into Pure Helpers (Phase H)**
+Extracted two single-responsibility helpers from the 60-line strategy method in `services.py`:
+- `_is_ha_mqtt_available()` — single source of truth for HA MQTT component check (was duplicated inline)
+- `_select_strategy(clean_host)` — pure priority logic returning a strategy constant; no side-effects
+
+`_determine_strategy()` now only handles caching, host normalisation, logging, and assignment. No behaviour changes.
+
 **`_async_update_fast()` Split into Focused Helpers (Phase G)**
 The 97-line monolithic fast-poll method has been refactored into three single-responsibility helpers:
 - `_run_fast_modbus_read(client, lock, ultra)` — Modbus read with one-shot retry; returns `None` on double failure

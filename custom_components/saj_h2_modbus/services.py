@@ -231,38 +231,30 @@ class MqttPublisher:
             bool(self._paho_available is not False),
         )
 
-    def _determine_strategy(self, force: bool = False):
-        """Decide once which MQTT strategy to use with minimal logging."""
-        cache_key = self._strategy_key()
-        if not force and cache_key == self._strategy_cache_key:
-            return
-        self._strategy_cache_key = cache_key
-        # Clean up host input
-        clean_host = (self.host or "").strip().lower()
+    def _is_ha_mqtt_available(self) -> bool:
+        """Return True if the HA MQTT integration is loaded and available."""
+        return "mqtt" in self.hass.config.components
 
-        # Forced HA MQTT path overrides host setting
+    def _select_strategy(self, clean_host: str) -> str:
+        """Derive the correct MQTT strategy from the current configuration.
+
+        Priority order:
+        1. Forced HA MQTT (use_ha_mqtt flag)
+        2. Paho (explicit host, paho installed)
+        3. HA MQTT (auto-detected)
+        4. None (disabled)
+        """
+        # Priority 1: forced HA MQTT
         if self.use_ha_mqtt:
-            if "mqtt" in self.hass.config.components:
-                self.host = ""
-                new_strategy = self.STRATEGY_HA
-                self._log_strategy(new_strategy, "MQTT Strategy Selected: Forced Home Assistant MQTT (use_ha_mqtt enabled)", "MQTT Strategy remains HA (use_ha_mqtt enabled)")
-                self.strategy = new_strategy
-                return
+            if self._is_ha_mqtt_available():
+                return self.STRATEGY_HA
             _LOGGER.warning(
                 "MQTT strategy fallback: use_ha_mqtt is enabled, but HA MQTT integration is not loaded"
             )
-            # Clear host so we do not fall back to Paho
-            self.host = ""
-            clean_host = ""
+            return self.STRATEGY_NONE
 
-        # 1. Check for manual disable or empty
-        if not clean_host or clean_host in ["disable", "disabled", "off", "none", "false"]:
-            # If manually disabled, fall through to HA check or None
-            self.host = ""  # Ensure it's treated as empty
-            clean_host = ""
-        
-        # 2. Priority: Manual Configuration (Paho) - Only if we have a valid-looking host
-        if self.host:
+        # Priority 2: Paho with explicit host
+        if clean_host:
             if self._paho_available is False:
                 _LOGGER.warning(
                     "MQTT strategy fallback: host configured (%s) but paho-mqtt is not installed. "
@@ -270,27 +262,64 @@ class MqttPublisher:
                     self.host,
                 )
             else:
-                new_strategy = self.STRATEGY_PAHO
-                self._log_strategy(new_strategy, f"MQTT Strategy Selected: Internal Paho Client (Custom Host configured: {self.host}:{self.port})", f"MQTT Strategy remains Paho (Host: {self.host}:{self.port})")
-                self.strategy = new_strategy
-                return
+                return self.STRATEGY_PAHO
 
-        # 3. Priority: Home Assistant Integration
-        if "mqtt" in self.hass.config.components:
-            new_strategy = self.STRATEGY_HA
-            self._log_strategy(new_strategy, "MQTT Strategy Selected: Home Assistant Native Integration", "MQTT Strategy remains HA (auto-detected)")
-            self.strategy = new_strategy
-            # Warn if user provided credentials in SAJ config, as they are ignored in HA strategy
-            if self.user or self.password:
+        # Priority 3: HA MQTT auto-detected
+        if self._is_ha_mqtt_available():
+            return self.STRATEGY_HA
+
+        # Priority 4: disabled
+        return self.STRATEGY_NONE
+
+    def _determine_strategy(self, force: bool = False):
+        """Decide once which MQTT strategy to use with minimal logging."""
+        cache_key = self._strategy_key()
+        if not force and cache_key == self._strategy_cache_key:
+            return
+        self._strategy_cache_key = cache_key
+
+        # Normalise and sanitise host input
+        clean_host = (self.host or "").strip().lower()
+        if clean_host in {"disable", "disabled", "off", "none", "false"}:
+            clean_host = ""
+        if not clean_host:
+            self.host = ""
+
+        # When use_ha_mqtt is active, never fall back to Paho
+        if self.use_ha_mqtt:
+            self.host = ""
+            clean_host = ""
+
+        new_strategy = self._select_strategy(clean_host)
+
+        if new_strategy == self.STRATEGY_PAHO:
+            self._log_strategy(
+                new_strategy,
+                f"MQTT Strategy Selected: Internal Paho Client (Custom Host configured: {self.host}:{self.port})",
+                f"MQTT Strategy remains Paho (Host: {self.host}:{self.port})",
+            )
+        elif new_strategy == self.STRATEGY_HA:
+            self._log_strategy(
+                new_strategy,
+                "MQTT Strategy Selected: Home Assistant Native Integration"
+                if not self.use_ha_mqtt
+                else "MQTT Strategy Selected: Forced Home Assistant MQTT (use_ha_mqtt enabled)",
+                "MQTT Strategy remains HA"
+                if not self.use_ha_mqtt
+                else "MQTT Strategy remains HA (use_ha_mqtt enabled)",
+            )
+            if new_strategy == self.STRATEGY_HA and not self.use_ha_mqtt and (self.user or self.password):
                 _LOGGER.warning(
                     "CONFIG WARNING: MQTT User/Pass are set in SAJ config, but ignored because HOST IP is missing/disabled. "
                     "Using HA Integration instead. If you want direct connection, enter the IP. If not, ignore this."
                 )
-            return
+        else:
+            self._log_strategy(
+                new_strategy,
+                "MQTT Strategy Selected: Disabled (No config, no HA MQTT found)",
+                "MQTT Strategy remains disabled",
+            )
 
-        # 4. No MQTT
-        new_strategy = self.STRATEGY_NONE
-        self._log_strategy(new_strategy, "MQTT Strategy Selected: Disabled (No config, no HA MQTT found)", "MQTT Strategy remains disabled")
         self.strategy = new_strategy
 
     def _log_strategy(self, new_strategy: str, info_msg: str, debug_msg: str):
