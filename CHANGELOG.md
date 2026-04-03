@@ -1,3 +1,22 @@
+## [v2.8.7]
+
+---
+
+## Release v2.8.7 – Energy Dashboard Defaults
+
+### Changed
+
+**Grid Energy Sensors Enabled by Default**
+`Sum All Phases Feed-In Total` (`sensor.saj_sum_all_phases_feed_in_total`) and `Sum All Phases Sell Total` (`sensor.saj_sum_all_phases_sell_total`) are now enabled by default (`enable: True`).
+
+Both sensors are required for the Home Assistant Energy Dashboard:
+- **Feed-In Total** → Grid Consumption (import from grid)
+- **Sell Total** → Grid Export (feed into grid)
+
+Previously users had to manually enable these entities after installation. Existing installations are unaffected (already-enabled or already-disabled states persist in the HA entity registry).
+
+---
+
 ## [v2.8.6]
 
 ---
