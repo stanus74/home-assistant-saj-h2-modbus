@@ -1,8 +1,4 @@
-## [v2.8.7]
-
----
-
-## Release v2.8.7 – Energy Dashboard Defaults
+## Release v2.8.6 – Code Quality & Refactoring
 
 ### Changed
 
@@ -14,16 +10,6 @@ Both sensors are required for the Home Assistant Energy Dashboard:
 - **Sell Total** → Grid Export (feed into grid)
 
 Previously users had to manually enable these entities after installation. Existing installations are unaffected (already-enabled or already-disabled states persist in the HA entity registry).
-
----
-
-## [v2.8.6]
-
----
-
-## Release v2.8.6 – Code Quality & Refactoring
-
-This version contains only internal code quality improvements. No new features, no behaviour changes, no user-visible impact.
 
 ### Refactoring
 
@@ -64,10 +50,6 @@ The 97-line monolithic fast-poll method has been refactored into three single-re
 
 `_async_update_fast()` is now a lean ~45-line orchestrator. No behaviour changes.
 
-### Internal
-- No register addresses changed
-- No polling intervals changed
-- No external API surface changed
 
 ---
 
