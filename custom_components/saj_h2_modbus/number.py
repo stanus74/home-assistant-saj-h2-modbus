@@ -24,6 +24,17 @@ NUMBER_DEFINITIONS = [
         "setter": "set_charge_time_enable",
     },
     {
+        "key": "app_mode",
+        "name": "App Mode",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "default": 0,
+        "unit": None,
+        "setter": "set_app_mode",
+        "allowed_values": [0, 1, 2, 3, 12],
+    },
+    {
         "key": "export_limit",
         "name": "Export Limit",
         "min": 0,
@@ -32,16 +43,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_export_limit",
-    },
-    {
-        "key": "app_mode",
-        "name": "App Mode",
-        "min": 0,
-        "max": 3,
-        "step": 1,
-        "default": 0,
-        "unit": None,
-        "setter": "set_app_mode",
     },
     {
         "key": "discharge_time_enable",
@@ -220,13 +221,19 @@ class SajGenericNumberEntity(SajNumberEntity):
         device_info: dict,
         unit: str | None = None,
         set_method_name: str | None = None,
+        allowed_values: list[int] | None = None,
     ) -> None:
         super().__init__(hub, name, unique_id, min_val, max_val, step, default, device_info, unit)
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
+        self._allowed_values = allowed_values
 
     async def async_set_native_value(self, value: float) -> None:
         val = int(value)
-        if not self._attr_native_min_value <= val <= self._attr_native_max_value:
+        if self._allowed_values is not None:
+            if val not in self._allowed_values:
+                _LOGGER.error("Invalid value for %s: %s (allowed: %s)", self._attr_name, val, self._allowed_values)
+                return
+        elif not self._attr_native_min_value <= val <= self._attr_native_max_value:
             _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
             return
         self._attr_native_value = val
@@ -253,6 +260,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             unit=desc["unit"],
             set_method_name=desc["setter"],
             device_info=device_info,
+            allowed_values=desc.get("allowed_values"),
         )
         entities.append(entity)
 

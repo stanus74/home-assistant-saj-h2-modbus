@@ -1,3 +1,14 @@
+## Release v2.8.7 – App Mode AI Saving Support
+
+### Changed
+
+**`number.saj_app_mode_input` now accepts value 12 (AI Saving)**
+The `app_mode` number entity previously had `max: 3`, making it impossible to restore AI Saving mode (value 12) from Home Assistant after it was overwritten. The upper bound is now `max: 12`.
+
+To prevent users from accidentally writing undefined intermediate values (4–11), an `allowed_values` whitelist `[0, 1, 2, 3, 12]` has been added. Attempts to set any value outside this list are rejected with an error log and leave the inverter unchanged. Automations that need to restore AI Saving mode can now set `number.saj_app_mode_input` to `12` directly.
+
+---
+
 ## Release v2.8.6 – Code Quality & Refactoring
 
 ### Changed
