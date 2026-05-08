@@ -2,7 +2,6 @@
 
 ### Changed
 
-
 **`number.saj_app_mode_input` now accepts value 12 (AI Saving)**
 The `app_mode` number entity previously had `max: 3`, making it impossible to restore AI Saving mode (value 12) from Home Assistant after it was overwritten. The upper bound is now `max: 12`.
 
@@ -62,9 +61,7 @@ The 97-line monolithic fast-poll method has been refactored into three single-re
 
 ## [v2.8.5]
 
----
-
-## Release v2.8.5 – Stability & Code Quality
+## Stability & Code Quality
 
 This version closes multiple potential data corruption and race condition issues and improves the robustness of the entire polling system.
 
