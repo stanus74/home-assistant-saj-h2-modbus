@@ -1,8 +1,67 @@
-## [v2.8.5]
+## Release v2.8.6 – Code Quality & Refactoring
+
+### Changed
+
+**`number.saj_app_mode_input` now accepts value 12 (AI Saving)**
+The `app_mode` number entity previously had `max: 3`, making it impossible to restore AI Saving mode (value 12) from Home Assistant after it was overwritten. The upper bound is now `max: 12`.
+
+To prevent users from accidentally writing undefined intermediate values (4–11), an `allowed_values` whitelist `[0, 1, 2, 3, 12]` has been added. Attempts to set any value outside this list are rejected with an error log and leave the inverter unchanged. Automations that need to restore AI Saving mode can now set `number.saj_app_mode_input` to `12` directly.
+
+
+**Grid Energy Sensors Enabled by Default**
+`Sum All Phases Feed-In Total` (`sensor.saj_sum_all_phases_feed_in_total`) and `Sum All Phases Sell Total` (`sensor.saj_sum_all_phases_sell_total`) are now enabled by default (`enable: True`).
+
+Both sensors are required for the Home Assistant Energy Dashboard:
+- **Feed-In Total** → Grid Consumption (import from grid)
+- **Sell Total** → Grid Export (feed into grid)
+
+Previously users had to manually enable these entities after installation. Existing installations are unaffected (already-enabled or already-disabled states persist in the HA entity registry).
+
+### Refactoring
+
+**Lint Errors Eliminated**
+All 40 Ruff lint errors resolved across 7 files: module-level docstring moved before `from __future__` in `hub.py` (21× E402), 8 unused imports removed (F401), undefined name `SAJModbusHub` in `__init__.py` fixed via `TYPE_CHECKING` block (F821), inline `if`/return statements split (E701), unused variable removed (F841).
+
+**Legacy Typing Modernised**
+Replaced `Optional[X]`, `Dict[K,V]`, `List[X]`, `Union[X,Y]` from `typing` with native Python 3.10+ builtins (`X | None`, `dict`, `list`, `X | Y`) in `hub.py`, `charge_control.py`, `modbus_utils.py` and `services.py`.
+
+**Type Hints Added to `number.py`**
+`number.py` was the only file with 0% type hint coverage. All 5 functions/methods now fully annotated including the HA platform signature (`HomeAssistant`, `ConfigEntry`, `AddEntitiesCallback`).
+
+**Generic `CircuitBreaker` Base Class**
+Extracted shared circuit breaker logic (~40 duplicate lines) into a single `CircuitBreaker` base class in `modbus_utils.py`. `ModbusCircuitBreaker` and `MqttCircuitBreaker` are now slim two-line subclasses with unchanged defaults and identical runtime behaviour. Also fixes an f-string log call to use `%s` format.
+
+**`hub.__init__()` Split into Focused Helpers**
+The 126-line `__init__` has been reduced to ~74 lines by extracting three private methods:
+- `_init_locks()` — all `asyncio.Lock` / `Event` / `OrderedDict` objects
+- `_init_fast_poll_state()` — fast/ultra-fast callback handles and listener registry
+- `_init_charge_control()` — `ChargeSettingHandler`, pending states, setters, cache cleanup timer
+
+**`DEFAULT_CONFIG_SCHEMA` Constant Extracted**
+The 12-key config-defaults dict was duplicated verbatim in `hub.__init__()` and `async_update_options()` in `__init__.py` (with minor inconsistencies: raw strings vs. constants, `1883` vs. `DEFAULT_MQTT_PORT`). Both are now replaced by a single `DEFAULT_CONFIG_SCHEMA: dict[str, Any]` constant in `const.py`.
+Also moved from `hub.py` to `const.py`: `CONF_ULTRA_FAST_ENABLED`, `CONF_MQTT_TOPIC_PREFIX`, `CONF_MQTT_PUBLISH_ALL`, `CONF_USE_HA_MQTT`, `DEFAULT_MQTT_PORT`, `DEFAULT_MQTT_TOPIC_PREFIX`. Removed local redefinitions of `DEFAULT_MODBUS_PORT` and `DEFAULT_SCAN_INTERVAL` that duplicated existing `const.py` values.
+
+**`_determine_strategy()` Refactored into Pure Helpers**
+Extracted two single-responsibility helpers from the 60-line strategy method in `services.py`:
+- `_is_ha_mqtt_available()` — single source of truth for HA MQTT component check (was duplicated inline)
+- `_select_strategy(clean_host)` — pure priority logic returning a strategy constant; no side-effects
+
+`_determine_strategy()` now only handles caching, host normalisation, logging, and assignment. No behaviour changes.
+
+**`_async_update_fast()` Split into Focused Helpers**
+The 97-line monolithic fast-poll method has been refactored into three single-responsibility helpers:
+- `_run_fast_modbus_read(client, lock, ultra)` — Modbus read with one-shot retry; returns `None` on double failure
+- `_publish_fast_mqtt(fast_data)` — delegates MQTT publishing
+- `_notify_fast_listeners()` — notifies HA entity callbacks (10 s loop only)
+
+`_async_update_fast()` is now a lean ~45-line orchestrator. No behaviour changes.
+
 
 ---
 
-## Release v2.8.5 – Stability & Code Quality
+## [v2.8.5]
+
+## Stability & Code Quality
 
 This version closes multiple potential data corruption and race condition issues and improves the robustness of the entire polling system.
 

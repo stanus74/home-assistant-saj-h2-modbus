@@ -1,7 +1,7 @@
 """Utility functions for SAJ H2 Modbus integration."""
 import asyncio
 import logging
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, List
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 

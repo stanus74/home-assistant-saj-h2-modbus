@@ -1,6 +1,12 @@
+"""SAJ H2 Modbus number entities."""
+from __future__ import annotations
 import logging
+from typing import Any
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .utils import generate_slot_definitions
 
@@ -18,6 +24,17 @@ NUMBER_DEFINITIONS = [
         "setter": "set_charge_time_enable",
     },
     {
+        "key": "app_mode",
+        "name": "App Mode",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "default": 0,
+        "unit": None,
+        "setter": "set_app_mode",
+        "allowed_values": [0, 1, 2, 3, 12],
+    },
+    {
         "key": "export_limit",
         "name": "Export Limit",
         "min": 0,
@@ -26,16 +43,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_export_limit",
-    },
-    {
-        "key": "app_mode",
-        "name": "App Mode",
-        "min": 0,
-        "max": 3,
-        "step": 1,
-        "default": 0,
-        "unit": None,
-        "setter": "set_app_mode",
     },
     {
         "key": "discharge_time_enable",
@@ -174,7 +181,18 @@ class SajNumberEntity(NumberEntity):
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, hub, name, unique_id, min_val, max_val, step, default, device_info, unit=None):
+    def __init__(
+        self,
+        hub: Any,
+        name: str,
+        unique_id: str,
+        min_val: float,
+        max_val: float,
+        step: float,
+        default: float,
+        device_info: dict,
+        unit: str | None = None,
+    ) -> None:
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
@@ -186,18 +204,36 @@ class SajNumberEntity(NumberEntity):
         self._attr_device_info = device_info
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | None:
         return self._attr_native_value
 
 class SajGenericNumberEntity(SajNumberEntity):
     """Generic class for SAJ number entities."""
-    def __init__(self, hub, name, unique_id, min_val, max_val, step, default, device_info, unit=None, set_method_name=None):
+    def __init__(
+        self,
+        hub: Any,
+        name: str,
+        unique_id: str,
+        min_val: float,
+        max_val: float,
+        step: float,
+        default: float,
+        device_info: dict,
+        unit: str | None = None,
+        set_method_name: str | None = None,
+        allowed_values: list[int] | None = None,
+    ) -> None:
         super().__init__(hub, name, unique_id, min_val, max_val, step, default, device_info, unit)
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
+        self._allowed_values = allowed_values
 
-    async def async_set_native_value(self, value):
+    async def async_set_native_value(self, value: float) -> None:
         val = int(value)
-        if not self._attr_native_min_value <= val <= self._attr_native_max_value:
+        if self._allowed_values is not None:
+            if val not in self._allowed_values:
+                _LOGGER.error("Invalid value for %s: %s (allowed: %s)", self._attr_name, val, self._allowed_values)
+                return
+        elif not self._attr_native_min_value <= val <= self._attr_native_max_value:
             _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
             return
         self._attr_native_value = val
@@ -205,7 +241,7 @@ class SajGenericNumberEntity(SajNumberEntity):
             await self.set_method(val)
         self.async_write_ha_state()
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up SAJ number entities."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]
@@ -224,6 +260,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             unit=desc["unit"],
             set_method_name=desc["setter"],
             device_info=device_info,
+            allowed_values=desc.get("allowed_values"),
         )
         entities.append(entity)
 

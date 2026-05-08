@@ -1,12 +1,11 @@
 """Optimized charge control with exponential backoff and improved error handling."""
+from __future__ import annotations
 import asyncio
 import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Any, List, Dict, Tuple, Callable, TYPE_CHECKING
-
-from .const import DOMAIN
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .hub import SAJModbusHub
@@ -27,7 +26,7 @@ DEFAULT_POWER_PERCENT = 10
 MAX_HANDLER_RETRIES = 3
 
 # --- Definitions for Pending Setter (Restored for compatibility) ---
-PENDING_FIELDS: List[tuple[str, str]] = (
+PENDING_FIELDS: list[tuple[str, str]] = (
     [
         (f"charge{i}_{suffix}", f"charges[{i-1}][{suffix}]")
         for i in range(1, 8)
@@ -121,11 +120,11 @@ class ChargeSettingHandler:
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self._is_processing = False
         self._processing_lock = asyncio.Lock()
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_task: asyncio.Task | None = None
         self._stop_processing = False
 
         # Locks & Caches
-        self._app_mode_before_passive: Optional[int] = None
+        self._app_mode_before_passive: int | None = None
         # Locks removed
         # Cache removed
 
@@ -367,7 +366,7 @@ class ChargeSettingHandler:
             # Push latest pending flag / state to HA regardless of outcome
             self.hub.async_set_updated_data(self.hub.inverter_data)
 
-    async def _handle_passive_mode(self, value: Optional[int]) -> None:
+    async def _handle_passive_mode(self, value: int | None) -> None:
         if value is None:
             return
         desired_int = self._coerce_int(value, "passive_charge_enable")
@@ -437,7 +436,7 @@ class ChargeSettingHandler:
             # Force UI update to clear pending flag and show new state
             self.hub.async_set_updated_data(self.hub.inverter_data)
 
-    def _get_power_states(self) -> Tuple[bool, bool]:
+    def _get_power_states(self) -> tuple[bool, bool]:
         """Get current charging and discharging states from inverter data."""
         chg = bool(self.hub.inverter_data.get("charging_enabled", 0))
         dchg = bool(self.hub.inverter_data.get("discharging_enabled", 0))
@@ -455,13 +454,13 @@ class ChargeSettingHandler:
 
     # ========== HELPER METHODS ==========
 
-    async def _update_cache(self, updates: Dict[str, Any]) -> None:
+    async def _update_cache(self, updates: dict[str, Any]) -> None:
         """Update hub inverter_data and notify listeners (acquires _data_lock)."""
         async with self.hub._data_lock:
             self.hub.inverter_data.update(updates)
         self.hub.async_set_updated_data(self.hub.inverter_data)
 
-    def _coerce_int(self, value: Any, key: str) -> Optional[int]:
+    def _coerce_int(self, value: Any, key: str) -> int | None:
         """Convert value to int with consistent logging on failure."""
         try:
             return int(value)
@@ -474,7 +473,7 @@ class ChargeSettingHandler:
         address: int,
         value: int,
         label: str,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
     ) -> bool:
         """Write a register and update cache on success."""
         if await self._write_register_with_backoff(address, value, label):
@@ -482,7 +481,7 @@ class ChargeSettingHandler:
             return True
         return False
 
-    def _parse_time_to_register(self, time_str: Any) -> Optional[int]:
+    def _parse_time_to_register(self, time_str: Any) -> int | None:
         """Validates and converts time string HH:MM to register value."""
         if not isinstance(time_str, str):
             _LOGGER.debug("Invalid time format: not a string: %s", time_str)
@@ -562,7 +561,7 @@ class ChargeSettingHandler:
                 await asyncio.sleep(2 ** (attempt - 1))
         return False
 
-    async def _update_day_mask_and_power(self, address: int, day_mask: Optional[int], power_percent: Optional[int], label: str) -> None:
+    async def _update_day_mask_and_power(self, address: int, day_mask: int | None, power_percent: int | None, label: str) -> None:
         """Updates the day mask and power percentage using generic modifier."""
         def modifier(current_value):
             current_day_mask = (current_value >> 8) & 0xFF
@@ -620,7 +619,7 @@ class ChargeSettingHandler:
         """Set the discharging state."""
         self._set_state_with_pending("discharging", CommandType.DISCHARGING_STATE, value)
 
-    def set_passive_mode(self, value: Optional[int]) -> None:
+    def set_passive_mode(self, value: int | None) -> None:
         """Set the passive mode."""
         self._set_state_with_pending("passive_mode", CommandType.PASSIVE_MODE, value)
 
@@ -637,6 +636,6 @@ class ChargeSettingHandler:
             self._is_processing = True
             asyncio.create_task(self._process_queue())
 
-    def get_optimistic_overlay(self, current_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def get_optimistic_overlay(self, current_data: dict[str, Any]) -> dict[str, Any] | None:
         """Returns None as optimistic UI is less relevant with immediate queue processing."""
         return None

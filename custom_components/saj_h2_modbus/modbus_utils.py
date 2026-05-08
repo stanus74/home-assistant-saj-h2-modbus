@@ -1,10 +1,12 @@
+"""Low-level Modbus TCP utilities, retry logic, and connection caching."""
+from __future__ import annotations
 import asyncio
 import functools
 import logging
 import os
 import time
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, List, Optional, Union
+from typing import Any, Awaitable, Callable
 
 import socket
 
@@ -35,23 +37,44 @@ class ReconnectionNeededError(Exception):
     pass
 
 
-class ModbusCircuitBreaker:
-    """Circuit breaker pattern for Modbus operations (reads/connect)."""
+class CircuitBreaker:
+    """Generic circuit breaker pattern for protecting against cascading failures.
 
-    def __init__(self, failure_threshold: int = 3, timeout: int = 30):
+    States:
+        CLOSED:    Normal operation; failures are counted.
+        OPEN:      Failure threshold exceeded; calls are rejected immediately.
+        HALF_OPEN: Testing whether the service has recovered.
+    """
+
+    def __init__(
+        self,
+        failure_threshold: int = 3,
+        timeout: int = 30,
+        name: str = "CircuitBreaker",
+    ) -> None:
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count = 0
         self.last_failure_time = 0.0
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self._name = name
 
     async def call(
         self,
         func: Callable[..., Awaitable[Any]],
         *args: Any,
-        should_trip: Optional[Callable[[Exception], bool]] = None,
+        should_trip: Callable[[Exception], bool] | None = None,
         **kwargs: Any,
     ) -> Any:
+        """Execute *func* through the circuit breaker.
+
+        Args:
+            func: Async callable to protect.
+            *args: Positional arguments forwarded to *func*.
+            should_trip: Optional predicate; the breaker only opens when this
+                returns True for the raised exception.  Defaults to always-trip.
+            **kwargs: Keyword arguments forwarded to *func*.
+        """
         now = time.monotonic()
         if should_trip is None:
             def should_trip(_: Exception) -> bool:
@@ -60,16 +83,16 @@ class ModbusCircuitBreaker:
         if self.state == "OPEN":
             if now - self.last_failure_time > self.timeout:
                 self.state = "HALF_OPEN"
-                _LOGGER.info("Modbus Circuit Breaker transitioning to HALF_OPEN")
+                _LOGGER.info("%s Circuit Breaker transitioning to HALF_OPEN", self._name)
             else:
-                raise ConnectionError("Modbus Circuit Breaker is OPEN")
+                raise ConnectionError(f"{self._name} Circuit Breaker is OPEN")
 
         try:
             result = await func(*args, **kwargs)
             if self.state == "HALF_OPEN":
                 self.state = "CLOSED"
                 self.failure_count = 0
-                _LOGGER.info("Modbus Circuit Breaker transitioning to CLOSED")
+                _LOGGER.info("%s Circuit Breaker transitioning to CLOSED", self._name)
             return result
         except Exception as e:
             if should_trip(e):
@@ -78,10 +101,18 @@ class ModbusCircuitBreaker:
                 if self.failure_count >= self.failure_threshold:
                     self.state = "OPEN"
                     _LOGGER.warning(
-                        "Modbus Circuit Breaker OPEN after %s failures",
+                        "%s Circuit Breaker OPEN after %s failures",
+                        self._name,
                         self.failure_count,
                     )
             raise
+
+
+class ModbusCircuitBreaker(CircuitBreaker):
+    """Circuit breaker pattern for Modbus operations (reads/connect)."""
+
+    def __init__(self, failure_threshold: int = 3, timeout: int = 30) -> None:
+        super().__init__(failure_threshold, timeout, "Modbus")
 
 
 # Module-level default used when no per-instance circuit breaker is active
@@ -92,7 +123,7 @@ _DEFAULT_CIRCUIT_BREAKER = ModbusCircuitBreaker()
 # through the coroutine call chain without changing every function signature.
 # Set by SAJModbusHub before calling any reader; resets automatically when
 # the enclosing asyncio task finishes.
-_CIRCUIT_BREAKER_CTX: ContextVar[Optional[ModbusCircuitBreaker]] = ContextVar(
+_CIRCUIT_BREAKER_CTX: ContextVar[ModbusCircuitBreaker | None] = ContextVar(
     "saj_modbus_circuit_breaker", default=None
 )
 
@@ -116,9 +147,9 @@ _RECONNECT_DONE.set()  # Initially set: no reconnect in progress
 
 # Global Modbus config storage
 class ModbusGlobalConfig:
-    host: Optional[str] = None
-    port: Optional[int] = None
-    hass: Optional[Any] = None
+    host: str | None = None
+    port: int | None = None
+    hass: Any | None = None
 
 def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
     ModbusGlobalConfig.host = host
@@ -209,7 +240,7 @@ class ConnectionCache:
         Args:
             cache_ttl: Time to live for cached connections in seconds
         """
-        self._cached_client: Optional[ModbusTcpClient] = None
+        self._cached_client: ModbusTcpClient | None = None
         self._cache_expiry: float = 0.0
         self._cache_ttl: float = cache_ttl
         self._last_health_check: float = 0.0
@@ -222,7 +253,7 @@ class ConnectionCache:
         self._cached_client = None
         self._cache_expiry = 0.0
 
-    async def get_cached_client(self) -> Optional[ModbusTcpClient]:
+    async def get_cached_client(self) -> ModbusTcpClient | None:
         """
         Get cached client if still valid.
         
@@ -352,7 +383,7 @@ async def _retry_with_backoff(
     retries: int,
     base_delay: float,
     cap: float,
-    on_retry: Optional[Callable[[int, Exception], Awaitable[None]]] = None,
+    on_retry: Callable[[int, Exception], Awaitable[None]] | None = None,
     task_name: str = "Task"
 ) -> Any:
     last_exception: Exception
@@ -515,7 +546,7 @@ async def try_read_registers(
     max_retries: int = DEFAULT_READ_RETRIES,
     base_delay: float = DEFAULT_READ_BASE_DELAY,
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
-) -> List[int]:
+) -> list[int]:
     host = ModbusGlobalConfig.host
     port = ModbusGlobalConfig.port
     if host is None or port is None:
@@ -578,7 +609,7 @@ async def try_write_registers(
     lock: Lock,
     unit: int,
     address: int,
-    values: Union[int, List[int]],
+    values: int | list[int],
     max_retries: int = DEFAULT_WRITE_RETRIES,
     base_delay: float = DEFAULT_WRITE_BASE_DELAY,
     cap_delay: float = DEFAULT_WRITE_CAP_DELAY,

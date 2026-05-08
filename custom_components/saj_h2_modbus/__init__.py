@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
@@ -11,11 +12,14 @@ from .const import (
     DOMAIN,
     ATTR_MANUFACTURER,
     DEFAULT_SCAN_INTERVAL,
-    DEFAULT_PORT,
     CONF_FAST_ENABLED,
+    DEFAULT_CONFIG_SCHEMA,
 )
 from homeassistant.helpers import config_validation as cv
 from .utils import get_config_value, get_config_values
+
+if TYPE_CHECKING:
+    from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,23 +89,7 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update options and restart fast updates if needed."""
     hub: SAJModbusHub | None = hass.data[DOMAIN].get(entry.entry_id, {}).get("hub")
     if hub is not None:
-        config = get_config_values(
-            entry,
-            {
-                CONF_HOST: None,
-                CONF_PORT: DEFAULT_PORT,
-                CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                CONF_FAST_ENABLED: False,
-                "ultra_fast_enabled": False,
-                "mqtt_host": "",
-                "mqtt_port": 1883,
-                "mqtt_user": "",
-                "mqtt_password": "",
-                "mqtt_topic_prefix": "saj",
-                "mqtt_publish_all": False,
-                "use_ha_mqtt": False,
-            },
-        )
+        config = get_config_values(entry, DEFAULT_CONFIG_SCHEMA)
         await hub.update_connection_settings(
             host=config[CONF_HOST],
             port=config[CONF_PORT],
