@@ -8,7 +8,7 @@ New writable number entity controlling the inverter mode outside TOU charge/disc
 - `1` = Self Use Mode
 
 **`number.saj_time_bat_dis_input` — Register 0x3660**
-New writable number entity to allow or block battery charging/discharging during time-sharing periods.
+New writable number entity to allow or block battery discharging during time-sharing periods.
 - `0` = Not allow
 - `1` = Allow
 
