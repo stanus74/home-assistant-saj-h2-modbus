@@ -57,7 +57,7 @@ NUMBER_DEFINITIONS = [
     },
     {
         "key": "time_bat_dis",
-        "name": "Time-Sharing Battery Charge/Discharge Allow",
+        "name": "Time-Sharing Battery Discharge Allow",
         "min": 0,
         "max": 1,
         "step": 1,

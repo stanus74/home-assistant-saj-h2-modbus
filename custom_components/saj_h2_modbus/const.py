@@ -434,7 +434,7 @@ information_sensors = [
     {"name": "Battery 4 Warning", "key": "Bat4WarnMSG", "icon": "alert", "enable": False},
     {"name": "App Mode", "key": "AppMode", "icon": "information-outline", "enable": True},
     {"name": "TOU Outside Mode", "key": "tou_outside_mode", "icon": "calendar-clock", "enable": True},
-    {"name": "Time-Sharing Battery Charge/Discharge Allow", "key": "time_bat_dis", "icon": "calendar-clock", "enable": True},
+    {"name": "Time-Sharing Battery Discharge Allow", "key": "time_bat_dis", "icon": "calendar-clock", "enable": True},
     
     # New entities from register 0x3604/0x3605
     {"name": "Charge Time Enable Bitmask", "key": "charge_time_enable", "icon": "clock-check", "enable": True},
