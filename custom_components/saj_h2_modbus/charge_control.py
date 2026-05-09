@@ -56,6 +56,8 @@ PENDING_FIELDS: list[tuple[str, str]] = (
         ("passive_grid_discharge_power", "passive_grid_discharge_power"),
         ("passive_bat_charge_power", "passive_bat_charge_power"),
         ("passive_bat_discharge_power", "passive_bat_discharge_power"),
+        ("tou_outside_mode", "tou_outside_mode"),
+        ("time_bat_dis", "time_bat_dis"),
     ]
 )
 
@@ -96,6 +98,8 @@ MODBUS_ADDRESSES = {
         "passive_grid_discharge_power": {"address": 0x3638, "label": "passive grid discharge power"},
         "passive_bat_charge_power": {"address": 0x3639, "label": "passive battery charge power"},
         "passive_bat_discharge_power": {"address": 0x363A, "label": "passive battery discharge power"},
+        "tou_outside_mode": {"address": 0x365F, "label": "tou outside mode"},
+        "time_bat_dis": {"address": 0x3660, "label": "time-sharing battery charge/discharge allow"},
     }
 }
 

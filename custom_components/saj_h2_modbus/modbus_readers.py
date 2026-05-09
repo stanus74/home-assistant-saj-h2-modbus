@@ -157,6 +157,9 @@ PASSIVE_BATTERY_DATA_MAP = [
     ("BatChargePower", "16u"), ("BatDischargePower", "16u"), ("GridChargePower", "16u"), ("GridDischargePower", "16u"),
     (None, "skip_bytes", 18),
     ("AntiRefluxPowerLimit", "16u", 1), ("AntiRefluxCurrentLimit", "16u", 1), ("AntiRefluxCurrentmode_raw", "16u", 1),
+    (None, "skip_bytes", 4),
+    ("tou_outside_mode", "16u", 1),  # 0x365F: 0=Standby, 1=Self Use Mode
+    ("time_bat_dis", "16u", 1),  # 0x3660: 0=Not allow, 1=Allow charge/discharge in time-sharing mode
 ]
 
 METER_A_DATA_MAP = [
@@ -658,7 +661,7 @@ async def read_passive_battery_data(client: ModbusTcpClient, lock: Lock) -> Data
             client,
             lock,
             0x3636,
-            39,
+            43,
             PASSIVE_BATTERY_DATA_MAP,
             "passive_battery_anti_reflux_data",
             default_factor=0.1,

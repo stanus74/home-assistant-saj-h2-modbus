@@ -1,3 +1,21 @@
+## Release v2.8.7 – New Input Entities: TOU Outside Mode & Time-Sharing Allow
+
+### Added
+
+**`number.saj_tou_outside_mode_input` — Register 0x365F**
+New writable number entity controlling the inverter mode outside TOU charge/discharge windows.
+- `0` = Standby
+- `1` = Self Use Mode
+
+**`number.saj_time_bat_dis_input` — Register 0x3660**
+New writable number entity to allow or block battery charging/discharging during time-sharing periods.
+- `0` = Not allow
+- `1` = Allow
+
+Both entities use `allowed_values = [0, 1]` validation and appear in HA under the Config entity category. Corresponding read-only sensor entities (`sensor.saj_tou_outside_mode`, `sensor.saj_time_bat_dis`) are added for dashboard display. Values are read via the existing 60 s `read_passive_battery_data` call (register block 0x3636, count extended from 39 to 43).
+
+---
+
 ## Release v2.8.6 – Code Quality & Refactoring
 
 ### Changed
