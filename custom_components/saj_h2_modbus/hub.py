@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.config_entries import ConfigEntry
 
@@ -259,9 +259,11 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 await self.mqtt.publish_data(self.inverter_data)
             
             return self.inverter_data
+        except (ConnectionError, ReconnectionNeededError) as err:
+            raise UpdateFailed(f"Connection error: {err}") from err
         except Exception as err:
             _LOGGER.error("Update cycle failed: %s", err)
-            raise
+            raise UpdateFailed(f"Update cycle failed: {err}") from err
 
     async def _run_reader_methods(self, client: Any) -> dict[str, Any]:
         """Executes all readers using the provided client."""
