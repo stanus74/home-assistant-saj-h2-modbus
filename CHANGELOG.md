@@ -1,4 +1,5 @@
-## Release v2.8.7 – New Input Entities: TOU Outside Mode & Time-Sharing Allow
+## Release v2.9.0 – Reliability & Correctness Fixes
+
 
 ### Added
 
@@ -14,7 +15,47 @@ New writable number entity to allow or block battery discharging during time-sha
 
 Both entities use `allowed_values = [0, 1]` validation and appear in HA under the Config entity category. Corresponding read-only sensor entities (`sensor.saj_tou_outside_mode`, `sensor.saj_time_bat_dis`) are added for dashboard display. Values are read via the existing 60 s `read_passive_battery_data` call (register block 0x3636, count extended from 39 to 43).
 
+
+### Fixed
+
+**RMW Lock LRU Eviction** (`hub.py`)
+`_rmw_locks` (OrderedDict, cap=64) previously used a `for...else` loop that only evicted unlocked entries. If all entries were locked the dict grew to 65+ entries unboundedly. Now always evicts the oldest entry via `next(iter(...))`, with a WARNING log if the evicted entry was still locked.
+
+**`asyncio.Event` for Removal Guards** (`sensor.py`)
+`_is_removed` and `_on_remove_cleanup_registered` were plain `bool` flags, which are not safe in concurrent asyncio code. Both are now `asyncio.Event` objects — the standard Python pattern for inter-coroutine signalling. Eliminates a potential double-cleanup race condition on entity removal.
+
+**Circuit Breaker for Write Operations** (`modbus_utils.py`)
+`try_write_registers()` was not protected by the shared `ModbusCircuitBreaker`. Consecutive write failures could spin indefinitely without tripping the breaker. The write path is now wrapped identically to reads: `get_modbus_circuit_breaker().call(operation, should_trip=...)`.
+
+**`_write_done.set()` Exception Safety** (`hub.py`)
+The `finally` block of `_write_register()` called `self._write_done.set()` without any guard. An unexpected exception here would propagate out of `finally`, masking the original error. The call is now wrapped in `try/except Exception: pass`.
+
+**`ReconnectionNeededError` Propagation on Reconnect Failure** (`modbus_utils.py`)
+When `_on_modbus_retry()` failed to reconnect the Modbus client it only logged a warning and silently continued the backoff loop, so the caller never learned about the persistent connection problem. It now raises `ReconnectionNeededError` immediately, which is the correct signal for the hub to initiate a full reconnect cycle.
+
+**Untracked `asyncio.create_task` Calls** (`charge_control.py`)
+Two `asyncio.create_task(...)` calls in `_queue_command_async()` and `process_pending()` created fire-and-forget tasks whose exceptions were silently discarded. Both are replaced with `create_logged_task(self.hub.hass, ..., logger=_LOGGER)` so exceptions are caught and logged by the HA task infrastructure.
+
+**ContextVar Token not Reset in `_async_update_fast` / `_read_registers`** (`hub.py`)
+`_CIRCUIT_BREAKER_CTX.set(...)` was called without saving the returned token, making it impossible to restore the previous context value. In nested calls within the same asyncio Task the circuit breaker context was permanently overwritten. Both methods now follow the correct `cb_token = ctx.set(...); try: ...; finally: ctx.reset(cb_token)` pattern.
+
+**MQTT Strategy not Re-evaluated after Late MQTT Load** (`services.py`)
+`MqttPublisher._determine_strategy()` cached the selected strategy at startup. If the HA MQTT integration loaded after the SAJ integration (e.g. slow boot), the publisher stayed on the Paho fallback forever. The publisher now subscribes to `EVENT_COMPONENT_LOADED` and forces a strategy re-evaluation when the `mqtt` component becomes available.
+
+**Cache-Cleanup Timer not Restarted on Config Change** (`hub.py`)
+The Modbus connection cache cleanup timer (300 s TTL) was created once at startup and never restarted when connection settings changed via Options Flow. Stale cache entries from the old host/port could persist. `update_connection_settings()` now cancels and recreates the timer on every config update.
+
+**AppMode (0x3647) not Written after `_ensure_slot_enabled`** (`charge_control.py`)
+`_ensure_slot_enabled()` set the `time_enable` bitmask for a charge/discharge slot but never called `_update_app_mode_from_states()`. Writing a slot via the inverter card therefore left register 0x3647 unchanged, so the inverter did not activate Force-Charge/Discharge mode despite having an enabled slot. Added the same `chg/dchg → _update_app_mode_from_states` pattern already present in `_handle_simple_setting` and `_handle_power_state`.
+
+**`create_logged_task` Used Deprecated `async_create_task`** (`utils.py`)
+`hass.async_create_task()` is deprecated since HA Core 2023.6. Migrated to `hass.async_create_background_task(coro, name=name)`. The optional `name` parameter is forwarded so tasks appear with a meaningful label in HA diagnostics.
+
+**Redundant `get_client()` Call in `process_pending_now`** (`hub.py`)
+`process_pending_now()` called `await self.connection.get_client()` before delegating to `process_pending()`. The connection is established lazily inside `_write_register → get_client()` anyway, so the pre-call was a no-op that added unnecessary overhead on every switch toggle.
+
 ---
+
 
 ## Release v2.8.6 – Code Quality & Refactoring
 
