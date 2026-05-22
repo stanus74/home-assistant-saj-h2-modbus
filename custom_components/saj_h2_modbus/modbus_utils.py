@@ -161,66 +161,6 @@ def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
 # CONNECTION MANAGEMENT
 # ============================================================================
 
-# OPTIMIZATION: Combined ensure_client_connected() and connect_if_needed()
-# into a single _connect_client() function to reduce code duplication.
-# The original functions are kept as backward compatibility wrappers.
-
-async def _connect_client(
-    client: ModbusTcpClient,
-    host: str,
-    port: int,
-    logger: logging.Logger,
-    create_new: bool = False
-) -> ModbusTcpClient:
-    """
-    Ensures the Modbus client is connected.
-    
-    This is a unified function that handles both:
-    - Creating new clients when needed (if create_new=True)
-    - Connecting existing clients if not already connected
-    
-    Args:
-        client: The Modbus client to connect (or None if create_new is True)
-        host: The host to connect to
-        port: The port to connect to
-        logger: Logger instance for logging
-        create_new: If True, creates a new client when client is None
-    
-    Returns:
-        The connected Modbus client
-    
-    Raises:
-        ConnectionError: If connection fails
-        ValueError: If client is None and create_new is False
-    """
-    # Create new client if needed and requested
-    if client is None:
-        if not create_new:
-            raise ValueError("Client is None and create_new is False")
-        logger.debug("Creating new ModbusTcpClient for %s:%s", host, port)
-        client = ModbusTcpClient(host=host, port=port, timeout=5)
-    
-    # Connect if not already connected
-    if not client.connected:
-        logger.debug("Attempting to connect ModbusTcpClient to %s:%s", host, port)
-        try:
-            if ModbusGlobalConfig.hass:
-                await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
-            else:
-                client.connect()
-                
-            # Verify that the client is actually connected after the connection attempt
-            if not client.connected:
-                raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
-            logger.info("ModbusTcpClient successfully connected to %s:%s", host, port)
-        except Exception as e:
-            logger.error("Error connecting client to %s:%s: %s", host, port, e)
-            raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
-    
-
-    return client
-
-
 # ============================================================================
 # CONNECTION POOLING OPTIMIZATION
 # ============================================================================
