@@ -642,12 +642,26 @@ async def try_write_registers(
             _LOGGER.debug("[write-ok] unit=%s addr=%s values=%s", unit, hex(address), values)
         return True
 
-    return await _retry_with_backoff(
-        func=write_once,
-        should_retry=should_retry,
-        retries=max_retries,
-        base_delay=base_delay,
-        cap=cap_delay,
-        on_retry=on_retry,
-        task_name="Modbus-Write"
-    )
+    async def on_write_retry(attempt: int, e: Exception) -> None:
+        _LOGGER.warning("[Modbus-Write] Retry %d after error: %s", attempt, e)
+        await on_retry(attempt, e)
+
+    try:
+        operation = functools.partial(
+            _retry_with_backoff,
+            func=write_once,
+            should_retry=should_retry,
+            retries=max_retries,
+            base_delay=base_delay,
+            cap=cap_delay,
+            on_retry=on_write_retry,
+            task_name="Modbus-Write",
+        )
+        return await get_modbus_circuit_breaker().call(
+            operation,
+            should_trip=_should_trip_circuit_breaker,
+        )
+    except (ConnectionException, ConnectionError, OSError) as final_e:
+        raise ReconnectionNeededError(
+            f"Modbus write failed after {max_retries} retries – connection lost: {final_e}"
+        ) from final_e
