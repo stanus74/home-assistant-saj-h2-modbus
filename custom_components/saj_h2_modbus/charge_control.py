@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, TYPE_CHECKING
@@ -26,6 +27,9 @@ DEFAULT_POWER_PERCENT = 10
 
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
+
+# Minimum interval between HA state flushes (debounce)
+_FLUSH_MIN_INTERVAL: float = 1.0
 
 # --- Definitions for Pending Setter (Restored for compatibility) ---
 PENDING_FIELDS: list[tuple[str, str]] = (
@@ -131,6 +135,10 @@ class ChargeSettingHandler:
 
         # Locks & Caches
         self._app_mode_before_passive: int | None = None
+
+        # Debounce for HA state flushes
+        self._flush_pending: bool = False
+        self._last_flush_time: float = 0.0
         # Locks removed
         # Cache removed
 
@@ -341,7 +349,7 @@ class ChargeSettingHandler:
 
         # Mark pending before awaiting I/O so the UI reflects the transition immediately
         setattr(self.hub, pending_attr, value)
-        self.hub.async_set_updated_data(self.hub.inverter_data)
+        self._schedule_flush()
 
         write_success = False
         
@@ -373,7 +381,7 @@ class ChargeSettingHandler:
             self._clear_pending_state(state_type)
 
             # Push latest pending flag / state to HA regardless of outcome
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._schedule_flush()
 
     async def _handle_passive_mode(self, value: int | None) -> None:
         if value is None:
@@ -395,7 +403,7 @@ class ChargeSettingHandler:
         finally:
             self._clear_pending_state("passive_mode")
             # Force UI update to clear pending flag and show new state
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._schedule_flush()
 
     async def _activate_passive_mode(self) -> None:
         """Activate passive mode by capturing current app mode and setting to passive."""
@@ -443,7 +451,7 @@ class ChargeSettingHandler:
         finally:
             self._clear_pending_state("passive_charge_enable")
             # Force UI update to clear pending flag and show new state
-            self.hub.async_set_updated_data(self.hub.inverter_data)
+            self._schedule_flush()
 
     def _get_power_states(self) -> tuple[bool, bool]:
         """Get current charging and discharging states from inverter data."""
@@ -467,6 +475,28 @@ class ChargeSettingHandler:
         """Update hub inverter_data and notify listeners (acquires _data_lock)."""
         async with self.hub._data_lock:
             self.hub.inverter_data.update(updates)
+        self._schedule_flush()
+
+    def _schedule_flush(self) -> None:
+        """Schedule a debounced state flush — at most once per second.
+
+        Multiple calls within the same 1 s window are coalesced into a
+        single ``async_set_updated_data`` call so rapid consecutive writes
+        (e.g. slot batch updates) do not flood the HA state machine.
+        """
+        if self._flush_pending:
+            return
+        self._flush_pending = True
+        delay = max(0.0, self._last_flush_time + _FLUSH_MIN_INTERVAL - time.monotonic())
+        if delay <= 0.0:
+            self.hub.hass.loop.call_soon(self._do_flush)
+        else:
+            self.hub.hass.loop.call_later(delay, self._do_flush)
+
+    def _do_flush(self) -> None:
+        """Perform the actual state flush and reset the debounce guard."""
+        self._flush_pending = False
+        self._last_flush_time = time.monotonic()
         self.hub.async_set_updated_data(self.hub.inverter_data)
 
     def _coerce_int(self, value: Any, key: str) -> int | None:
@@ -527,7 +557,7 @@ class ChargeSettingHandler:
             async with self.hub._data_lock:
                 self.hub.inverter_data["AppMode"] = desired_app_mode
             if current_app_mode != desired_app_mode:
-                self.hub.async_set_updated_data(self.hub.inverter_data)
+                self._schedule_flush()
 
     async def _update_app_mode_from_states(self, charge_enabled: bool, discharge_enabled: bool, force: bool = False) -> None:
         """Update AppMode based on current charge/discharge states."""
