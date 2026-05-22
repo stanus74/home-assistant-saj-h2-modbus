@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Any
 import importlib
+from homeassistant.const import EVENT_COMPONENT_LOADED
 from homeassistant.core import HomeAssistant
 from homeassistant.components import mqtt
 from pymodbus.client import ModbusTcpClient
@@ -212,10 +213,15 @@ class MqttPublisher:
         
         # Log throttling
         self._last_no_connection_log = 0.0
-        
+
+        # Re-evaluate strategy when a new HA component loads (e.g., MQTT added later)
+        self._unsub_component_loaded = self.hass.bus.async_listen(
+            EVENT_COMPONENT_LOADED, self._on_component_loaded
+        )
+
         # Determine strategy immediately
         self._determine_strategy(force=True)
-        
+
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
             create_logged_task(self.hass, self._async_init_paho_client(), logger=_LOGGER)
@@ -529,8 +535,17 @@ class MqttPublisher:
             except Exception as e:
                 _LOGGER.warning("Internal MQTT publish failed: %s", e)
 
+    def _on_component_loaded(self, event: Any) -> None:
+        """Re-evaluate MQTT strategy when a new HA component is loaded."""
+        if event.data.get("component") == "mqtt":
+            _LOGGER.debug("HA MQTT component loaded – re-evaluating MQTT strategy")
+            self._determine_strategy(force=True)
+
     def stop(self):
-        """Stops the internal Paho client."""
+        """Stops the internal Paho client and cleans up event subscriptions."""
+        if self._unsub_component_loaded:
+            self._unsub_component_loaded()
+            self._unsub_component_loaded = None
         if self._paho_client and self._paho_started:
             _LOGGER.info("Paho MQTT: Stopping client")
             self._paho_client.loop_stop()
