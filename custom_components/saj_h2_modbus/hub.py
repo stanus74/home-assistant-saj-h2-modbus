@@ -709,23 +709,22 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             lock = self._merge_locks.get(address)
             if lock is None:
                 if address not in self._rmw_locks:
-                    # Hard LRU cap: evict the oldest unlocked entry before adding a new one.
+                    # Hard LRU cap: always evict the oldest entry before adding a new one.
                     # Should never exceed ~20 entries in normal operation.
                     if len(self._rmw_locks) >= 64:
-                        for evict_addr, evict_lock in self._rmw_locks.items():
-                            if not evict_lock.locked():
-                                del self._rmw_locks[evict_addr]
-                                _LOGGER.debug(
-                                    "merge_write_register: evicted RMW lock for 0x%04x "
-                                    "(LRU, capacity=64)",
-                                    evict_addr,
-                                )
-                                break
-                        else:
+                        evict_addr, evict_lock = next(iter(self._rmw_locks.items()))
+                        del self._rmw_locks[evict_addr]
+                        if evict_lock.locked():
                             _LOGGER.warning(
-                                "merge_write_register: _rmw_locks at 64 entries and all "
-                                "currently locked (address=0x%04x) – possible bug.",
-                                address,
+                                "merge_write_register: force-evicted locked RMW lock for "
+                                "0x%04x (LRU, capacity=64) – possible bug.",
+                                evict_addr,
+                            )
+                        else:
+                            _LOGGER.debug(
+                                "merge_write_register: evicted RMW lock for 0x%04x "
+                                "(LRU, capacity=64)",
+                                evict_addr,
                             )
                     self._rmw_locks[address] = asyncio.Lock()
                 # Move to end so this entry is considered most-recently-used.
