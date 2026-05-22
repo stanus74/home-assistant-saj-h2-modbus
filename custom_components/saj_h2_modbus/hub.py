@@ -670,7 +670,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     client, self._write_lock, 1, address, value
                 )
         finally:
-            self._write_done.set()
+            try:
+                self._write_done.set()
+            except Exception:
+                pass
             if self._ultra_fast_pending and self.ultra_fast_enabled:
                 self._ultra_fast_pending = False
                 create_logged_task(self.hass, self._async_update_fast(ultra=True), logger=_LOGGER)
