@@ -539,7 +539,17 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         try:
             # Update Services
             self.connection.update_config(host, port)
-            
+
+            # Restart cache-cleanup timer so it fires relative to the new config change,
+            # not from whenever the integration was first set up.
+            if self._cache_cleanup_unsub:
+                self._cache_cleanup_unsub()
+            self._cache_cleanup_unsub = async_track_time_interval(
+                self.hass,
+                self._async_cleanup_cache,
+                timedelta(seconds=300),
+            )
+
             # FAILSAFE: If prefix argument is None (because __init__.py didn't pass it),
             # retrieve it from the ConfigEntry options/data directly.
             if mqtt_topic_prefix is None:
