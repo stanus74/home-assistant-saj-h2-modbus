@@ -493,8 +493,14 @@ async def _on_modbus_retry(
                     await _connect_client_inplace(client, host, port)
                     logger.info("Reconnect during %s successful", operation_name)
                 except Exception as reconnect_error:
-                    logger.warning("Reconnect during %s failed: %s. Will retry in next attempt.", operation_name, reconnect_error)
-                    # Do NOT raise here, let the backoff loop continue
+                    logger.warning(
+                        "Reconnect during %s failed: %s – aborting retry loop.",
+                        operation_name,
+                        reconnect_error,
+                    )
+                    raise ReconnectionNeededError(
+                        f"Reconnect during {operation_name} failed: {reconnect_error}"
+                    ) from reconnect_error
         finally:
             # Always unblock waiting tasks, whether reconnect succeeded or failed.
             _RECONNECT_DONE.set()
