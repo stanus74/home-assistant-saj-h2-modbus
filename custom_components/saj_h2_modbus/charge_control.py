@@ -10,6 +10,8 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from .hub import SAJModbusHub
 
+from .utils import create_logged_task
+
 _LOGGER = logging.getLogger(__name__)
 
 CHARGE_PENDING_SUFFIXES = ("start", "end", "day_mask", "power_percent")
@@ -594,7 +596,7 @@ class ChargeSettingHandler:
 
     def _queue_command_async(self, command: Command) -> None:
         """Queue a command asynchronously."""
-        asyncio.create_task(self.queue_command(command))
+        create_logged_task(self.hub.hass, self.queue_command(command), logger=_LOGGER)
 
     def set_pending(self, key: str, value: Any) -> None:
         """Generic setter that queues commands."""
@@ -638,7 +640,7 @@ class ChargeSettingHandler:
         # Ensure processing is running if queue is not empty
         if not self._command_queue.empty() and not self._is_processing:
             self._is_processing = True
-            asyncio.create_task(self._process_queue())
+            create_logged_task(self.hub.hass, self._process_queue(), logger=_LOGGER)
 
     def get_optimistic_overlay(self, current_data: dict[str, Any]) -> dict[str, Any] | None:
         """Returns None as optimistic UI is less relevant with immediate queue processing."""
