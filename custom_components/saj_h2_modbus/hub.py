@@ -470,33 +470,36 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             lock_name = "ultra_fast" if ultra else "fast"
 
             # Activate per-instance circuit breaker for this fast-poll read session.
-            _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
-            async with self._lock_order_guard(lock_name):
-                result = await self._run_fast_modbus_read(client, lock, ultra)
-                if result is None:
-                    return  # both attempts failed, already logged
+            cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
+            try:
+                async with self._lock_order_guard(lock_name):
+                    result = await self._run_fast_modbus_read(client, lock, ultra)
+                    if result is None:
+                        return  # both attempts failed, already logged
 
-                if not result:
-                    _LOGGER.warning("Fast poll returned an empty result – skipping update cycle")
-                    return
+                    if not result:
+                        _LOGGER.warning("Fast poll returned an empty result – skipping update cycle")
+                        return
 
-                fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
-                if not fast_data:
-                    _LOGGER.warning(
-                        "Fast poll: result contained no matching sensor keys "
-                        "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
-                        len(result),
-                    )
-                    return
+                    fast_data = {k: v for k, v in result.items() if k in self._fast_poll_sensor_keys}
+                    if not fast_data:
+                        _LOGGER.warning(
+                            "Fast poll: result contained no matching sensor keys "
+                            "(got %d raw keys, 0 matched FAST_POLL_SENSORS)",
+                            len(result),
+                        )
+                        return
 
-                async with self._data_lock:
-                    self.inverter_data.update(fast_data)
+                    async with self._data_lock:
+                        self.inverter_data.update(fast_data)
 
-                await self._publish_fast_mqtt(fast_data)
+                    await self._publish_fast_mqtt(fast_data)
 
-                # Only the 10s loop should push to HA entities to avoid DB spam.
-                if not ultra:
-                    self._notify_fast_listeners()
+                    # Only the 10s loop should push to HA entities to avoid DB spam.
+                    if not ultra:
+                        self._notify_fast_listeners()
+            finally:
+                _CIRCUIT_BREAKER_CTX.reset(cb_token)
 
         except ReconnectionNeededError:
             await self.connection.notify_error()
@@ -696,10 +699,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         
         async with self._lock_order_guard("slow"):
             client = await self.connection.get_client()
-            _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
-            return await try_read_registers(
-                client, self._slow_lock, 1, address, count
-            )
+            cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
+            try:
+                return await try_read_registers(
+                    client, self._slow_lock, 1, address, count
+                )
+            finally:
+                _CIRCUIT_BREAKER_CTX.reset(cb_token)
 
     async def merge_write_register(
         self,
