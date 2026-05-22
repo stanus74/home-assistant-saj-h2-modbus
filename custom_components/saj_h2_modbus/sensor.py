@@ -65,7 +65,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         # Only fast variants should register for fast updates
         self._is_fast_sensor = (description.key in FAST_POLL_SENSORS) and is_fast_variant
         self._remove_fast_listener = None
-        self._on_remove_cleanup_registered = False
+        self._on_remove_cleanup_registered = asyncio.Event()
         self._last_value = None  # Cache last value for change detection
         # Event-based flag to prevent double-cleanup during entity removal
         self._is_removed = asyncio.Event()
@@ -92,9 +92,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """When entity is added to hass."""
         await super().async_added_to_hass()
 
-        if not self._on_remove_cleanup_registered:
+        if not self._on_remove_cleanup_registered.is_set():
             self.async_on_remove(self._cleanup_fast_listener)
-            self._on_remove_cleanup_registered = True
+            self._on_remove_cleanup_registered.set()
 
         # Initial registration check
         self._update_fast_listener_registration()
