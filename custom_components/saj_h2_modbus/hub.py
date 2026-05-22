@@ -346,7 +346,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         # Replace any existing pending handle for the same loop
         pending_handle = getattr(self, pending_attr, None)
         if pending_handle:
-            pending_handle.cancel()
+            pending_handle()
 
         setattr(
             self,
@@ -366,7 +366,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 self._cancel_fast_update()
                 self._cancel_fast_update = None
             if self._pending_fast_start_cancel:
-                self._pending_fast_start_cancel.cancel()
+                self._pending_fast_start_cancel()
                 self._pending_fast_start_cancel = None
 
             self._schedule_update_loop(FAST_UPDATE_INTERVAL, "_cancel_fast_update", False)
@@ -375,7 +375,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 self._cancel_fast_update()
                 self._cancel_fast_update = None
             if self._pending_fast_start_cancel:
-                self._pending_fast_start_cancel.cancel()
+                self._pending_fast_start_cancel()
                 self._pending_fast_start_cancel = None
 
         # Start the 1s Ultra Loop independently if enabled
@@ -384,7 +384,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 self._cancel_ultra_fast_update()
                 self._cancel_ultra_fast_update = None
             if self._pending_ultra_fast_start_cancel:
-                self._pending_ultra_fast_start_cancel.cancel()
+                self._pending_ultra_fast_start_cancel()
                 self._pending_ultra_fast_start_cancel = None
 
             self._schedule_update_loop(ULTRA_FAST_UPDATE_INTERVAL, "_cancel_ultra_fast_update", True)
@@ -614,9 +614,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         if self._cancel_ultra_fast_update:
             self._cancel_ultra_fast_update()
         if self._pending_fast_start_cancel:
-            self._pending_fast_start_cancel.cancel()
+            self._pending_fast_start_cancel()
         if self._pending_ultra_fast_start_cancel:
-            self._pending_ultra_fast_start_cancel.cancel()
+            self._pending_ultra_fast_start_cancel()
         
         # Clear references completely
         self._cancel_fast_update = None

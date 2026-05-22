@@ -329,6 +329,9 @@ class ChargeSettingHandler:
             # Update cache
             key = "charge_time_enable" if mode_type == "charge" else "discharge_time_enable"
             await self._update_cache({key: new_mask})
+            # Sync AppMode: enabling any slot requires AppMode=1 (Force Charge/Discharge)
+            chg, dchg = self._get_power_states()
+            await self._update_app_mode_from_states(charge_enabled=chg, discharge_enabled=dchg)
 
     async def _handle_power_state(self, state_type: str, value: bool) -> None:
         """Handles charging or discharging state changes generically."""
