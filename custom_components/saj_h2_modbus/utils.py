@@ -112,9 +112,10 @@ def create_logged_task(
     coro,
     *,
     logger: logging.Logger,
+    name: str = "saj_modbus_task",
 ) -> asyncio.Task:
     """Schedule a coroutine as a background HA task and log any unhandled exception."""
-    task = hass.async_create_task(coro)
+    task = hass.async_create_background_task(coro, name=name)
 
     def _log_exception(t: asyncio.Task) -> None:
         if not t.cancelled():
