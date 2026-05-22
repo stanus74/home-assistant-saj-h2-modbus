@@ -237,7 +237,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     async def process_pending_now(self) -> None:
         """Immediately process pending settings."""
         try:
-            await self.connection.get_client()
             await self._setting_handler.process_pending()
         except Exception as e:
             _LOGGER.error("Immediate pending processing failed: %s", e)
