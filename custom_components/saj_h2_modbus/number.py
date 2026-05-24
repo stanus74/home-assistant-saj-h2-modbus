@@ -1,7 +1,7 @@
 """SAJ H2 Modbus number entities."""
 from __future__ import annotations
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
@@ -9,6 +9,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .utils import generate_slot_definitions
+
+if TYPE_CHECKING:
+    from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -205,14 +208,14 @@ class SajNumberEntity(NumberEntity):
 
     def __init__(
         self,
-        hub: Any,
+        hub: SAJModbusHub,
         name: str,
         unique_id: str,
         min_val: float,
         max_val: float,
         step: float,
         default: float,
-        device_info: dict,
+        device_info: dict[str, Any],
         unit: str | None = None,
     ) -> None:
         self._hub = hub
@@ -233,14 +236,14 @@ class SajGenericNumberEntity(SajNumberEntity):
     """Generic class for SAJ number entities."""
     def __init__(
         self,
-        hub: Any,
+        hub: SAJModbusHub,
         name: str,
         unique_id: str,
         min_val: float,
         max_val: float,
         step: float,
         default: float,
-        device_info: dict,
+        device_info: dict[str, Any],
         unit: str | None = None,
         set_method_name: str | None = None,
         allowed_values: list[int] | None = None,

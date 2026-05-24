@@ -366,8 +366,8 @@ def _should_retry_modbus_error(e: Exception) -> bool:
 
 
 def _should_trip_circuit_breaker(e: Exception) -> bool:
-    """Trip CB only for connection-class failures (not protocol errors)."""
-    return isinstance(e, (ConnectionException, ConnectionError, OSError))
+    """Trip CB for connection-class and protocol errors."""
+    return isinstance(e, (ConnectionException, ConnectionError, OSError, ModbusIOException))
 
 
 async def _on_modbus_retry(
