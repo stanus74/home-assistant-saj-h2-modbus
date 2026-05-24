@@ -7,7 +7,7 @@ import importlib
 from homeassistant.const import EVENT_COMPONENT_LOADED
 from homeassistant.core import HomeAssistant
 from homeassistant.components import mqtt
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
 
 from .modbus_utils import (
     _connect_client_inplace,

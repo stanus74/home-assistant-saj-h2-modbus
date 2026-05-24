@@ -18,9 +18,9 @@ Basierend auf dem Plan `plans/opti-2305.md`.
 - [ ] **`_RECONNECT_LOCK` / `_RECONNECT_DONE` instanziieren:** Auch diese Reconnect-Guards pro `ModbusConnectionManager`-Instanz anlegen, damit zwei getrennte Inverter sich bei Reconnects nicht global blockieren.
 
 ## Phase 4 — Performance (Latenz & Systemauslastung)
-- [ ] **`async_add_executor_job` für Modbus-Aufrufe entfernen:** Pymodbus 3.x ist voll asynchron. Folglich in `modbus_utils.py` direkte `await operation(...)` Routine einrichten, anstatt Kontext-Wechsel in HA-Threads zu erzwingen.
-- [ ] **`_rmw_locks` TTL-Garbage Collection:** Speichermanagement in `hub.py` einbauen, durch das selten geschriebene Register-Locks nach z.B. 1 Stunde aus dem Cache aufgeräumt werden.
-- [ ] **Lock-Strategie straffen (`_fast_lock` / `_ultra_fast_lock`):** Da Register sequenziell auf dem gleichen Client gepollt werden, reicht in `hub.py` ein zusammengefasster `_read_lock` für alle Lese-Routinen völlig aus. Reduziert Instanzen.
+- [x] **`async_add_executor_job` für Modbus-Aufrufe entfernen:** Pymodbus 3.x ist voll asynchron. Folglich in `modbus_utils.py` direkte `await operation(...)` Routine einrichten, anstatt Kontext-Wechsel in HA-Threads zu erzwingen.
+- [x] **`_rmw_locks` TTL-Garbage Collection:** Speichermanagement in `hub.py` einbauen, durch das selten geschriebene Register-Locks nach z.B. 1 Stunde aus dem Cache aufgeräumt werden.
+- [x] **Lock-Strategie straffen (`_fast_lock` / `_ultra_fast_lock`):** Da Register sequenziell auf dem gleichen Client gepollt werden, reicht in `hub.py` ein zusammengefasster `_read_lock` für alle Lese-Routinen völlig aus. Reduziert Instanzen.
 
 ## Phase 5 — MQTT & Entity Polishing
 - [ ] **`notify_error` Race Condition:** Die Auswertung des `_connection_healthy` Flags in `services.py` nochmals innerhalb des Cache-Locks in `get_cached_client` verifizieren, um die Weitergabe stale/alter Client-Instanzen zu unterbinden.

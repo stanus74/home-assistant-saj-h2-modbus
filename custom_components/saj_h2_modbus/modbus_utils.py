@@ -11,9 +11,9 @@ from typing import Any, Awaitable, Callable
 import socket
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
-from pymodbus.client import ModbusTcpClient
+# Alias AsyncModbusTcpClient as ModbusTcpClient to retain compatibility with existing type hints
+from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
 
-# We use ModbusTcpClient explicitly, so we don't import the generic ModbusClient alias
 from .const import Lock
 
 _LOGGER = logging.getLogger(__name__)
@@ -292,10 +292,7 @@ async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int)
         return
     _LOGGER.debug("Connecting Modbus client to %s:%s", host, port)
     try:
-        if ModbusGlobalConfig.hass:
-            await ModbusGlobalConfig.hass.async_add_executor_job(client.connect)
-        else:
-            client.connect()
+        await client.connect()
         if not client.connected:
             raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
         _LOGGER.info("ModbusTcpClient successfully connected to %s:%s", host, port)
@@ -475,13 +472,7 @@ async def _perform_modbus_operation(
     """
     async with lock:
         client.unit_id = unit
-        if ModbusGlobalConfig.hass:
-            return await ModbusGlobalConfig.hass.async_add_executor_job(
-                functools.partial(operation, *args, **kwargs)
-            )
-        else:
-            # Fallback for testing or if hass is not configured
-            return operation(*args, **kwargs)
+        return await operation(*args, **kwargs)
 
 async def try_read_registers(
     client: ModbusTcpClient,

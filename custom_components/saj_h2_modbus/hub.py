@@ -147,9 +147,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         """Initialise all asyncio locks and synchronisation primitives."""
         # PERFORMANCE OPTIMIZATION: Separate locks for different polling intervals
         # to reduce contention between ultra-fast (1s), fast (10s) and slow (60s) loops.
-        self._ultra_fast_lock = asyncio.Lock()  # For 1s ultra fast polling
-        self._fast_lock = asyncio.Lock()        # For 10s fast polling
-        self._slow_lock = asyncio.Lock()        # For 60s slow polling
+        # Single lock for all reads because reader groups execute sequentially
+        self._read_lock = asyncio.Lock()
 
         # Merge locks for shared state/mask registers
         self._merge_locks: dict[int, asyncio.Lock] = {
@@ -158,10 +157,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         }
 
         # Read-modify-write locks for non-merge-locked registers.
-        # Important: do NOT use _write_lock as an outer lock for RMW, because
-        # _write_register()/try_write_registers() acquire _write_lock internally.
         # OrderedDict enables LRU eviction: oldest (front) entry is dropped first.
         self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
+        self._rmw_locks_last_access: dict[int, float] = {}
+        self._rmw_lock_ttl: float = 3600.0  # 1 hour TTL
 
         # DEDICATED WRITE LOCK: Write operations have priority over read operations.
         self._write_lock = asyncio.Lock()
@@ -280,7 +279,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             if _static_expired:
                 try:
                     self._inverter_static_data = await modbus_readers.read_modbus_inverter_data(
-                        client, self._slow_lock  # Use slow lock for static data
+                        client, self._read_lock
                     )
                     self._inverter_static_data_loaded_at = time.monotonic()
                 except Exception as e:
@@ -294,7 +293,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             for group in _READER_GROUPS:
                 for method in group:
                     try:
-                        res = await method(client, self._slow_lock)
+                        res = await method(client, self._read_lock)
                         if isinstance(res, dict):
                             new_cache.update(res)
                     except ReconnectionNeededError:
@@ -463,10 +462,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Skipping ultra-fast update after get_client – write in progress")
                 return
 
-            # PERFORMANCE OPTIMIZATION: Use dedicated lock based on polling mode.
-            # Ultra fast (1s) uses its own lock to avoid contention with fast (10s) and slow (60s).
-            lock = self._ultra_fast_lock if ultra else self._fast_lock
-            lock_name = "ultra_fast" if ultra else "fast"
+            # PERFORMANCE OPTIMIZATION: Use dedicated single lock for all reads.
+            lock = self._read_lock
+            lock_name = "fast_read"
 
             # Activate per-instance circuit breaker for this fast-poll read session.
             cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
@@ -637,9 +635,25 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         await self.connection.close()
         self._fast_listeners.clear()
 
+    async def _cleanup_rmw_locks(self) -> None:
+        """Clean up stale RMW locks (idle > TTL)."""
+        now = time.monotonic()
+        stale = [
+            addr for addr, last_access in self._rmw_locks_last_access.items()
+            if now - last_access > self._rmw_lock_ttl
+        ]
+        for addr in stale:
+            if addr in self._rmw_locks:
+                lck = self._rmw_locks[addr]
+                if not lck.locked():
+                    del self._rmw_locks[addr]
+                    del self._rmw_locks_last_access[addr]
+                    _LOGGER.debug("Cleaned up stale RMW lock for 0x%04x", addr)
+
     async def _async_cleanup_cache(self, now=None) -> None:
         """Periodically clean up stale connection cache entries."""
         await self.connection.cleanup_cache()
+        await self._cleanup_rmw_locks()
 
     @asynccontextmanager
     async def _lock_order_guard(self, name: str):
@@ -711,7 +725,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
             try:
                 return await try_read_registers(
-                    client, self._slow_lock, 1, address, count
+                    client, self._read_lock, 1, address, count
                 )
             finally:
                 _CIRCUIT_BREAKER_CTX.reset(cb_token)
@@ -751,6 +765,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     self._rmw_locks[address] = asyncio.Lock()
                 # Move to end so this entry is considered most-recently-used.
                 self._rmw_locks.move_to_end(address)
+                self._rmw_locks_last_access[address] = time.monotonic()
                 lock = self._rmw_locks[address]
             async with lock:
                 current_regs = await self._read_registers(address, 1)

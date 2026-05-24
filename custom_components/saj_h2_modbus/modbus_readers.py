@@ -1,7 +1,7 @@
 import logging
 import struct
 from typing import Dict, Any, List, TypeAlias
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
 from pymodbus.client.mixin import ModbusClientMixin
 
 # Use explicit asyncio.Lock for typing to reduce dependency on .const specifics
