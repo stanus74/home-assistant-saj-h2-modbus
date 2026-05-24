@@ -203,6 +203,11 @@ class ConnectionCache:
         async with self._cache_lock:
             now = time.monotonic()
 
+            # Check if invalidation was requested
+            if not self._connection_healthy:
+                self._do_invalidate()
+                return None
+
             if self._cached_client is not None and now < self._cache_expiry:
                 if self._is_connection_healthy(now):
                     return self._cached_client

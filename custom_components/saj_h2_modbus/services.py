@@ -211,6 +211,10 @@ class MqttPublisher:
         self._paho_available: bool | None = None
         self._last_strategy_log = 0.0
         
+        # Publish rate-limiting tracking
+        self._publish_timestamps: dict[str, float] = {}
+        self._min_publish_interval: float = 2.0  # Min 2s between repeats
+        
         # Log throttling
         self._last_no_connection_log = 0.0
 
@@ -469,12 +473,22 @@ class MqttPublisher:
             return
         
         messages = []
+        now = time.monotonic()
         for key, value in data.items():
             safe_key = key.split("/")[-1] if "/" in key else key
+            
+            # Skip if value interval has not elapsed
+            prev_ts = self._publish_timestamps.get(safe_key, 0.0)
+            if not force and now - prev_ts < self._min_publish_interval:
+                continue
+                
             messages.append((safe_key, str(value)))
 
         if not messages:
             return
+            
+        for key, _ in messages:
+            self._publish_timestamps[key] = time.monotonic()
 
         # STRATEGY 1: HA MQTT
         if self.strategy == self.STRATEGY_HA:
