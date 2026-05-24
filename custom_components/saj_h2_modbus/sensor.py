@@ -18,37 +18,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = []
     for description in SENSOR_TYPES.values():
-        entities.append(SajSensor(hub, device_info, description))
+        if description.key in FAST_POLL_SENSORS:
+            # Create BOTH entities for fast-poll sensors:
+            # 1. Normal entity (60s, with DB recording)
+            # 2. Fast entity (10s, no DB recording) with "fast_" prefix
+            entities.append(SajSensor(hub, device_info, description, is_fast_variant=False))
+            entities.append(FastPollSensor(hub, device_info, description, is_fast_variant=True))
+        else:
+            # Regular sensors only have one entity (60s, with DB)
+            entities.append(SajSensor(hub, device_info, description, is_fast_variant=False))
 
     async_add_entities(entities)
-    fast_count = sum(1 for e in entities if getattr(e, "_is_fast_sensor", False))
+    fast_count = sum(1 for e in entities if isinstance(e, FastPollSensor))
     normal_count = len(entities) - fast_count
-    _LOGGER.info("Added SAJ sensors (%d normal, %d fast-poll)", normal_count, fast_count)
+    _LOGGER.info("Added SAJ sensors (%d normal, %d fast-variants)", normal_count, fast_count)
 
 class SajSensor(CoordinatorEntity, SensorEntity):
     """Base class for SAJ Modbus sensors."""
 
-    def __init__(self, hub: SAJModbusHub, device_info: dict, description: SajModbusSensorEntityDescription):
+    def __init__(self, hub: SAJModbusHub, device_info: dict, description: SajModbusSensorEntityDescription, is_fast_variant: bool = False):
         """Initialize the sensor."""
         super().__init__(coordinator=hub)
         
         self.entity_description = description
         self._attr_device_info = device_info
         self._hub = hub
+        self._is_fast_variant = is_fast_variant
         
         # Stable unique_id: independent of coordinator name
         device_name = device_info.get("name", "SAJ")
         
-        self._attr_unique_id = f"{device_name}_{description.key}"
-        self._attr_name = description.name
+        if is_fast_variant:
+            # Fast variant has "fast_" prefix
+            self._attr_unique_id = f"{device_name}_fast_{description.key}"
+            self._attr_name = f"Fast {description.name}"
+        else:
+            self._attr_unique_id = f"{device_name}_{description.key}"
+            self._attr_name = description.name
         
         self._attr_has_entity_name = True
         self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         self._attr_force_update = description.force_update
         
         # Determine if this is a fast-poll sensor using FAST_POLL_SENSORS from hub
-        self._is_fast_sensor = (description.key in FAST_POLL_SENSORS)
-        
+        # Only fast variants should register for fast updates
+        self._is_fast_sensor = (description.key in FAST_POLL_SENSORS) and is_fast_variant
         self._remove_fast_listener = None
         self._last_value = None  # Cache last value for change detection
         # Simple boolean flag to prevent double-cleanup during entity removal
@@ -178,3 +192,19 @@ class SajSensor(CoordinatorEntity, SensorEntity):
                 self._remove_fast_listener = None
 
 
+class FastPollSensor(SajSensor):
+    """Sensor for fast-polling (10s) - NO state_class to prevent DB logging.
+    
+    These sensors update every 10 seconds but are NOT recorded in the database
+    to prevent excessive database growth. They still show live updates in the UI.
+    
+    Note: Only fast variants (is_fast_variant=True) should use this class.
+    """
+    
+    _attr_state_class = None  # No DB recording for fast-poll sensors
+    
+    def __init__(self, hub: SAJModbusHub, device_info: dict, description: SajModbusSensorEntityDescription, is_fast_variant: bool = True):
+        """Initialize the fast-poll sensor."""
+        super().__init__(hub, device_info, description, is_fast_variant=True)
+        # Fast variants are always enabled by default for live monitoring
+        self._attr_entity_registry_enabled_default = True

@@ -25,4 +25,4 @@ Basierend auf dem Plan `plans/opti-2305.md`.
 ## Phase 5 — MQTT & Entity Polishing
 - [x] **`notify_error` Race Condition:** Die Auswertung des `_connection_healthy` Flags in `services.py` nochmals innerhalb des Cache-Locks in `get_cached_client` verifizieren, um die Weitergabe stale/alter Client-Instanzen zu unterbinden.
 - [x] **MQTT Publishing Rate-Limiting:** Einen lokalen Cooldown-Stempel in `MqttPublisher.publish_data` verwalten, der im Ultra-Fast-Modus abfängt, dass identische Werte den HA Ereignis-Bus dauerfeuern.
-- [x] **Fast-Sensor Redundanzen (Dualität):** In `sensor.py` abstellen, dass für jeden 'Fast'-Sensor zwei verschiedene HA-Entities initialisiert werden; besser via `force_update=True` oder dynamischer Polling-Zeit managen.
+- [x] **Fast-Sensor Redundanzen (Dualität):** *Wurde auf User-Wunsch verworfen, um die reinen 10s-"Fast"-Sensoren explizit separat zu behalten.*
