@@ -730,19 +730,23 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     # Hard LRU cap: always evict the oldest entry before adding a new one.
                     # Should never exceed ~20 entries in normal operation.
                     if len(self._rmw_locks) >= 64:
-                        evict_addr, evict_lock = next(iter(self._rmw_locks.items()))
-                        del self._rmw_locks[evict_addr]
-                        if evict_lock.locked():
-                            _LOGGER.warning(
-                                "merge_write_register: force-evicted locked RMW lock for "
-                                "0x%04x (LRU, capacity=64) – possible bug.",
-                                evict_addr,
-                            )
-                        else:
+                        evict_addr = None
+                        for addr, lck in self._rmw_locks.items():
+                            if not lck.locked():
+                                evict_addr = addr
+                                break
+                        
+                        if evict_addr is not None:
+                            del self._rmw_locks[evict_addr]
                             _LOGGER.debug(
                                 "merge_write_register: evicted RMW lock for 0x%04x "
                                 "(LRU, capacity=64)",
                                 evict_addr,
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "merge_write_register: RMW cache full (64), but all locks are in use. "
+                                "Skipping eviction this time."
                             )
                     self._rmw_locks[address] = asyncio.Lock()
                 # Move to end so this entry is considered most-recently-used.

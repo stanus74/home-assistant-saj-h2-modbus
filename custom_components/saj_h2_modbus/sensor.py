@@ -1,5 +1,4 @@
 """SAJ Modbus Hub."""
-import asyncio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -65,10 +64,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         # Only fast variants should register for fast updates
         self._is_fast_sensor = (description.key in FAST_POLL_SENSORS) and is_fast_variant
         self._remove_fast_listener = None
-        self._on_remove_cleanup_registered = asyncio.Event()
         self._last_value = None  # Cache last value for change detection
-        # Event-based flag to prevent double-cleanup during entity removal
-        self._is_removed = asyncio.Event()
+        # Simple boolean flag to prevent double-cleanup during entity removal
+        self._is_removed_flag = False
 
         if ADVANCED_LOGGING and self._is_fast_sensor:
             _LOGGER.debug("Sensor %s (key: %s) marked as fast-poll sensor", self._attr_name, description.key)
@@ -92,9 +90,11 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         """When entity is added to hass."""
         await super().async_added_to_hass()
 
-        if not self._on_remove_cleanup_registered.is_set():
-            self.async_on_remove(self._cleanup_fast_listener)
-            self._on_remove_cleanup_registered.set()
+        # Remove any lingering listeners from previous registration before re-registering
+        self._cleanup_fast_listener()
+        
+        # Reset removal flag in case of entity reload
+        self._is_removed_flag = False
 
         # Initial registration check
         self._update_fast_listener_registration()
@@ -152,11 +152,11 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         if self.registry_entry is not None:
             is_enabled = not self.registry_entry.disabled
 
-        if self._is_removed.is_set() or not is_enabled:
+        if self._is_removed_flag or not is_enabled:
             _LOGGER.debug(
                 "Skipping fast update for %s (removed=%s, enabled=%s)",
                 self._attr_name,
-                self._is_removed.is_set(),
+                self._is_removed_flag,
                 is_enabled,
             )
             return
@@ -176,10 +176,10 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _cleanup_fast_listener(self) -> None:
         """Ensure fast listener is removed exactly once when entity is torn down."""
-        if self._is_removed.is_set():
+        if self._is_removed_flag:
             return
 
-        self._is_removed.set()
+        self._is_removed_flag = True
 
         if self._remove_fast_listener is not None:
             try:

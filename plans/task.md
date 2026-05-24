@@ -9,9 +9,9 @@ Basierend auf dem Plan `plans/opti-2305.md`.
 - [x] **Circuit Breaker für Write-Fehler:** In `modbus_utils.py` die Bedingung `_should_trip_circuit_breaker()` um `ModbusIOException` ergänzen, damit auch Modbus-Protokollfehler Rate-Limits triggern.
 
 ## Phase 2 — Stabilität (Race Conditions beheben)
-- [ ] **`_is_removed` Race Condition:** In `sensor.py` `_handle_fast_update` so umschreiben, dass der Status atomar gesetzt und bei Entfernungen konsequent asynchrone "Double-Writes" an Home Assistant unterbunden werden.
-- [ ] **`_rmw_locks` LRU-Eviction ohne Lock-Schutz:** In `hub.py` die Eviction von RMW-Locks (Read-Modify-Write) thread-safe machen, damit beim Rotieren aus dem Cache keine Locks fälschlicherweise in aktiven Prozessen freigegeben werden.
-- [ ] **`_on_remove_cleanup_registered` Race:** Flag in `sensor.py` entfernen; HA registriert beim `async_added_to_hass` / `async_will_remove_from_hass` korrekte State-Lifecycles von alleine ohne redundante Überprüfung.
+- [x] **`_is_removed` Race Condition:** In `sensor.py` `_handle_fast_update` so umschreiben, dass der Status atomar gesetzt und bei Entfernungen konsequent asynchrone "Double-Writes" an Home Assistant unterbunden werden.
+- [x] **`_rmw_locks` LRU-Eviction ohne Lock-Schutz:** In `hub.py` die Eviction von RMW-Locks (Read-Modify-Write) thread-safe machen, damit beim Rotieren aus dem Cache keine Locks fälschlicherweise in aktiven Prozessen freigegeben werden.
+- [x] **`_on_remove_cleanup_registered` Race:** Flag in `sensor.py` entfernen; HA registriert beim `async_added_to_hass` / `async_will_remove_from_hass` korrekte State-Lifecycles von alleine ohne redundante Überprüfung.
 
 ## Phase 3 — Multi-Inverter-Fähigkeit (Architektonischer Kernumbau)
 - [ ] **`ModbusGlobalConfig` entfernen:** Modul-Zustand aus `modbus_utils.py` entfernen. Stattdessen eine `ModbusConnectionConfig` Klasse (pro Verbindung) instanziieren und an die entsprechenden Lese/Schreib-Routinen weiterreichen.
