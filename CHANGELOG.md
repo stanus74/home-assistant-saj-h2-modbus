@@ -1,3 +1,21 @@
+## Release v2.10.0 – Performance, Architecture & Entity Optimization (opti-2305)
+
+### Performance & Architecture
+- **Native Asyncio for Modbus:** Eliminated `async_add_executor_job` wrappers for Modbus calls. Pymodbus calls are now executed natively, significantly reducing thread context-switching overhead and latency.
+- **Lock Consolidation:** Consolidated redundant read locks into a single `_read_lock` since Modbus polling inherently runs sequentially on the same TCP connection.
+- **RMW Lock Garbage Collection:** Added a 1-hour TTL garbage collection for Read-Modify-Write (RMW) locks in `hub.py`. Prevents memory leaks for rarely accessed UI configuration registers.
+- **Entity Deduplication (Fast-Poll):** Fixed the creation of duplicate entities for high-frequency sensors. Now registers exactly one sensor entity per configure metric, automatically plugging into the fast-poll routine if enabled.
+- **MQTT Rate-Limiting:** Introduced local timestamp tracking in `MqttPublisher` to prevent identical rapid-fire state updates from flooding the Home Assistant event bus in the 1-second ultra-fast mode.
+
+### Stability & Fixes
+- **ModbusClient Cache Safety:** Fixed a race condition inside `get_cached_client` by re-evaluating `_connection_healthy` inside the cache lock, eliminating the leakage of stale Modbus connection instances on network drops.
+- **Circuit Breaker ModbusIOException:** The `ModbusCircuitBreaker` now properly captures `ModbusIOException`, triggering rate-limits upon Modbus protocol errors.
+- **Entity Lifecycle Races:** Fixed double-cleanup bugs in `sensor.py` during plugin teardown utilizing an atomic `_is_removed_flag` boolean to squash double-writes.
+- **Thread-safe LRU Eviction:** Fixed read-modify-write (RMW) lock rotation logic in `hub.py` to ensure active locks are never forcibly safely evicted from the LRU cache.
+- **Code Quality:** Added full type annotations to `number.py`, stripped obsolete imports (F401), and moved module docstrings to valid module-level targets.
+
+---
+
 ## Release v2.9.0 – Reliability & Correctness Fixes
 
 
