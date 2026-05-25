@@ -1,4 +1,5 @@
 """Platform for writable SAJ Modbus time entities."""
+
 import datetime
 import re
 import logging
@@ -14,6 +15,7 @@ from .utils import generate_slot_definitions
 _LOGGER = logging.getLogger(__name__)
 
 # Removed old TEXT_DEFINITIONS - now handled dynamically
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -34,7 +36,7 @@ async def async_setup_entry(
             name=f"SAJ {desc['name']} (Time)",
             unique_id=f"{hub.name}{desc['unique_id_suffix']}",
             set_method=getattr(hub, desc["setter"]),
-            device_info=device_info
+            device_info=device_info,
         )
         entities.append(entity)
 
@@ -46,11 +48,12 @@ async def async_setup_entry(
             name=f"SAJ {desc['name']} (Time)",
             unique_id=f"{hub.name}{desc['unique_id_suffix']}",
             set_method=getattr(hub, desc["setter"]),
-            device_info=device_info
+            device_info=device_info,
         )
         entities.append(entity)
 
     async_add_entities(entities)
+
 
 class SajTimeTextEntity(TextEntity):
     """Base class for SAJ writable time entities."""
@@ -96,9 +99,11 @@ class SajTimeTextEntity(TextEntity):
         # If value is a datetime.time object, convert it
         if isinstance(value, datetime.time):
             value = value.strftime("%H:%M")
-        
+
         if not isinstance(value, str) or not re.match(self._attr_pattern, value):
-            _LOGGER.error("Invalid time format for %s: %s. Expected HH:MM", self._attr_name, value)
+            _LOGGER.error(
+                "Invalid time format for %s: %s. Expected HH:MM", self._attr_name, value
+            )
             return
 
         await self.set_method(value)

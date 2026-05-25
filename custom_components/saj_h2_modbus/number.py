@@ -1,4 +1,5 @@
 """SAJ H2 Modbus number entities."""
+
 from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
@@ -201,8 +202,10 @@ NUMBER_DEFINITIONS = [
     },
 ]
 
+
 class SajNumberEntity(NumberEntity):
     """Base class for SAJ writable number entities."""
+
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
 
@@ -232,8 +235,10 @@ class SajNumberEntity(NumberEntity):
     def native_value(self) -> float | None:
         return self._attr_native_value
 
+
 class SajGenericNumberEntity(SajNumberEntity):
     """Generic class for SAJ number entities."""
+
     def __init__(
         self,
         hub: SAJModbusHub,
@@ -248,7 +253,9 @@ class SajGenericNumberEntity(SajNumberEntity):
         set_method_name: str | None = None,
         allowed_values: list[int] | None = None,
     ) -> None:
-        super().__init__(hub, name, unique_id, min_val, max_val, step, default, device_info, unit)
+        super().__init__(
+            hub, name, unique_id, min_val, max_val, step, default, device_info, unit
+        )
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
         self._allowed_values = allowed_values
 
@@ -256,7 +263,12 @@ class SajGenericNumberEntity(SajNumberEntity):
         val = int(value)
         if self._allowed_values is not None:
             if val not in self._allowed_values:
-                _LOGGER.error("Invalid value for %s: %s (allowed: %s)", self._attr_name, val, self._allowed_values)
+                _LOGGER.error(
+                    "Invalid value for %s: %s (allowed: %s)",
+                    self._attr_name,
+                    val,
+                    self._allowed_values,
+                )
                 return
         elif not self._attr_native_min_value <= val <= self._attr_native_max_value:
             _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
@@ -266,7 +278,10 @@ class SajGenericNumberEntity(SajNumberEntity):
             await self.set_method(val)
         self.async_write_ha_state()
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
     """Set up SAJ number entities."""
     hub = hass.data[DOMAIN][entry.entry_id]["hub"]
     device_info = hass.data[DOMAIN][entry.entry_id]["device_info"]

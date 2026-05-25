@@ -59,7 +59,7 @@ async def async_setup_entry(
         entities.append(entity)
 
     async_add_entities(entities)
-    
+
     # Register entities in hass.data for direct access by charge_control
     if "entities" not in hass.data[DOMAIN][entry.entry_id]:
         hass.data[DOMAIN][entry.entry_id]["entities"] = []
@@ -80,7 +80,9 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             if self._switch_type in PASSIVE_SWITCH_KEYS
             else f"_pending_{self._switch_type}_state"
         )
-        self._attr_unique_id = f"{hub.name}_{self._switch_type}{description['unique_id_suffix']}"
+        self._attr_unique_id = (
+            f"{hub.name}_{self._switch_type}{description['unique_id_suffix']}"
+        )
         self._attr_name = f"{hub.name} {description['name']}"
         self._attr_entity_registry_enabled_default = True
         self._attr_assumed_state = True
@@ -126,7 +128,9 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         pending = getattr(self._hub, self._pending_attr, None)
         attrs = {"pending_write": pending is not None}
         if self._switch_type in PASSIVE_SWITCH_KEYS:
-            attrs["passive_mode_value"] = self._hub.inverter_data.get("passive_charge_enable")
+            attrs["passive_mode_value"] = self._hub.inverter_data.get(
+                "passive_charge_enable"
+            )
         return attrs
 
     async def _set_state(self, desired_state: bool) -> None:
@@ -136,14 +140,22 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         Does NOT apply optimistic updates to avoid conflicts with card slot configurations.
         """
         if self.is_on == desired_state:
-            _LOGGER.debug("%s already %s", self._switch_type.capitalize(), "on" if desired_state else "off")
+            _LOGGER.debug(
+                "%s already %s",
+                self._switch_type.capitalize(),
+                "on" if desired_state else "off",
+            )
             return
 
         if not self._allow_switch():
             return
 
         try:
-            _LOGGER.debug("%s turned %s", self._switch_type.capitalize(), "ON" if desired_state else "OFF")
+            _LOGGER.debug(
+                "%s turned %s",
+                self._switch_type.capitalize(),
+                "ON" if desired_state else "OFF",
+            )
             if self._switch_type in PASSIVE_SWITCH_KEYS:
                 if not await self._handle_passive_mode_state(desired_state):
                     return
@@ -162,7 +174,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
             self.async_write_ha_state()
             _LOGGER.debug(
                 "Pending %s setting will be processed in next update cycle",
-                self._switch_type
+                self._switch_type,
             )
         except Exception as e:
             _LOGGER.error("Failed to set %s state: %s", self._switch_type, e)
@@ -195,6 +207,10 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         elapsed = current_time - self._last_switch_time
         if elapsed < self._switch_timeout:
             remaining = round(self._switch_timeout - elapsed, 1)
-            _LOGGER.warning("Time lock active! Wait %ss before switching %s again.", remaining, self._switch_type)
+            _LOGGER.warning(
+                "Time lock active! Wait %ss before switching %s again.",
+                remaining,
+                self._switch_type,
+            )
             return False
         return True

@@ -1,4 +1,5 @@
 """Low-level Modbus TCP utilities, retry logic, and connection caching."""
+
 from __future__ import annotations
 import asyncio
 import functools
@@ -11,6 +12,7 @@ from typing import Any, Awaitable, Callable
 import socket
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+
 # Alias AsyncModbusTcpClient as ModbusTcpClient to retain compatibility with existing type hints
 from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
 
@@ -32,8 +34,10 @@ ENABLE_DETAILED_MODBUS_WRITE_LOGGING = (
     os.getenv("SAJ_DEBUG_MODBUS_WRITE", "0") == "1" or DEBUG_WRITE_DEFAULT
 )
 
+
 class ReconnectionNeededError(Exception):
     """Indicates that a reconnect is needed due to communication failure."""
+
     pass
 
 
@@ -77,13 +81,16 @@ class CircuitBreaker:
         """
         now = time.monotonic()
         if should_trip is None:
+
             def should_trip(_: Exception) -> bool:
                 return True
 
         if self.state == "OPEN":
             if now - self.last_failure_time > self.timeout:
                 self.state = "HALF_OPEN"
-                _LOGGER.info("%s Circuit Breaker transitioning to HALF_OPEN", self._name)
+                _LOGGER.info(
+                    "%s Circuit Breaker transitioning to HALF_OPEN", self._name
+                )
             else:
                 raise ConnectionError(f"{self._name} Circuit Breaker is OPEN")
 
@@ -132,6 +139,7 @@ def get_modbus_circuit_breaker() -> ModbusCircuitBreaker:
     """Return the active per-instance circuit breaker, or the module-level default."""
     return _CIRCUIT_BREAKER_CTX.get() or _DEFAULT_CIRCUIT_BREAKER
 
+
 # Global lock that serializes all reconnect attempts across polling loops.
 # Fast-Loop and Slow-Loop share the same ModbusTcpClient; without this lock
 # both loops would try to reconnect the same broken socket simultaneously,
@@ -145,17 +153,25 @@ _RECONNECT_LOCK: asyncio.Lock = asyncio.Lock()
 _RECONNECT_DONE: asyncio.Event = asyncio.Event()
 _RECONNECT_DONE.set()  # Initially set: no reconnect in progress
 
+
 # Global Modbus config storage
 class ModbusGlobalConfig:
     host: str | None = None
     port: int | None = None
     hass: Any | None = None
 
+
 def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
     ModbusGlobalConfig.host = host
     ModbusGlobalConfig.port = port
     ModbusGlobalConfig.hass = hass
-    _LOGGER.debug("Global Modbus config set: %s:%s (hass configured: %s)", host, port, hass is not None)
+    _LOGGER.debug(
+        "Global Modbus config set: %s:%s (hass configured: %s)",
+        host,
+        port,
+        hass is not None,
+    )
+
 
 # ============================================================================
 # CONNECTION MANAGEMENT
@@ -165,18 +181,19 @@ def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
 # CONNECTION POOLING OPTIMIZATION
 # ============================================================================
 
+
 class ConnectionCache:
     """
     Caches Modbus client connections to reduce connection overhead.
-    
+
     PERFORMANCE OPTIMIZATION: Reduces redundant connection checks and
     reconnection attempts by caching the client for a configurable TTL.
     """
-    
+
     def __init__(self, cache_ttl: float = 30.0):
         """
         Initialize connection cache.
-        
+
         Args:
             cache_ttl: Time to live for cached connections in seconds
         """
@@ -186,7 +203,9 @@ class ConnectionCache:
         self._last_health_check: float = 0.0
         self._health_check_interval: float = 5.0  # Check health every 5s
         self._connection_healthy: bool = True
-        self._cache_lock = asyncio.Lock()  # Protects concurrent read-modify-write on cache state
+        self._cache_lock = (
+            asyncio.Lock()
+        )  # Protects concurrent read-modify-write on cache state
 
     def _do_invalidate(self) -> None:
         """Internal invalidate without lock. Must be called while holding _cache_lock."""
@@ -196,7 +215,7 @@ class ConnectionCache:
     async def get_cached_client(self) -> ModbusTcpClient | None:
         """
         Get cached client if still valid.
-        
+
         Returns:
             Cached client if valid, None otherwise
         """
@@ -221,7 +240,7 @@ class ConnectionCache:
     async def set_cached_client(self, client: ModbusTcpClient) -> None:
         """
         Set cached client with TTL.
-        
+
         Args:
             client: The client to cache
         """
@@ -257,35 +276,37 @@ class ConnectionCache:
                 self._do_invalidate()
                 return True
             return False
-    
+
     def _is_connection_healthy(self, now: float) -> bool:
         """
         Check if connection is healthy without full reconnect.
-        
+
         PERFORMANCE OPTIMIZATION: Only checks connection health periodically
         to reduce overhead.
-        
+
         Args:
             now: Current monotonic time
-            
+
         Returns:
             True if connection is healthy, False otherwise
         """
         # Only check health periodically
         if now - self._last_health_check < self._health_check_interval:
             return self._connection_healthy
-        
+
         self._last_health_check = now
-        
+
         if self._cached_client and self._cached_client.connected:
             self._connection_healthy = True
             return True
-        
+
         self._connection_healthy = False
         return False
 
 
-async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int) -> None:
+async def _connect_client_inplace(
+    client: ModbusTcpClient, host: str, port: int
+) -> None:
     """
     Connect an existing ModbusTcpClient in-place (close if needed, then connect).
 
@@ -303,7 +324,10 @@ async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int)
         _LOGGER.info("ModbusTcpClient successfully connected to %s:%s", host, port)
     except Exception as e:
         _LOGGER.error("Error connecting client to %s:%s: %s", host, port, e)
-        raise ConnectionError("Failed to connect to %s:%s due to %s" % (host, port, e)) from e
+        raise ConnectionError(
+            "Failed to connect to %s:%s due to %s" % (host, port, e)
+        ) from e
+
 
 # ============================================================================
 # RETRY LOGIC
@@ -314,10 +338,12 @@ async def _connect_client_inplace(client: ModbusTcpClient, host: str, port: int)
 # maintainability. The _create_retry_handlers() function now uses
 # functools.partial to create on_retry callback.
 
+
 async def _exponential_backoff(attempt: int, base: float, cap: float) -> None:
     delay = min(base * 2 ** (attempt - 1), cap)
     _LOGGER.debug("Backoff: waiting %.2fs before retry #%d", delay, attempt)
     await asyncio.sleep(delay)
+
 
 async def _retry_with_backoff(
     func: Callable[[], Awaitable[Any]],
@@ -326,7 +352,7 @@ async def _retry_with_backoff(
     base_delay: float,
     cap: float,
     on_retry: Callable[[int, Exception], Awaitable[None]] | None = None,
-    task_name: str = "Task"
+    task_name: str = "Task",
 ) -> Any:
     last_exception: Exception
     for attempt in range(1, retries + 1):
@@ -337,13 +363,22 @@ async def _retry_with_backoff(
             if not should_retry(e):
                 _LOGGER.error("Non-retriable exception occurred", exc_info=True)
                 raise
-            _LOGGER.warning("[%s] Attempt %d failed: %s", task_name, attempt, e, exc_info=(attempt == retries))
+            _LOGGER.warning(
+                "[%s] Attempt %d failed: %s",
+                task_name,
+                attempt,
+                e,
+                exc_info=(attempt == retries),
+            )
             if on_retry:
                 await on_retry(attempt, e)
             if attempt < retries:
                 await _exponential_backoff(attempt, base_delay, cap)
-    _LOGGER.warning("[%s] All %d attempts failed: %s", task_name, retries, last_exception)
+    _LOGGER.warning(
+        "[%s] All %d attempts failed: %s", task_name, retries, last_exception
+    )
     raise last_exception
+
 
 # Default retry settings
 DEFAULT_READ_RETRIES = 3
@@ -354,10 +389,11 @@ DEFAULT_WRITE_RETRIES = 3
 DEFAULT_WRITE_BASE_DELAY = 1.0
 DEFAULT_WRITE_CAP_DELAY = 5.0
 
+
 def _should_retry_modbus_error(e: Exception) -> bool:
     """
     Determines if a Modbus error should trigger a retry.
-    
+
     Includes ConnectionError to catch standard OS connection errors (like ConnectionResetError).
     """
     # Treat low-level socket failures (e.g. Bad file descriptor) as retriable by default
@@ -369,7 +405,9 @@ def _should_retry_modbus_error(e: Exception) -> bool:
 
 def _should_trip_circuit_breaker(e: Exception) -> bool:
     """Trip CB for connection-class and protocol errors."""
-    return isinstance(e, (ConnectionException, ConnectionError, OSError, ModbusIOException))
+    return isinstance(
+        e, (ConnectionException, ConnectionError, OSError, ModbusIOException)
+    )
 
 
 async def _on_modbus_retry(
@@ -380,7 +418,7 @@ async def _on_modbus_retry(
     operation_name: str,
     _lock: Lock,  # kept for functools.partial compatibility; reconnect uses _RECONNECT_LOCK
     attempt: int,
-    e: Exception
+    e: Exception,
 ) -> None:
     """
     Handles retry logic for Modbus operations, including reconnection on connection errors.
@@ -403,11 +441,16 @@ async def _on_modbus_retry(
         # Wait until that reconnect finishes (success or failure) before we retry our read,
         # so we don't immediately hit a still-broken socket.
         if _RECONNECT_LOCK.locked():
-            logger.debug("Reconnect for %s waiting for in-progress reconnect to finish", operation_name)
+            logger.debug(
+                "Reconnect for %s waiting for in-progress reconnect to finish",
+                operation_name,
+            )
             try:
                 await asyncio.wait_for(_RECONNECT_DONE.wait(), timeout=10.0)
             except asyncio.TimeoutError:
-                logger.warning("Reconnect wait timed out for %s, continuing anyway", operation_name)
+                logger.warning(
+                    "Reconnect wait timed out for %s, continuing anyway", operation_name
+                )
             return
 
         # Signal that a reconnect is starting so concurrent tasks wait.
@@ -416,7 +459,10 @@ async def _on_modbus_retry(
             async with _RECONNECT_LOCK:
                 # Double-checked: another coroutine may have already reconnected while we waited.
                 if client.connected:
-                    logger.debug("Reconnect for %s skipped – client already connected after lock", operation_name)
+                    logger.debug(
+                        "Reconnect for %s skipped – client already connected after lock",
+                        operation_name,
+                    )
                     return
 
                 # Force close to ensure connected state is reset
@@ -426,7 +472,9 @@ async def _on_modbus_retry(
                             fileno = client.socket.fileno()
                         except Exception:
                             fileno = "unknown"
-                        logger.debug("Closing Modbus socket (fd=%s) due to %s", fileno, e)
+                        logger.debug(
+                            "Closing Modbus socket (fd=%s) due to %s", fileno, e
+                        )
                     client.close()
                 except Exception:
                     pass  # Ignore errors during close
@@ -448,20 +496,31 @@ async def _on_modbus_retry(
             _RECONNECT_DONE.set()
 
 
-def _create_retry_handlers(client: ModbusTcpClient, host: str, port: int, logger: logging.Logger, operation_name: str, lock: Lock):
+def _create_retry_handlers(
+    client: ModbusTcpClient,
+    host: str,
+    port: int,
+    logger: logging.Logger,
+    operation_name: str,
+    lock: Lock,
+):
     """
     Create standard retry handlers for Modbus operations.
-    
+
     Returns:
         Tuple of (should_retry, on_retry) functions
     """
     should_retry = _should_retry_modbus_error
-    on_retry = functools.partial(_on_modbus_retry, client, host, port, logger, operation_name, lock)
+    on_retry = functools.partial(
+        _on_modbus_retry, client, host, port, logger, operation_name, lock
+    )
     return should_retry, on_retry
+
 
 # ============================================================================
 # MODBUS OPERATIONS
 # ============================================================================
+
 
 async def _perform_modbus_operation(
     client: ModbusTcpClient,
@@ -469,15 +528,16 @@ async def _perform_modbus_operation(
     unit: int,
     operation: Callable[..., Any],
     *args: Any,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Any:
     """
     Performs a Modbus operation, setting the unit_id on the client.
-    Executes blocking Modbus calls in the executor to avoid blocking the event loop.
+    Executes native async Modbus calls inside the provided lock.
     """
     async with lock:
         client.unit_id = unit
         return await operation(*args, **kwargs)
+
 
 async def try_read_registers(
     client: ModbusTcpClient,
@@ -492,15 +552,24 @@ async def try_read_registers(
     host = ModbusGlobalConfig.host
     port = ModbusGlobalConfig.port
     if host is None or port is None:
-        raise ReconnectionNeededError("Modbus client not configured with host and port.")
+        raise ReconnectionNeededError(
+            "Modbus client not configured with host and port."
+        )
 
-    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "read", lock)
-    
+    should_retry, on_retry = _create_retry_handlers(
+        client, host, port, _LOGGER, "read", lock
+    )
+
     async def read_once():
         if ENABLE_DETAILED_MODBUS_READ_LOGGING:
             _LOGGER.debug("[read] unit=%s addr=%s count=%s", unit, hex(address), count)
         response = await _perform_modbus_operation(
-            client, lock, unit, client.read_holding_registers, address=address, count=count
+            client,
+            lock,
+            unit,
+            client.read_holding_registers,
+            address=address,
+            count=count,
         )
 
         # Detect specific exception error early
@@ -513,9 +582,15 @@ async def try_read_registers(
         if not hasattr(response, "registers"):
             raise ModbusIOException("No registers in response")
         if ENABLE_DETAILED_MODBUS_READ_LOGGING:
-            _LOGGER.debug("[read-ok] unit=%s addr=%s count=%s regs=%s", unit, hex(address), count, response.registers)
+            _LOGGER.debug(
+                "[read-ok] unit=%s addr=%s count=%s regs=%s",
+                unit,
+                hex(address),
+                count,
+                response.registers,
+            )
         return response.registers  # type: ignore
-    
+
     async def on_read_retry(attempt: int, e: Exception) -> None:
         _LOGGER.warning("[Modbus-Read] Retry %d after error: %s", attempt, e)
         await on_retry(attempt, e)
@@ -559,15 +634,21 @@ async def try_write_registers(
     host = ModbusGlobalConfig.host
     port = ModbusGlobalConfig.port
     if host is None or port is None:
-        raise ReconnectionNeededError("Modbus client not configured with host and port.")
+        raise ReconnectionNeededError(
+            "Modbus client not configured with host and port."
+        )
 
-    should_retry, on_retry = _create_retry_handlers(client, host, port, _LOGGER, "write", lock)
+    should_retry, on_retry = _create_retry_handlers(
+        client, host, port, _LOGGER, "write", lock
+    )
 
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
         if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
-            _LOGGER.debug("[write] unit=%s addr=%s values=%s", unit, hex(address), values)
+            _LOGGER.debug(
+                "[write] unit=%s addr=%s values=%s", unit, hex(address), values
+            )
 
         if is_single:
             result = await _perform_modbus_operation(
@@ -575,13 +656,20 @@ async def try_write_registers(
             )
         else:
             result = await _perform_modbus_operation(
-                client, lock, unit, client.write_registers, address=address, values=values
+                client,
+                lock,
+                unit,
+                client.write_registers,
+                address=address,
+                values=values,
             )
         if result.isError():
             raise ModbusIOException("Write response error")
 
         if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
-            _LOGGER.debug("[write-ok] unit=%s addr=%s values=%s", unit, hex(address), values)
+            _LOGGER.debug(
+                "[write-ok] unit=%s addr=%s values=%s", unit, hex(address), values
+            )
         return True
 
     async def on_write_retry(attempt: int, e: Exception) -> None:

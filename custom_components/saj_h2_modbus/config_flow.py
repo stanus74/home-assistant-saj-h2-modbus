@@ -26,16 +26,21 @@ CONF_USE_HA_MQTT = "use_ha_mqtt"
 
 _LOGGER = logging.getLogger(__name__)
 
-DATA_SCHEMA = vol.Schema({
-    vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
-    vol.Required(CONF_HOST): str,
-    vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")),
-})
+DATA_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
+        vol.Required(CONF_HOST): str,
+        vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
+        vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
+            vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")
+        ),
+    }
+)
 
 
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
+
 
 def host_valid(host):
     """Return True if hostname or IP address is valid."""
@@ -46,13 +51,19 @@ def host_valid(host):
         disallowed = re.compile(r"[^a-zA-Z\d\-]")
         return all(x and not disallowed.search(x) for x in host.split("."))
 
+
 @callback
 def saj_modbus_entries(hass: HomeAssistant):
     """Return the hosts already configured."""
-    return {get_config_value(entry, CONF_HOST) for entry in hass.config_entries.async_entries(DOMAIN)}
+    return {
+        get_config_value(entry, CONF_HOST)
+        for entry in hass.config_entries.async_entries(DOMAIN)
+    }
+
 
 class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """SAJ Modbus configflow."""
+
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
@@ -74,9 +85,13 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+                return self.async_create_entry(
+                    title=user_input[CONF_NAME], data=user_input
+                )
 
-        return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=DATA_SCHEMA, errors=errors
+        )
 
     @staticmethod
     @callback
@@ -93,7 +108,9 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         opt = (self.config_entry.options.get(CONF_MQTT_TOPIC_PREFIX) or "").strip()
         if opt:
             return opt
-        data_val = (self.config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "") or "").strip()
+        data_val = (
+            self.config_entry.data.get(CONF_MQTT_TOPIC_PREFIX, "") or ""
+        ).strip()
         return data_val or "saj"
 
     async def async_step_init(self, user_input=None):
@@ -101,24 +118,44 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
         errors = {}
         if user_input is not None:
             merged = dict(user_input)
-            merged.setdefault(CONF_SCAN_INTERVAL, get_config_value(self.config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
-            
+            merged.setdefault(
+                CONF_SCAN_INTERVAL,
+                get_config_value(
+                    self.config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                ),
+            )
+
             # Enforce minimum scan interval of 60s
             if merged[CONF_SCAN_INTERVAL] < 60:
                 errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
 
-            merged.setdefault(CONF_MQTT_HOST, get_config_value(self.config_entry, CONF_MQTT_HOST, ""))
-            merged.setdefault(CONF_MQTT_PORT, get_config_value(self.config_entry, CONF_MQTT_PORT, 1883))
-            merged.setdefault(CONF_MQTT_USER, get_config_value(self.config_entry, CONF_MQTT_USER, ""))
-            merged.setdefault(CONF_MQTT_PASSWORD, get_config_value(self.config_entry, CONF_MQTT_PASSWORD, ""))
+            merged.setdefault(
+                CONF_MQTT_HOST, get_config_value(self.config_entry, CONF_MQTT_HOST, "")
+            )
+            merged.setdefault(
+                CONF_MQTT_PORT,
+                get_config_value(self.config_entry, CONF_MQTT_PORT, 1883),
+            )
+            merged.setdefault(
+                CONF_MQTT_USER, get_config_value(self.config_entry, CONF_MQTT_USER, "")
+            )
+            merged.setdefault(
+                CONF_MQTT_PASSWORD,
+                get_config_value(self.config_entry, CONF_MQTT_PASSWORD, ""),
+            )
             topic_prefix_default = self._get_topic_prefix_default()
-            topic_prefix = (merged.get(CONF_MQTT_TOPIC_PREFIX, topic_prefix_default) or "").strip()
+            topic_prefix = (
+                merged.get(CONF_MQTT_TOPIC_PREFIX, topic_prefix_default) or ""
+            ).strip()
             merged[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or topic_prefix_default
             merged[CONF_MQTT_PUBLISH_ALL] = merged.get(
                 CONF_MQTT_PUBLISH_ALL,
                 get_config_value(self.config_entry, CONF_MQTT_PUBLISH_ALL, False),
             )
-            merged.setdefault(CONF_USE_HA_MQTT, get_config_value(self.config_entry, CONF_USE_HA_MQTT, False))
+            merged.setdefault(
+                CONF_USE_HA_MQTT,
+                get_config_value(self.config_entry, CONF_USE_HA_MQTT, False),
+            )
 
             # If HA MQTT is forced, clear custom host to prevent Paho fallback
             if merged.get(CONF_USE_HA_MQTT, False):
@@ -128,46 +165,74 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlowWithConfigEntry):
                 return self.async_create_entry(title="", data=merged)
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=self._get_options_schema(),
-            errors=errors
+            step_id="init", data_schema=self._get_options_schema(), errors=errors
         )
 
     def _get_options_schema(self):
-        host_default = get_config_value(self.config_entry, CONF_HOST, self.config_entry.data.get(CONF_HOST))
-        port_default = get_config_value(self.config_entry, CONF_PORT, self.config_entry.data.get(CONF_PORT, DEFAULT_PORT))
-        scan_default = get_config_value(self.config_entry, CONF_SCAN_INTERVAL, self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        host_default = get_config_value(
+            self.config_entry, CONF_HOST, self.config_entry.data.get(CONF_HOST)
+        )
+        port_default = get_config_value(
+            self.config_entry,
+            CONF_PORT,
+            self.config_entry.data.get(CONF_PORT, DEFAULT_PORT),
+        )
+        scan_default = get_config_value(
+            self.config_entry,
+            CONF_SCAN_INTERVAL,
+            self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
         if scan_default < 60:
             scan_default = 60
 
         fast_default = get_config_value(self.config_entry, CONF_FAST_ENABLED, False)
-        ultra_fast_default = get_config_value(self.config_entry, CONF_ULTRA_FAST_ENABLED, False)
+        ultra_fast_default = get_config_value(
+            self.config_entry, CONF_ULTRA_FAST_ENABLED, False
+        )
         mqtt_host_default = get_config_value(self.config_entry, CONF_MQTT_HOST, "")
         mqtt_port_default = get_config_value(self.config_entry, CONF_MQTT_PORT, 1883)
         mqtt_user_default = get_config_value(self.config_entry, CONF_MQTT_USER, "")
-        mqtt_password_default = get_config_value(self.config_entry, CONF_MQTT_PASSWORD, "")
+        mqtt_password_default = get_config_value(
+            self.config_entry, CONF_MQTT_PASSWORD, ""
+        )
         mqtt_prefix_default = self._get_topic_prefix_default()
-        mqtt_publish_all_default = get_config_value(self.config_entry, CONF_MQTT_PUBLISH_ALL, False)
-        use_ha_mqtt_default = get_config_value(self.config_entry, CONF_USE_HA_MQTT, False)
-        return vol.Schema({
-            vol.Required(CONF_HOST, default=host_default): str,
-            vol.Required(CONF_PORT, default=port_default): int,
-            vol.Optional(CONF_SCAN_INTERVAL, default=scan_default): vol.All(vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")),
-            vol.Optional(CONF_FAST_ENABLED, default=fast_default): bool,
-            vol.Optional(
-                CONF_ULTRA_FAST_ENABLED,
-                default=ultra_fast_default,
-                description={"name": "Ultra Fast (1s over MQTT)"},
-            ): bool,
-            vol.Optional(
-                CONF_MQTT_HOST,
-                default="" if use_ha_mqtt_default else mqtt_host_default,
-                description={"name": "MQTT Host (ignored when HA MQTT is active)"},
-            ): str,
-            vol.Optional(CONF_MQTT_PORT, default=mqtt_port_default): int,
-            vol.Optional(CONF_MQTT_USER, default=mqtt_user_default): str,
-            vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
-            vol.Optional(CONF_MQTT_TOPIC_PREFIX, default=mqtt_prefix_default): str,
-            vol.Optional(CONF_MQTT_PUBLISH_ALL, default=mqtt_publish_all_default): bool,
-            vol.Optional(CONF_USE_HA_MQTT, default=use_ha_mqtt_default, description={"name": "Home Assistant MQTT nutzen (ignoriert Host/Port Einstellungen)"}): bool,
-        })
+        mqtt_publish_all_default = get_config_value(
+            self.config_entry, CONF_MQTT_PUBLISH_ALL, False
+        )
+        use_ha_mqtt_default = get_config_value(
+            self.config_entry, CONF_USE_HA_MQTT, False
+        )
+        return vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=host_default): str,
+                vol.Required(CONF_PORT, default=port_default): int,
+                vol.Optional(CONF_SCAN_INTERVAL, default=scan_default): vol.All(
+                    vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")
+                ),
+                vol.Optional(CONF_FAST_ENABLED, default=fast_default): bool,
+                vol.Optional(
+                    CONF_ULTRA_FAST_ENABLED,
+                    default=ultra_fast_default,
+                    description={"name": "Ultra Fast (1s over MQTT)"},
+                ): bool,
+                vol.Optional(
+                    CONF_MQTT_HOST,
+                    default="" if use_ha_mqtt_default else mqtt_host_default,
+                    description={"name": "MQTT Host (ignored when HA MQTT is active)"},
+                ): str,
+                vol.Optional(CONF_MQTT_PORT, default=mqtt_port_default): int,
+                vol.Optional(CONF_MQTT_USER, default=mqtt_user_default): str,
+                vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
+                vol.Optional(CONF_MQTT_TOPIC_PREFIX, default=mqtt_prefix_default): str,
+                vol.Optional(
+                    CONF_MQTT_PUBLISH_ALL, default=mqtt_publish_all_default
+                ): bool,
+                vol.Optional(
+                    CONF_USE_HA_MQTT,
+                    default=use_ha_mqtt_default,
+                    description={
+                        "name": "Home Assistant MQTT nutzen (ignoriert Host/Port Einstellungen)"
+                    },
+                ): bool,
+            }
+        )

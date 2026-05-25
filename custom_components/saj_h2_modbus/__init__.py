@@ -1,4 +1,5 @@
 """The SAJ Modbus integration."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,13 @@ import time
 from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_NAME,
+    CONF_PORT,
+    CONF_SCAN_INTERVAL,
+    Platform,
+)
 
 from .const import (
     DOMAIN,
@@ -23,7 +30,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.TEXT,
+]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -38,15 +50,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a SAJ Modbus entry."""
     _LOGGER.debug("Starting async_setup_entry")
     start_time = time.monotonic()
-    
+
     hub = await _create_hub(hass, entry)
-    
+
     if not hub:
         return False
 
     hass.data[DOMAIN][entry.entry_id] = {
         "hub": hub,
-        "device_info": _create_device_info(entry)
+        "device_info": _create_device_info(entry),
     }
 
     # Start fast updates only if enabled in hub
@@ -55,14 +67,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.info("Fast coordinator started (10s interval)")
     else:
         _LOGGER.info("Fast coordinator not started (disabled).")
-    
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_update_options))
-    
+
     end_time = time.monotonic()
     elapsed_time = end_time - start_time
     _LOGGER.debug(f"async_setup_entry completed in {elapsed_time:.2f} seconds")
-    
+
     return True
 
 
@@ -75,13 +87,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await hub.async_unload_entry()
         except Exception as e:
             _LOGGER.debug(f"Ignoring hub unload error: {e}")
-    
+
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     else:
-        _LOGGER.warning("Unload platforms failed for entry %s; Hub remains registered in hass.data", entry.entry_id)
+        _LOGGER.warning(
+            "Unload platforms failed for entry %s; Hub remains registered in hass.data",
+            entry.entry_id,
+        )
     return unload_ok
 
 
@@ -116,7 +131,9 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
         fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
 
         # Ensure the scan_interval is correctly passed to the hub
-        scan_interval = get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        scan_interval = get_config_value(
+            entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        )
         _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
         _LOGGER.info("Starting hub with first refresh...")
 
@@ -127,10 +144,12 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
             entry,  # Pass the full ConfigEntry object
         )
         hub.fast_enabled = fast_enabled
-        
+
         await hub.async_config_entry_first_refresh()
-        _LOGGER.info(f"Hub first refresh completed, coordinator should run every {scan_interval} seconds")
-        
+        _LOGGER.info(
+            f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
+        )
+
         return hub
     except Exception as e:
         _LOGGER.error(f"Failed to set up SAJ Modbus hub: {e}")
@@ -142,5 +161,5 @@ def _create_device_info(entry: ConfigEntry) -> dict:
     return {
         "identifiers": {(DOMAIN, entry.data[CONF_NAME])},
         "name": entry.data[CONF_NAME],
-        "manufacturer": ATTR_MANUFACTURER
+        "manufacturer": ATTR_MANUFACTURER,
     }

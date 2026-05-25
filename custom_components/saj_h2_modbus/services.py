@@ -27,10 +27,11 @@ _LOGGER = logging.getLogger(__name__)
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
+
 class ModbusConnectionManager:
     """
     Manages the Modbus TCP connection, locking, and reconnection logic.
-    
+
     PERFORMANCE OPTIMIZATION: Uses connection caching to reduce redundant
     connection checks and lock acquisitions.
     """
@@ -153,12 +154,18 @@ class ModbusConnectionManager:
     def update_config(self, host: str, port: int):
         """
         Updates connection parameters.
-        
+
         PERFORMANCE OPTIMIZATION: Invalidates cache when config changes to
         ensure new connection settings are used.
         """
         if host != self._host or port != self._port:
-            _LOGGER.info("Updating Modbus config: %s:%s -> %s:%s", self._host, self._port, host, port)
+            _LOGGER.info(
+                "Updating Modbus config: %s:%s -> %s:%s",
+                self._host,
+                self._port,
+                host,
+                port,
+            )
             self._host = host
             self._port = port
             set_modbus_config(host, port, self.hass)
@@ -181,26 +188,37 @@ class MqttPublisher:
     STRATEGY_PAHO = "PAHO"
     STRATEGY_NONE = "NONE"
 
-    def __init__(self, hass: HomeAssistant, host: str, port: int, user: str, password: str, topic_prefix: str, publish_all: bool, ultra_fast_enabled: bool, use_ha_mqtt: bool = False):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        topic_prefix: str,
+        publish_all: bool,
+        ultra_fast_enabled: bool,
+        use_ha_mqtt: bool = False,
+    ):
         self.hass = hass
         self._circuit_breaker = MqttCircuitBreaker(
             failure_threshold=3 if ultra_fast_enabled else 5,
             timeout=30 if ultra_fast_enabled else 60,
         )
-        
+
         # Config
         self.host = host
         try:
             self.port = int(port)
         except (ValueError, TypeError):
             self.port = 1883
-            
+
         self.user = user
         self.password = password
         self.publish_all = publish_all
         self.topic_prefix = (topic_prefix or "saj").strip().rstrip("/")
         self.use_ha_mqtt = use_ha_mqtt
-        
+
         self.strategy = self.STRATEGY_NONE
         self._strategy_cache_key = None
 
@@ -210,11 +228,11 @@ class MqttPublisher:
         self._paho_module = None
         self._paho_available: bool | None = None
         self._last_strategy_log = 0.0
-        
+
         # Publish rate-limiting tracking
         self._publish_timestamps: dict[str, float] = {}
         self._min_publish_interval: float = 2.0  # Min 2s between repeats
-        
+
         # Log throttling
         self._last_no_connection_log = 0.0
 
@@ -228,7 +246,9 @@ class MqttPublisher:
 
         # Init Paho if selected
         if self.strategy == self.STRATEGY_PAHO:
-            create_logged_task(self.hass, self._async_init_paho_client(), logger=_LOGGER)
+            create_logged_task(
+                self.hass, self._async_init_paho_client(), logger=_LOGGER
+            )
 
     def _strategy_key(self) -> tuple:
         """Compute strategy cache key based on relevant inputs."""
@@ -318,7 +338,11 @@ class MqttPublisher:
                 if not self.use_ha_mqtt
                 else "MQTT Strategy remains HA (use_ha_mqtt enabled)",
             )
-            if new_strategy == self.STRATEGY_HA and not self.use_ha_mqtt and (self.user or self.password):
+            if (
+                new_strategy == self.STRATEGY_HA
+                and not self.use_ha_mqtt
+                and (self.user or self.password)
+            ):
                 _LOGGER.warning(
                     "CONFIG WARNING: MQTT User/Pass are set in SAJ config, but ignored because HOST IP is missing/disabled. "
                     "Using HA Integration instead. If you want direct connection, enter the IP. If not, ignore this."
@@ -391,7 +415,9 @@ class MqttPublisher:
                 self._paho_client.username_pw_set(self.user, self.password)
                 auth_status = f"with Auth (User: {self.user})"
 
-            _LOGGER.debug("Internal MQTT client initialized %s (waiting for connect)", auth_status)
+            _LOGGER.debug(
+                "Internal MQTT client initialized %s (waiting for connect)", auth_status
+            )
         except Exception as e:
             _LOGGER.error("Failed to init internal MQTT: %s", e)
 
@@ -399,15 +425,22 @@ class MqttPublisher:
         """Publish via Paho client in executor."""
         if not self._paho_client:
             return
-        await self.hass.async_add_executor_job(self._paho_client.publish, topic, payload)
+        await self.hass.async_add_executor_job(
+            self._paho_client.publish, topic, payload
+        )
 
     def _on_paho_connect(self, client, userdata, flags, rc, *args):
         """Callback for Paho connection result."""
         # RC codes: 0=Success, 1=Protocol wrong, 2=ID rejected, 3=Server unavailable, 4=Bad user/pass, 5=Not authorized
         if rc == 0:
-            _LOGGER.info("Paho MQTT: Connected successfully to %s:%s", self.host, self.port)
+            _LOGGER.info(
+                "Paho MQTT: Connected successfully to %s:%s", self.host, self.port
+            )
         elif rc == 4 or rc == 5:
-            _LOGGER.error("Paho MQTT: Auth failed (rc=%s). Check Username/Password in SAJ Config!", rc)
+            _LOGGER.error(
+                "Paho MQTT: Auth failed (rc=%s). Check Username/Password in SAJ Config!",
+                rc,
+            )
         else:
             _LOGGER.error("Paho MQTT: Connection failed with return code %s", rc)
 
@@ -416,7 +449,17 @@ class MqttPublisher:
         if rc != 0:
             _LOGGER.warning("Paho MQTT: Disconnected unexpectedly (rc=%s)", rc)
 
-    def update_config(self, host, port, user, password, topic_prefix, publish_all, ultra_fast_enabled, use_ha_mqtt=False):
+    def update_config(
+        self,
+        host,
+        port,
+        user,
+        password,
+        topic_prefix,
+        publish_all,
+        ultra_fast_enabled,
+        use_ha_mqtt=False,
+    ):
         """Updates MQTT configuration and re-inits client if needed (logs only on change)."""
         try:
             new_port = int(port)
@@ -436,7 +479,7 @@ class MqttPublisher:
             or publish_all != self.publish_all
             or use_ha_mqtt != self.use_ha_mqtt
         )
-        
+
         self.host = incoming_host
         self.port = new_port
         self.user = user
@@ -447,7 +490,7 @@ class MqttPublisher:
 
         if connection_changed:
             _LOGGER.debug("MQTT Config updated. Prefix: '%s'", self.topic_prefix)
-        
+
         # Update CB
         self._circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
         self._circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
@@ -461,7 +504,9 @@ class MqttPublisher:
         if self.strategy == self.STRATEGY_PAHO:
             if connection_changed or strategy_changed or not self._paho_client:
                 self.stop()
-                create_logged_task(self.hass, self._async_init_paho_client(), logger=_LOGGER)
+                create_logged_task(
+                    self.hass, self._async_init_paho_client(), logger=_LOGGER
+                )
         else:
             # If we switched away from Paho, stop it
             if prev_strategy == self.STRATEGY_PAHO:
@@ -471,22 +516,22 @@ class MqttPublisher:
         """Publishes dictionary data to MQTT based on selected strategy."""
         if not data or self.strategy == self.STRATEGY_NONE:
             return
-        
+
         messages = []
         now = time.monotonic()
         for key, value in data.items():
             safe_key = key.split("/")[-1] if "/" in key else key
-            
+
             # Skip if value interval has not elapsed
             prev_ts = self._publish_timestamps.get(safe_key, 0.0)
             if not force and now - prev_ts < self._min_publish_interval:
                 continue
-                
+
             messages.append((safe_key, str(value)))
 
         if not messages:
             return
-            
+
         for key, _ in messages:
             self._publish_timestamps[key] = time.monotonic()
 
@@ -520,7 +565,7 @@ class MqttPublisher:
                                 "\n2. OR: You entered User/Password in SAJ Config but disabled the Host IP.\n"
                                 "   -> If you wanted to use the Internal Client, put the Broker IP back into the 'MQTT Host' field."
                             )
-                        
+
                         _LOGGER.error(msg)
                         self._last_no_connection_log = now
             except Exception as e:
@@ -531,14 +576,18 @@ class MqttPublisher:
         if self.strategy == self.STRATEGY_PAHO and self._paho_client:
             try:
                 if not self._paho_started:
-                    _LOGGER.info("Paho MQTT: Starting connection loop to %s:%s", self.host, self.port)
+                    _LOGGER.info(
+                        "Paho MQTT: Starting connection loop to %s:%s",
+                        self.host,
+                        self.port,
+                    )
                     self._paho_client.connect_async(self.host, self.port)
                     self._paho_client.loop_start()
                     self._paho_started = True
-                
+
                 # Check connection status
                 if not self._paho_client.is_connected():
-                    return 
+                    return
 
                 for key, payload in messages:
                     await self._circuit_breaker.call(
