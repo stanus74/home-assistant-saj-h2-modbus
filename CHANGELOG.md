@@ -56,9 +56,6 @@ Two `asyncio.create_task(...)` calls in `_queue_command_async()` and `process_pe
 **Cache-Cleanup Timer not Restarted on Config Change** (`hub.py`)
 The Modbus connection cache cleanup timer (300 s TTL) was created once at startup and never restarted when connection settings changed via Options Flow. Stale cache entries from the old host/port could persist. `update_connection_settings()` now cancels and recreates the timer on every config update.
 
-**AppMode (0x3647) not Written after `_ensure_slot_enabled`** (`charge_control.py`)
-`_ensure_slot_enabled()` set the `time_enable` bitmask for a charge/discharge slot but never called `_update_app_mode_from_states()`. Writing a slot via the inverter card therefore left register 0x3647 unchanged, so the inverter did not activate Force-Charge/Discharge mode despite having an enabled slot. Added the same `chg/dchg → _update_app_mode_from_states` pattern already present in `_handle_simple_setting` and `_handle_power_state`.
-
 **`create_logged_task` Used Deprecated `async_create_task`** (`utils.py`)
 `hass.async_create_task()` is deprecated since HA Core 2023.6. Migrated to `hass.async_create_background_task(coro, name=name)`. The optional `name` parameter is forwarded so tasks appear with a meaningful label in HA diagnostics.
 
