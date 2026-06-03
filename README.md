@@ -4,19 +4,6 @@
 
 # SAJ H2 Inverter Modbus - A Home Assistant integration for SAJ H2 Inverters
 
-> **Disclaimer / Important Notice**
->
-> This Home Assistant integration is an **unofficial community project** and is **not affiliated with or endorsed by SAJ**.
->
-> The Modbus register addresses and sensor mappings used in this integration were  
-> **independently determined through empirical testing and publicly available information**.  
-> No confidential documents, proprietary materials, or NDA-protected data have been included or published.
->
-> The register mappings in the source code are provided **solely for interoperability purposes**  
-> and are **not based on any official SAJ documentation**.  
-> Users install and use this integration **at their own risk**.
-
-
 Integration for reading data from SAJ Inverters through Modbus TCP.
 
 Implements SAJ H2/HS2 Inverter registers from [SAJ H2-Protocol](https://github.com/stanus74/home-assistant-saj-h2-modbus/blob/main/saj-h2-modbus.zip)
