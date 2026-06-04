@@ -404,9 +404,9 @@ def _should_retry_modbus_error(e: Exception) -> bool:
 
 
 def _should_trip_circuit_breaker(e: Exception) -> bool:
-    """Trip CB for connection-class and protocol errors."""
+    """Trip CB for connection-class errors only (protect against connection floods)."""
     return isinstance(
-        e, (ConnectionException, ConnectionError, OSError, ModbusIOException)
+        e, (ConnectionException, ConnectionError, OSError)
     )
 
 
