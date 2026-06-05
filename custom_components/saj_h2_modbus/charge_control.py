@@ -30,7 +30,9 @@ DEFAULT_POWER_PERCENT = 10
 MAX_HANDLER_RETRIES = 3
 
 # Minimum interval between HA state flushes (debounce)
-_FLUSH_MIN_INTERVAL: float = 0.5
+_FIRST_FLUSH_DELAY: float = 0.2       # Erster Flush: 200ms
+_SUBSEQUENT_FLUSH_DELAY: float = 0.5   # Weitere Flushes: 500ms
+_FLUSH_MIN_INTERVAL: float = 0.15      # Min-Intervall zwischen Flushes
 
 # --- Definitions for Pending Setter (Restored for compatibility) ---
 PENDING_FIELDS: list[tuple[str, str]] = (
@@ -572,16 +574,23 @@ class ChargeSettingHandler:
         self._schedule_flush()
 
     def _schedule_flush(self) -> None:
-        """Schedule a debounced state flush — at most once per second.
+        """Schedule a debounced state flush.
 
-        Multiple calls within the same 1 s window are coalesced into a
+        Multiple calls within the same window are coalesced into a
         single ``async_set_updated_data`` call so rapid consecutive writes
         (e.g. slot batch updates) do not flood the HA state machine.
         """
         if self._flush_pending:
             return
+            
         self._flush_pending = True
-        delay = max(0.0, self._last_flush_time + _FLUSH_MIN_INTERVAL - time.monotonic())
+        is_first = not self._last_flush_time
+        
+        if is_first:
+            delay = _FIRST_FLUSH_DELAY
+        else:
+            delay = max(_FLUSH_MIN_INTERVAL, _SUBSEQUENT_FLUSH_DELAY - (time.monotonic() - self._last_flush_time))
+            
         if delay <= 0.0:
             self.hub.hass.loop.call_soon(self._do_flush)
         else:

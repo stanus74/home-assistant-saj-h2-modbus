@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import asyncio
-import threading
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -199,7 +198,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
         self._rmw_locks_last_access: dict[int, float] = {}
         self._rmw_lock_ttl: float = 3600.0  # 1 hour TTL
-        self._rmw_dict_lock = threading.Lock()
+        self._rmw_dict_lock = asyncio.Lock()
 
         # DEDICATED WRITE LOCK: Write operations have priority over read operations.
         self._write_lock = asyncio.Lock()
@@ -741,7 +740,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     async def _cleanup_rmw_locks(self) -> None:
         """Clean up stale RMW locks (idle > TTL)."""
         now = time.monotonic()
-        with self._rmw_dict_lock:
+        async with self._rmw_dict_lock:
+            # Phase 1: TTL expired locks
             stale = [
                 addr
                 for addr, last_access in self._rmw_locks_last_access.items()
@@ -749,11 +749,20 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             ]
             for addr in stale:
                 if addr in self._rmw_locks:
-                    lck = self._rmw_locks[addr]
-                    if not lck.locked():
-                        del self._rmw_locks[addr]
-                        del self._rmw_locks_last_access[addr]
-                        _LOGGER.debug("Cleaned up stale RMW lock for 0x%04x", addr)
+                    del self._rmw_locks[addr]
+                    del self._rmw_locks_last_access[addr]
+                    _LOGGER.debug("Cleaned up stale RMW lock for 0x%04x (TTL)", addr)
+
+            # Phase 2: Capacity check
+            if len(self._rmw_locks) >= 64:
+                # Evict oldest
+                evict_addr = next(iter(self._rmw_locks))
+                del self._rmw_locks[evict_addr]
+                if evict_addr in self._rmw_locks_last_access:
+                    del self._rmw_locks_last_access[evict_addr]
+                _LOGGER.warning(
+                    "RMW cache at capacity, evicted LRU lock for 0x%04x", evict_addr
+                )
 
     async def _async_cleanup_cache(self, now=None) -> None:
         """Periodically clean up stale connection cache entries."""
@@ -854,31 +863,20 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         async with self._lock_order_guard("merge"):
             lock = self._merge_locks.get(address)
             if lock is None:
-                with self._rmw_dict_lock:
+                async with self._rmw_dict_lock:
                     if address not in self._rmw_locks:
                         # Hard LRU cap: always evict the oldest entry before adding a new one.
                         # Should never exceed ~20 entries in normal operation.
                         if len(self._rmw_locks) >= 64:
-                            evict_addr = None
-                            for addr, lck in self._rmw_locks.items():
-                                if not lck.locked():
-                                    evict_addr = addr
-                                    break
-
-                            if evict_addr is not None:
-                                del self._rmw_locks[evict_addr]
-                                if evict_addr in self._rmw_locks_last_access:
-                                    del self._rmw_locks_last_access[evict_addr]
-                                _LOGGER.debug(
-                                    "merge_write_register: evicted RMW lock for 0x%04x "
-                                    "(LRU, capacity=64)",
-                                    evict_addr,
-                                )
-                            else:
-                                _LOGGER.warning(
-                                    "merge_write_register: RMW cache full (64), but all locks are in use. "
-                                    "Skipping eviction this time."
-                                )
+                            evict_addr = next(iter(self._rmw_locks))
+                            del self._rmw_locks[evict_addr]
+                            if evict_addr in self._rmw_locks_last_access:
+                                del self._rmw_locks_last_access[evict_addr]
+                            _LOGGER.warning(
+                                "merge_write_register: evicted RMW lock for 0x%04x "
+                                "(LRU, capacity=64)",
+                                evict_addr,
+                            )
                         self._rmw_locks[address] = asyncio.Lock()
                     # Move to end so this entry is considered most-recently-used.
                     self._rmw_locks.move_to_end(address)
