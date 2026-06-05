@@ -353,7 +353,7 @@ async def _read_modbus_data(
         regs = await try_read_registers(client, lock, 1, start_address, count)
     except ValueError as ve:
         # Known error, e.g. Exception 131/0
-        _LOGGER.info("Unsupported Modbus register for %s: %s", data_key, ve)
+        _LOGGER.debug("Unsupported Modbus register for %s: %s", data_key, ve)
         errors.append(f"{data_key}: {ve}")
         return new_data, errors
     except ReconnectionNeededError:
@@ -524,14 +524,14 @@ _DATA_READ_CONFIG = {
         "count": 30,
         "decode_map": ADDITIONAL_DATA_3_MAP,
         "data_key": "additional_data_3",
-        "log_level_on_error": logging.WARNING,
+        "log_level_on_error": logging.DEBUG,
     },
     "additional_data_3_2": {
         "address": 16725,
         "count": 34,
         "decode_map": ADDITIONAL_DATA_3_2_MAP,
         "data_key": "additional_data_3_2",
-        "log_level_on_error": logging.WARNING,
+        "log_level_on_error": logging.DEBUG,
     },
     "battery_data": {
         "address": 40960,

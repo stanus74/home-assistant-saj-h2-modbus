@@ -361,20 +361,19 @@ async def _retry_with_backoff(
         except Exception as e:
             last_exception = e
             if not should_retry(e):
-                _LOGGER.error("Non-retriable exception occurred", exc_info=True)
+                _LOGGER.debug("Non-retriable exception occurred: %s", e)
                 raise
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "[%s] Attempt %d failed: %s",
                 task_name,
                 attempt,
                 e,
-                exc_info=(attempt == retries),
             )
             if on_retry:
                 await on_retry(attempt, e)
             if attempt < retries:
                 await _exponential_backoff(attempt, base_delay, cap)
-    _LOGGER.warning(
+    _LOGGER.debug(
         "[%s] All %d attempts failed: %s", task_name, retries, last_exception
     )
     raise last_exception
@@ -575,9 +574,9 @@ async def try_read_registers(
         # Detect specific exception error early
         if response.isError():
             exc_code = getattr(response, "exception_code", None)
-            if exc_code == 1:  # Illegal Function (Exception Code 1)
-                raise ValueError("Unsupported register (Exception response 131 / 0)")
-            raise ModbusIOException("General Modbus read error")
+            if exc_code in (1, 2, 3):  # 1: Illegal Function, 2: Illegal Data Address, 3: Illegal Data Value
+                raise ValueError(f"Unsupported register or address (Exception code {exc_code})")
+            raise ModbusIOException(f"General Modbus read error (Code: {exc_code})")
 
         if not hasattr(response, "registers"):
             raise ModbusIOException("No registers in response")
@@ -592,7 +591,7 @@ async def try_read_registers(
         return response.registers  # type: ignore
 
     async def on_read_retry(attempt: int, e: Exception) -> None:
-        _LOGGER.warning("[Modbus-Read] Retry %d after error: %s", attempt, e)
+        _LOGGER.debug("[Modbus-Read] Retry %d after error: %s", attempt, e)
         await on_retry(attempt, e)
 
     try:
@@ -673,7 +672,7 @@ async def try_write_registers(
         return True
 
     async def on_write_retry(attempt: int, e: Exception) -> None:
-        _LOGGER.warning("[Modbus-Write] Retry %d after error: %s", attempt, e)
+        _LOGGER.debug("[Modbus-Write] Retry %d after error: %s", attempt, e)
         await on_retry(attempt, e)
 
     try:
