@@ -11,7 +11,7 @@ from typing import Any, Callable
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant, callback, CoreState
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.event import async_track_time_interval, async_call_later
 from homeassistant.config_entries import ConfigEntry
@@ -365,20 +365,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
     # --- FAST POLLING ---
 
-    def _get_startup_delay(self) -> int:
-        """Get startup delay based on HA state and MQTT availability."""
-        mqtt_in_config = "mqtt" in self.hass.config.components
-        is_running = (
-            self.hass.state == CoreState.running
-            if hasattr(CoreState, "running")
-            else False
-        )
-        return (
-            STARTUP_DELAY_RUNNING
-            if is_running
-            else (STARTUP_DELAY_MQTT if mqtt_in_config else STARTUP_DELAY_RUNNING)
-        )
-
     @callback
     def _start_update_loop(
         self, interval: int, cancel_attr: str, ultra: bool = False
@@ -407,8 +393,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     def _schedule_update_loop(
         self, interval: int, cancel_attr: str, ultra: bool = False
     ) -> None:
-        """Schedule an update loop to start after startup delay."""
-        startup_delay = self._get_startup_delay()
+        """Schedule an update loop robustly based on HA startup state."""
         pending_attr = (
             "_pending_ultra_fast_start_cancel"
             if cancel_attr == "_cancel_ultra_fast_update"
@@ -420,15 +405,29 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         if pending_handle:
             pending_handle()
 
-        setattr(
-            self,
-            pending_attr,
-            async_call_later(
-                self.hass,
-                startup_delay,
-                lambda _: self._start_update_loop(interval, cancel_attr, ultra),
-            ),
+        is_running = (
+            self.hass.state == CoreState.running
+            if hasattr(CoreState, "running")
+            else False
         )
+
+        if not is_running:
+            _LOGGER.debug("HA not fully started, delaying %s loop", cancel_attr)
+            cancel_listener = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED,
+                lambda _: self._start_update_loop(interval, cancel_attr, ultra)
+            )
+            setattr(self, pending_attr, cancel_listener)
+        else:
+            setattr(
+                self,
+                pending_attr,
+                async_call_later(
+                    self.hass,
+                    STARTUP_DELAY_RUNNING,
+                    lambda _: self._start_update_loop(interval, cancel_attr, ultra),
+                ),
+            )
 
     async def start_fast_updates(self) -> None:
         """Start fast update loops based on configuration."""

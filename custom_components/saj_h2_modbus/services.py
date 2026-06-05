@@ -147,7 +147,7 @@ class ModbusConnectionManager:
         """Clean up stale cache entries and close socket if disconnected."""
         async with self._connection_lock:
             invalidated = await self._connection_cache.cleanup_stale()
-            if invalidated and not self._client.connected:
+            if invalidated:
                 await self._close_socket()
                 _LOGGER.debug("Modbus socket closed after cache cleanup")
 
