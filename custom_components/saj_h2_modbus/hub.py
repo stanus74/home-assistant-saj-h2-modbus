@@ -297,7 +297,17 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 self.inverter_data = cache
 
             if self.mqtt.publish_all and self.inverter_data:
-                await self.mqtt.publish_data(self.inverter_data)
+                # Prevent duplicate MQTT publishing by excluding fast-poll sensors
+                # from the slow loop if they are already handled by fast/ultra-fast loops.
+                if self.fast_enabled or self.ultra_fast_enabled:
+                    publish_cache = {
+                        k: v for k, v in self.inverter_data.items()
+                        if k not in self._fast_poll_sensor_keys
+                    }
+                else:
+                    publish_cache = self.inverter_data
+                if publish_cache:
+                    await self.mqtt.publish_data(publish_cache)
 
             return self.inverter_data
         except (ConnectionError, ReconnectionNeededError) as err:

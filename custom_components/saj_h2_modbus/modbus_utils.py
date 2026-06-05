@@ -475,8 +475,8 @@ async def _on_modbus_retry(
                             "Closing Modbus socket (fd=%s) due to %s", fileno, e
                         )
                     client.close()
-                except Exception:
-                    pass  # Ignore errors during close
+                except Exception as close_err:
+                    logger.debug("Exception during socket close: %s", close_err, exc_info=True)
 
                 try:
                     await _connect_client_inplace(client, host, port)
