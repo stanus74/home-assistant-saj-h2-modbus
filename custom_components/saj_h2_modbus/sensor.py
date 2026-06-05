@@ -1,7 +1,7 @@
 """SAJ Modbus Hub."""
 
+import asyncio
 import logging
-import threading
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -90,9 +90,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         ) and is_fast_variant
         self._remove_fast_listener = None
         self._last_value = None  # Cache last value for change detection
-        # Simple boolean flag to prevent double-cleanup during entity removal
-        self._is_removed_flag = False
-        self._removed_lock = threading.Lock()
+        # Use asyncio.Event for thread-safe atomic flags
+        self._is_removed_event = asyncio.Event()
+        self._is_removed_event.set()  # set means "not removed" initial state
 
         if ADVANCED_LOGGING and self._is_fast_sensor:
             _LOGGER.debug(
@@ -124,7 +124,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         self._cleanup_fast_listener()
 
         # Reset removal flag in case of entity reload
-        self._is_removed_flag = False
+        self._is_removed_event.set()
 
         # Initial registration check
         self._update_fast_listener_registration()
@@ -185,10 +185,8 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_fast_update(self) -> None:
         """Handle fast update notification (10s interval)."""
-        # Atomic removal check
-        with self._removed_lock:
-            if self._is_removed_flag:
-                return
+        if not self._is_removed_event.is_set():
+            return
 
         # Prevent processing if the entity has been removed or is disabled
         is_enabled = True
@@ -224,10 +222,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _cleanup_fast_listener(self) -> None:
         """Ensure fast listener is removed exactly once when entity is torn down."""
-        with self._removed_lock:
-            if self._is_removed_flag:
-                return
-            self._is_removed_flag = True
+        if not self._is_removed_event.is_set():
+            return
+        self._is_removed_event.clear()
 
         if self._remove_fast_listener is not None:
             try:

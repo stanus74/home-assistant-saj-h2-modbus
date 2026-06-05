@@ -707,7 +707,9 @@ class ChargeSettingHandler:
                 )
 
             if attempt < MAX_HANDLER_RETRIES:
-                await asyncio.sleep(2 ** (attempt - 1))
+                import random
+                delay = min(2.0, 2 ** (attempt - 1)) + random.uniform(0.1, 0.5)
+                await asyncio.sleep(delay)
         return False
 
     async def _update_day_mask_and_power(

@@ -530,7 +530,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         # blocking here would throw off the entire ultra-fast schedule.
         # The pending flag ensures a catch-up update is triggered after the write.
         if ultra and not self._write_done.is_set():
-            self._ultra_fast_pending = True
             _LOGGER.debug("Skipping ultra-fast update - write operation in progress")
             return
 
@@ -540,7 +539,6 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             # TOCTOU guard: a write may have started while we awaited get_client().
             # Re-check _write_done before touching the Modbus socket.
             if ultra and not self._write_done.is_set():
-                self._ultra_fast_pending = True
                 _LOGGER.debug(
                     "Skipping ultra-fast update after get_client – write in progress"
                 )
@@ -796,8 +794,11 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 f"Direct write to merge-locked register 0x{address:04x} is not allowed; use merge_write_register()."
             )
 
-        # Do not acquire the lock twice: try_write_registers already uses it.
-        self._write_done.clear()
+        # Atomar: write_done löschen + ultra_fast_pending setzen
+        async with self._write_lock:
+            self._write_done.clear()
+            self._ultra_fast_pending = True
+
         try:
             async with self._lock_order_guard("write"):
                 client = await self.connection.get_client()
@@ -805,11 +806,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     client, self._write_lock, 1, address, value
                 )
         finally:
-            try:
-                self._write_done.set()
-            except Exception:
-                pass
-            if self._ultra_fast_pending and self.ultra_fast_enabled:
+            self._write_done.set()
+            if self.ultra_fast_enabled and self._ultra_fast_pending:
                 self._ultra_fast_pending = False
                 create_logged_task(
                     self.hass, self._async_update_fast(ultra=True), logger=_LOGGER
