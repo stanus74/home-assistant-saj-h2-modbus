@@ -154,25 +154,6 @@ _RECONNECT_DONE: asyncio.Event = asyncio.Event()
 _RECONNECT_DONE.set()  # Initially set: no reconnect in progress
 
 
-# Global Modbus config storage
-class ModbusGlobalConfig:
-    host: str | None = None
-    port: int | None = None
-    hass: Any | None = None
-
-
-def set_modbus_config(host: str, port: int, hass: Any = None) -> None:
-    ModbusGlobalConfig.host = host
-    ModbusGlobalConfig.port = port
-    ModbusGlobalConfig.hass = hass
-    _LOGGER.debug(
-        "Global Modbus config set: %s:%s (hass configured: %s)",
-        host,
-        port,
-        hass is not None,
-    )
-
-
 # ============================================================================
 # CONNECTION MANAGEMENT
 # ============================================================================
@@ -548,8 +529,8 @@ async def try_read_registers(
     base_delay: float = DEFAULT_READ_BASE_DELAY,
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> list[int]:
-    host = ModbusGlobalConfig.host
-    port = ModbusGlobalConfig.port
+    host = getattr(client, "_saj_host", None)
+    port = getattr(client, "_saj_port", None)
     if host is None or port is None:
         raise ReconnectionNeededError(
             "Modbus client not configured with host and port."
@@ -630,8 +611,8 @@ async def try_write_registers(
     base_delay: float = DEFAULT_WRITE_BASE_DELAY,
     cap_delay: float = DEFAULT_WRITE_CAP_DELAY,
 ) -> bool:
-    host = ModbusGlobalConfig.host
-    port = ModbusGlobalConfig.port
+    host = getattr(client, "_saj_host", None)
+    port = getattr(client, "_saj_port", None)
     if host is None or port is None:
         raise ReconnectionNeededError(
             "Modbus client not configured with host and port."

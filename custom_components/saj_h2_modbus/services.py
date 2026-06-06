@@ -11,7 +11,6 @@ from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
 
 from .modbus_utils import (
     _connect_client_inplace,
-    set_modbus_config,
     ConnectionCache,
     CircuitBreaker,
     ModbusCircuitBreaker,
@@ -47,6 +46,8 @@ class ModbusConnectionManager:
         # Reconnect = close() + connect() on this same object – never replaced.
         # This guarantees that all polling loops always reference the same socket.
         self._client: ModbusTcpClient = ModbusTcpClient(host=host, port=port, timeout=5)
+        self._client._saj_host = host
+        self._client._saj_port = port
 
         # Connection cache to avoid repeated connection-state checks
         self._connection_cache = ConnectionCache(cache_ttl=30.0)
@@ -54,9 +55,6 @@ class ModbusConnectionManager:
         # Per-instance circuit breaker – isolates this inverter's failure state
         # from any other configured inverter (multi-inverter setups).
         self._circuit_breaker = ModbusCircuitBreaker()
-
-        # Initial setup of global config for utils
-        set_modbus_config(host, port, hass)
 
     @property
     def host(self) -> str:
@@ -147,7 +145,7 @@ class ModbusConnectionManager:
         """Clean up stale cache entries and close socket if disconnected."""
         async with self._connection_lock:
             invalidated = await self._connection_cache.cleanup_stale()
-            if invalidated:
+            if invalidated and not self._client.connected:
                 await self._close_socket()
                 _LOGGER.debug("Modbus socket closed after cache cleanup")
 
@@ -168,7 +166,8 @@ class ModbusConnectionManager:
             )
             self._host = host
             self._port = port
-            set_modbus_config(host, port, self.hass)
+            self._client._saj_host = host
+            self._client._saj_port = port
 
             # Close active client so the next call re-connects with new settings.
             create_logged_task(self.hass, self.close(), logger=_LOGGER)
