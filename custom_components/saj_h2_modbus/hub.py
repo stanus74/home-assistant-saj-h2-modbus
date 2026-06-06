@@ -474,22 +474,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         (already logged; caller should skip the update cycle).
         ReconnectionNeededError is always re-raised for hub-level handling.
         """
-        try:
-            if ultra:
-                return await modbus_readers.read_additional_modbus_data_1_part_2(
-                    client, lock
-                )
-            part_1 = await modbus_readers.read_additional_modbus_data_1_part_1(
-                client, lock
-            )
-            part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(
-                client, lock
-            )
-            return {**part_1, **part_2}
-        except ReconnectionNeededError:
-            raise
-        except Exception as e:
-            _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
+        for attempt in (1, 2):
             try:
                 if ultra:
                     return await modbus_readers.read_additional_modbus_data_1_part_2(
@@ -504,11 +489,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 return {**part_1, **part_2}
             except ReconnectionNeededError:
                 raise
-            except Exception as retry_e:
-                _LOGGER.debug(
-                    "Ultra-fast poll retry failed, skipping update cycle: %s", retry_e
-                )
-                return None
+            except Exception as e:
+                if attempt == 1:
+                    _LOGGER.debug("Fast poll failed, attempting one retry: %s", e)
+                else:
+                    _LOGGER.debug(
+                        "Ultra-fast poll retry failed, skipping update cycle: %s", e
+                    )
+                    return None
 
     async def _publish_fast_mqtt(self, fast_data: dict[str, Any]) -> None:
         """Publish fast-poll sensor values to MQTT."""

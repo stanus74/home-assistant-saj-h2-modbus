@@ -197,7 +197,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
             _LOGGER.debug(
                 "Skipping fast update for %s (removed=%s, enabled=%s)",
                 self._attr_name,
-                self._is_removed_flag,
+                "False (event set)" if self._is_removed_event.is_set() else "True",
                 is_enabled,
             )
             return

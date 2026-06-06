@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable
 import socket
 
 from pymodbus.exceptions import ConnectionException, ModbusIOException
+from pymodbus.pdu import ExceptionResponse
 
 # Alias AsyncModbusTcpClient as ModbusTcpClient to retain compatibility with existing type hints
 from pymodbus.client import AsyncModbusTcpClient as ModbusTcpClient
@@ -553,7 +554,7 @@ async def try_read_registers(
         )
 
         # Detect specific exception error early
-        if response.isError():
+        if isinstance(response, ExceptionResponse):
             exc_code = getattr(response, "exception_code", None)
             if exc_code in (1, 2, 3):  # 1: Illegal Function, 2: Illegal Data Address, 3: Illegal Data Value
                 raise ValueError(f"Unsupported register or address (Exception code {exc_code})")
@@ -643,7 +644,7 @@ async def try_write_registers(
                 address=address,
                 values=values,
             )
-        if result.isError():
+        if isinstance(result, ExceptionResponse):
             raise ModbusIOException("Write response error")
 
         if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
