@@ -736,9 +736,16 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
     async def async_unload_entry(self) -> None:
         self._cleanup_fast_update_callbacks()
         if self._cache_cleanup_unsub:
-            self._cache_cleanup_unsub()
-            self._cache_cleanup_unsub = None
-        self.mqtt.stop()
+            try:
+                self._cache_cleanup_unsub()
+            except Exception as e:
+                _LOGGER.debug("Error during cache cleanup unsub: %s", e)
+            finally:
+                self._cache_cleanup_unsub = None
+        try:
+            self.mqtt.stop()
+        except Exception as e:
+            _LOGGER.debug("Error during MQTT stop: %s", e)
         try:
             await self._setting_handler.shutdown()
         except Exception as e:
