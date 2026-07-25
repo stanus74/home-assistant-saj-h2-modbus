@@ -1,5 +1,7 @@
 """Platform for writable SAJ Modbus time entities."""
 
+from __future__ import annotations
+
 import datetime
 import re
 import logging

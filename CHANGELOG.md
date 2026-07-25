@@ -6,6 +6,10 @@
 > config-entry entity callbacks — without changing any entity IDs, so existing automations and
 > dashboards keep working.
 
+### Code Quality
+
+- **Consistent Future Annotations:** Added `from __future__ import annotations` to `const.py`, `config_flow.py`, `sensor.py`, `text.py`, and `utils.py` for consistent forward-reference handling and modern type annotations across the integration.
+
 ### Added New Sensors
 
 - **Inverter/Battery Setpoint Registers (0x4023-0x4030):** New reader `read_inverter_settings_data` exposes previously unread registers as sensors: `InvDisPowerSet`, `InvChgPowerSet`, `BatDisCurrSet`, `BatChgCurrSet`, `BatStatusDisp`, `BatProtocolSet`, `BatChgSocUpLimit`, `BatDisSocDowLimit`, `BatDODSet`, `BatResSoc`, and `MeterModeSet`. These closed a previously unread gap between `realtime_data` (ending at `0x4016`) and `additional_data_4` (starting at `0x4031`). `BatDisCurrSet` (`0x4025`) and `BatChgCurrSet` (`0x4026`) 

@@ -3,6 +3,10 @@
         "/^python3 -m ruff check \\.$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"style\\(typing\\): add future annotations import consistently\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }
