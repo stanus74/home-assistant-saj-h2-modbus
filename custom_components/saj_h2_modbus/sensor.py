@@ -92,9 +92,10 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         ) and is_fast_variant
         self._remove_fast_listener = None
         self._last_value = None  # Cache last value for change detection
-        # Use asyncio.Event for thread-safe atomic flags
-        self._is_removed_event = asyncio.Event()
-        self._is_removed_event.set()  # set means "not removed" initial state
+        # Use asyncio.Event for thread-safe atomic flags.
+        # set() means the entity is still active (not removed), clear() means removed.
+        self._is_active = asyncio.Event()
+        self._is_active.set()
 
         if ADVANCED_LOGGING and self._is_fast_sensor:
             _LOGGER.debug(
@@ -125,8 +126,8 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         # Remove any lingering listeners from previous registration before re-registering
         self._cleanup_fast_listener()
 
-        # Reset removal flag in case of entity reload
-        self._is_removed_event.set()
+        # Reset active flag in case of entity reload
+        self._is_active.set()
 
         # Initial registration check
         self._update_fast_listener_registration()
@@ -187,7 +188,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_fast_update(self) -> None:
         """Handle fast update notification (10s interval)."""
-        if not self._is_removed_event.is_set():
+        if not self._is_active.is_set():
             return
 
         # Prevent processing if the entity has been removed or is disabled
@@ -197,9 +198,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
 
         if not is_enabled:
             _LOGGER.debug(
-                "Skipping fast update for %s (removed=%s, enabled=%s)",
+                "Skipping fast update for %s (active=%s, enabled=%s)",
                 self._attr_name,
-                "False (event set)" if self._is_removed_event.is_set() else "True",
+                "yes" if self._is_active.is_set() else "no",
                 is_enabled,
             )
             return
@@ -225,9 +226,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _cleanup_fast_listener(self) -> None:
         """Ensure fast listener is removed exactly once when entity is torn down."""
-        if not self._is_removed_event.is_set():
+        if not self._is_active.is_set():
             return
-        self._is_removed_event.clear()
+        self._is_active.clear()
 
         if self._remove_fast_listener is not None:
             try:

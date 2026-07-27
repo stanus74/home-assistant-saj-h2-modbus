@@ -1,6 +1,6 @@
 ## v3.0.1
 
-> **Bugfix release:** Follow-up to v3.0.0 with code-quality improvements and a fix for input entity initialization after restart.
+> **Bugfix release:** Follow-up to v3.0.0 with code-quality improvements and fixes for input entity initialization and fast-poll listener clarity.
 
 ### Code Quality
 
@@ -9,6 +9,7 @@
 ### Fixed
 
 - **Number and Time Inputs Now Initialize from Live Inverter Data:** After a Home Assistant restart, writable Number and Text entities for charge/discharge settings used to show hard-coded default values until the next 60-second poll refreshed them. They now read their current value from the hub cache as soon as the entity is added, so the UI reflects the inverter's actual state immediately.
+- **Fast-Poll Listener Active Flag Renamed:** The internal `_is_removed_event` flag in `sensor.py` was inverted (`set()` meant "active"). It is now named `_is_active` and its semantics are explicit, making the cleanup path easier to follow and reducing the chance of mis-reading the listener state.
 
 ---
 
