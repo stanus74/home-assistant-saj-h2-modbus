@@ -687,41 +687,8 @@
       "why": "inferred connection - not explicitly stated in source; bridges separate communities"
     }
   ],
-  "questions": [
-    {
-      "type": "bridge_node",
-      "question": "Why does `SAJModbusHub` connect `SAJModbusHub` to `ChargeSettingHandler`, `BaseSajSwitch`, `SajSensor`, `__init__.py`?",
-      "why": "High betweenness centrality (0.301) - this node is a cross-community bridge."
-    },
-    {
-      "type": "bridge_node",
-      "question": "Why does `ChargeSettingHandler` connect `ChargeSettingHandler` to `SAJModbusHub`?",
-      "why": "High betweenness centrality (0.170) - this node is a cross-community bridge."
-    },
-    {
-      "type": "bridge_node",
-      "question": "Why does `create_logged_task()` connect `MqttPublisher` to `ChargeSettingHandler`, `utils.py`, `modbus_utils.py`?",
-      "why": "High betweenness centrality (0.103) - this node is a cross-community bridge."
-    },
-    {
-      "type": "verify_inferred",
-      "question": "Are the 6 inferred relationships involving `SAJModbusHub` (e.g. with `ChargeSettingHandler` and `Command`) actually correct?",
-      "why": "`SAJModbusHub` has 6 INFERRED edges - model-reasoned connections that need verification."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `ChargeSettingHandler` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.0528169014084507 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `SAJModbusHub` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.052600818234950324 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `modbus_utils.py` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.06829573934837092 - nodes in this community are weakly interconnected."
-    }
-  ]
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
 }

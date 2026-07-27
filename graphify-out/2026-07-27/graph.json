@@ -748,7 +748,7 @@
       "_origin": "ast",
       "community": 0,
       "norm_label": "charge_control.py",
-      "community_name": "ChargeSettingHandler",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_charge_control"
     },
     {
@@ -759,7 +759,7 @@
       "_origin": "ast",
       "community": 0,
       "norm_label": "commandtype",
-      "community_name": "ChargeSettingHandler",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_charge_control_commandtype"
     },
     {
@@ -770,7 +770,7 @@
       "_origin": "ast",
       "community": 0,
       "norm_label": "enum",
-      "community_name": "ChargeSettingHandler",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_charge_control_py_enum"
     },
     {
@@ -1188,7 +1188,7 @@
       "_origin": "ast",
       "community": 0,
       "norm_label": "optimized charge control with exponential backoff and improved error handling.",
-      "community_name": "ChargeSettingHandler",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_charge_control_rationale_1"
     },
     {
@@ -1529,7 +1529,7 @@
       "_origin": "ast",
       "community": 0,
       "norm_label": "# note: editing a slot's time/day-mask/power does not auto-enable it.",
-      "community_name": "ChargeSettingHandler",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_charge_control_rationale_414"
     },
     {
@@ -1540,7 +1540,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "homeassistant",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_py_homeassistant"
     },
     {
@@ -1562,7 +1562,7 @@
       "_origin": "ast",
       "community": 1,
       "norm_label": "homeassistant",
-      "community_name": "SAJModbusHub",
+      "community_name": ".__init__",
       "id": "custom_components_saj_h2_modbus_hub_py_homeassistant"
     },
     {
@@ -1573,7 +1573,7 @@
       "_origin": "ast",
       "community": 1,
       "norm_label": "configentry",
-      "community_name": "SAJModbusHub",
+      "community_name": ".__init__",
       "id": "custom_components_saj_h2_modbus_hub_py_configentry"
     },
     {
@@ -1584,7 +1584,7 @@
       "_origin": "ast",
       "community": 13,
       "norm_label": "any",
-      "community_name": "Any",
+      "community_name": "._async_update_data",
       "id": "custom_components_saj_h2_modbus_hub_py_any"
     },
     {
@@ -1595,7 +1595,7 @@
       "_origin": "ast",
       "community": 14,
       "norm_label": "lock",
-      "community_name": "Lock",
+      "community_name": "._async_update_fast",
       "id": "custom_components_saj_h2_modbus_hub_py_lock"
     },
     {
@@ -2783,7 +2783,7 @@
       "_origin": "ast",
       "community": 15,
       "norm_label": "addconfigentryentitiescallback",
-      "community_name": "AddConfigEntryEntitiesCallback",
+      "community_name": "SajSensor",
       "id": "custom_components_saj_h2_modbus_sensor_py_addconfigentryentitiescallback"
     },
     {
@@ -3795,7 +3795,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "configentry",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_py_configentry"
     },
     {
@@ -3806,7 +3806,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "any",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_py_any"
     },
     {
@@ -3817,7 +3817,7 @@
       "_origin": "ast",
       "community": 6,
       "norm_label": "homeassistant",
-      "community_name": "MqttPublisher",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_utils_py_homeassistant"
     },
     {
@@ -3839,7 +3839,7 @@
       "_origin": "ast",
       "community": 6,
       "norm_label": "task",
-      "community_name": "MqttPublisher",
+      "community_name": "create_logged_task",
       "id": "task"
     },
     {
@@ -3850,7 +3850,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "config_flow.py",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow"
     },
     {
@@ -3861,7 +3861,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "host_valid()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_host_valid"
     },
     {
@@ -3872,7 +3872,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "saj_modbus_entries()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_saj_modbus_entries"
     },
     {
@@ -3883,7 +3883,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "sajmodbusconfigflow",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusconfigflow"
     },
     {
@@ -3894,7 +3894,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "._host_in_configuration_exists()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusconfigflow_host_in_configuration_exists"
     },
     {
@@ -3905,7 +3905,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": ".async_step_user()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusconfigflow_async_step_user"
     },
     {
@@ -3916,7 +3916,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": ".async_get_options_flow()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusconfigflow_async_get_options_flow"
     },
     {
@@ -3927,7 +3927,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "sajmodbusoptionsflowhandler",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusoptionsflowhandler"
     },
     {
@@ -3938,7 +3938,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "._get_topic_prefix_default()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusoptionsflowhandler_get_topic_prefix_default"
     },
     {
@@ -3949,7 +3949,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": ".async_step_init()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusoptionsflowhandler_async_step_init"
     },
     {
@@ -3960,7 +3960,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "._get_options_schema()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_sajmodbusoptionsflowhandler_get_options_schema"
     },
     {
@@ -3971,7 +3971,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "return true if hostname or ip address is valid.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_48"
     },
     {
@@ -3982,7 +3982,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "return the hosts already configured.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_59"
     },
     {
@@ -3993,7 +3993,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "saj modbus configflow.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_67"
     },
     {
@@ -4004,7 +4004,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "return true if host exists in configuration.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_72"
     },
     {
@@ -4015,7 +4015,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "handle the initial step.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_76"
     },
     {
@@ -4026,7 +4026,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "return the options flow to allow configuration changes after setup.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_100"
     },
     {
@@ -4037,7 +4037,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "handle an options flow for saj modbus.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_105"
     },
     {
@@ -4048,7 +4048,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "prefer non-empty option prefix, fallback to data, then 'saj'.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_config_flow_rationale_108"
     },
     {
@@ -4235,7 +4235,7 @@
       "_origin": "ast",
       "community": 17,
       "norm_label": "sajmodbushub",
-      "community_name": "SAJModbusHub",
+      "community_name": "SajSensor",
       "id": "custom_components_saj_h2_modbus_sensor_py_sajmodbushub"
     },
     {
@@ -4400,7 +4400,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "utils.py",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils"
     },
     {
@@ -4422,7 +4422,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "get_config_value()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_get_config_value"
     },
     {
@@ -4433,7 +4433,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "get_config_values()",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_get_config_values"
     },
     {
@@ -4444,7 +4444,7 @@
       "_origin": "ast",
       "community": 6,
       "norm_label": "create_logged_task()",
-      "community_name": "MqttPublisher",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_utils_create_logged_task"
     },
     {
@@ -4455,7 +4455,7 @@
       "_origin": "ast",
       "community": 6,
       "norm_label": "logger",
-      "community_name": "MqttPublisher",
+      "community_name": "create_logged_task",
       "id": "logger"
     },
     {
@@ -4466,7 +4466,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "utility functions for saj h2 modbus integration.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_rationale_1"
     },
     {
@@ -4488,7 +4488,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "get config value with fallback: options -> data -> default.      this function r",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_rationale_91"
     },
     {
@@ -4499,7 +4499,7 @@
       "_origin": "ast",
       "community": 9,
       "norm_label": "get multiple config values with fallback: options -> data -> default.",
-      "community_name": "utils.py",
+      "community_name": "__init__.py",
       "id": "custom_components_saj_h2_modbus_utils_rationale_113"
     },
     {
@@ -4510,7 +4510,7 @@
       "_origin": "ast",
       "community": 6,
       "norm_label": "schedule a coroutine as a background ha task and log any unhandled exception.",
-      "community_name": "MqttPublisher",
+      "community_name": "create_logged_task",
       "id": "custom_components_saj_h2_modbus_utils_rationale_126"
     },
     {
@@ -4519,10 +4519,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "__init__.py",
       "id": "custom_components_saj_h2_modbus_init",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "__init__.py"
     },
     {
       "label": "async_setup()",
@@ -4530,10 +4529,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L44",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "async_setup()",
       "id": "custom_components_saj_h2_modbus_init_async_setup",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "async_setup()"
     },
     {
       "label": "async_setup_entry()",
@@ -4541,10 +4539,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L50",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "async_setup_entry()",
       "id": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "async_setup_entry()"
     },
     {
       "label": "async_unload_entry()",
@@ -4552,10 +4549,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L78",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "async_unload_entry()",
       "id": "custom_components_saj_h2_modbus_init_async_unload_entry",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "async_unload_entry()"
     },
     {
       "label": "async_update_options()",
@@ -4563,10 +4559,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L100",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "async_update_options()",
       "id": "custom_components_saj_h2_modbus_init_async_update_options",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "async_update_options()"
     },
     {
       "label": "_create_hub()",
@@ -4574,10 +4569,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L124",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "_create_hub()",
       "id": "custom_components_saj_h2_modbus_init_create_hub",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "_create_hub()"
     },
     {
       "label": "_create_device_info()",
@@ -4585,10 +4579,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L160",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "_create_device_info()",
       "id": "custom_components_saj_h2_modbus_init_create_device_info",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "_create_device_info()"
     },
     {
       "label": "_update_device_info_from_inverter_data()",
@@ -4596,10 +4589,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L170",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "_update_device_info_from_inverter_data()",
       "id": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "_update_device_info_from_inverter_data()"
     },
     {
       "label": "The SAJ Modbus integration.",
@@ -4607,10 +4599,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "the saj modbus integration.",
       "id": "custom_components_saj_h2_modbus_init_rationale_1",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "the saj modbus integration."
     },
     {
       "label": "Set up the SAJ Modbus component.",
@@ -4618,10 +4609,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L45",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "set up the saj modbus component.",
       "id": "custom_components_saj_h2_modbus_init_rationale_45",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "set up the saj modbus component."
     },
     {
       "label": "Set up a SAJ Modbus entry.",
@@ -4629,10 +4619,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L51",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "set up a saj modbus entry.",
       "id": "custom_components_saj_h2_modbus_init_rationale_51",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "set up a saj modbus entry."
     },
     {
       "label": "Unload a config entry.",
@@ -4640,10 +4629,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L79",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "unload a config entry.",
       "id": "custom_components_saj_h2_modbus_init_rationale_79",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "unload a config entry."
     },
     {
       "label": "Update options and restart fast updates if needed.",
@@ -4651,10 +4639,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L101",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "update options and restart fast updates if needed.",
       "id": "custom_components_saj_h2_modbus_init_rationale_101",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "update options and restart fast updates if needed."
     },
     {
       "label": "Helper function to create the SAJ Modbus hub.",
@@ -4662,10 +4649,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L125",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "helper function to create the saj modbus hub.",
       "id": "custom_components_saj_h2_modbus_init_rationale_125",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "helper function to create the saj modbus hub."
     },
     {
       "label": "Create device info for SAJ Modbus hub.",
@@ -4673,10 +4659,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L161",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "create device info for saj modbus hub.",
       "id": "custom_components_saj_h2_modbus_init_rationale_161",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "create device info for saj modbus hub."
     },
     {
       "label": "Enrich device info with firmware/hardware data after first refresh.",
@@ -4684,10 +4669,9 @@
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
       "source_location": "L171",
       "_origin": "ast",
-      "community": 12,
-      "norm_label": "enrich device info with firmware/hardware data after first refresh.",
       "id": "custom_components_saj_h2_modbus_init_rationale_171",
-      "community_name": "__init__.py"
+      "community": 12,
+      "norm_label": "enrich device info with firmware/hardware data after first refresh."
     },
     {
       "label": "const.py",
@@ -4695,10 +4679,9 @@
       "source_file": "custom_components/saj_h2_modbus/const.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "const.py",
       "id": "custom_components_saj_h2_modbus_const",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "const.py"
     },
     {
       "label": "SensorGroup",
@@ -4706,10 +4689,9 @@
       "source_file": "custom_components/saj_h2_modbus/const.py",
       "source_location": "L66",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "sensorgroup",
       "id": "custom_components_saj_h2_modbus_const_sensorgroup",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "sensorgroup"
     },
     {
       "label": "SajModbusSensorEntityDescription",
@@ -4717,10 +4699,9 @@
       "source_file": "custom_components/saj_h2_modbus/const.py",
       "source_location": "L75",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "sajmodbussensorentitydescription",
       "id": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "sajmodbussensorentitydescription"
     },
     {
       "label": "create_sensor_descriptions()",
@@ -4728,10 +4709,9 @@
       "source_file": "custom_components/saj_h2_modbus/const.py",
       "source_location": "L175",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "create_sensor_descriptions()",
       "id": "custom_components_saj_h2_modbus_const_create_sensor_descriptions",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "create_sensor_descriptions()"
     },
     {
       "label": "A class that describes SAJ H2 sensor entities.",
@@ -4739,10 +4719,9 @@
       "source_file": "custom_components/saj_h2_modbus/const.py",
       "source_location": "L76",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "a class that describes saj h2 sensor entities.",
       "id": "custom_components_saj_h2_modbus_const_rationale_76",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "a class that describes saj h2 sensor entities."
     },
     {
       "label": "hub.py",
@@ -4750,10 +4729,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "hub.py",
       "id": "custom_components_saj_h2_modbus_hub",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "hub.py"
     },
     {
       "label": "SAJModbusHub",
@@ -4761,10 +4739,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L129",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "sajmodbushub",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "sajmodbushub"
     },
     {
       "label": ".__init__()",
@@ -4772,10 +4749,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L130",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".__init__()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".__init__()"
     },
     {
       "label": "._init_locks()",
@@ -4783,10 +4759,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L191",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._init_locks()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._init_locks()"
     },
     {
       "label": "._init_fast_poll_state()",
@@ -4794,10 +4769,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L228",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._init_fast_poll_state()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._init_fast_poll_state()"
     },
     {
       "label": "._init_charge_control()",
@@ -4805,10 +4779,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L252",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._init_charge_control()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._init_charge_control()"
     },
     {
       "label": "._init_setters()",
@@ -4816,10 +4789,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L268",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._init_setters()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._init_setters()"
     },
     {
       "label": "._set_power_state()",
@@ -4827,10 +4799,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L285",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._set_power_state()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._set_power_state()"
     },
     {
       "label": "._set_charging_state()",
@@ -4838,10 +4809,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L294",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._set_charging_state()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_charging_state",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._set_charging_state()"
     },
     {
       "label": "._set_discharging_state()",
@@ -4849,10 +4819,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L297",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._set_discharging_state()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_discharging_state",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._set_discharging_state()"
     },
     {
       "label": "._set_passive_mode()",
@@ -4860,10 +4829,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L300",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._set_passive_mode()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_passive_mode",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._set_passive_mode()"
     },
     {
       "label": ".process_pending_now()",
@@ -4871,10 +4839,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L303",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".process_pending_now()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".process_pending_now()"
     },
     {
       "label": "._async_update_data()",
@@ -4882,10 +4849,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L312",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._async_update_data()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._async_update_data()"
     },
     {
       "label": "Any",
@@ -4893,10 +4859,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "any",
       "id": "any",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "any"
     },
     {
       "label": "._run_reader_methods()",
@@ -4904,10 +4869,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L343",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._run_reader_methods()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._run_reader_methods()"
     },
     {
       "label": "._start_update_loop()",
@@ -4915,10 +4879,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L423",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._start_update_loop()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._start_update_loop()"
     },
     {
       "label": "._schedule_update_loop()",
@@ -4926,10 +4889,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L447",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._schedule_update_loop()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._schedule_update_loop()"
     },
     {
       "label": ".start_fast_updates()",
@@ -4937,10 +4899,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L486",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".start_fast_updates()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".start_fast_updates()"
     },
     {
       "label": "._run_fast_modbus_read()",
@@ -4948,10 +4909,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L521",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._run_fast_modbus_read()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._run_fast_modbus_read()"
     },
     {
       "label": "Lock",
@@ -4959,10 +4919,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "lock",
       "id": "lock",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "lock"
     },
     {
       "label": "._publish_fast_mqtt()",
@@ -4970,10 +4929,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L555",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._publish_fast_mqtt()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._publish_fast_mqtt()"
     },
     {
       "label": "._notify_fast_listeners()",
@@ -4981,10 +4939,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L559",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._notify_fast_listeners()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._notify_fast_listeners()"
     },
     {
       "label": "._async_update_fast()",
@@ -4992,10 +4949,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L568",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._async_update_fast()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._async_update_fast()"
     },
     {
       "label": ".async_add_fast_listener()",
@@ -5003,10 +4959,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L652",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".async_add_fast_listener()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_add_fast_listener",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".async_add_fast_listener()"
     },
     {
       "label": ".update_connection_settings()",
@@ -5014,10 +4969,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L665",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".update_connection_settings()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".update_connection_settings()"
     },
     {
       "label": "._cleanup_fast_update_callbacks()",
@@ -5025,10 +4979,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L767",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._cleanup_fast_update_callbacks()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._cleanup_fast_update_callbacks()"
     },
     {
       "label": ".async_unload_entry()",
@@ -5036,10 +4989,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L784",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".async_unload_entry()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_unload_entry",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".async_unload_entry()"
     },
     {
       "label": "._cleanup_rmw_locks()",
@@ -5047,10 +4999,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L804",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._cleanup_rmw_locks()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._cleanup_rmw_locks()"
     },
     {
       "label": "._async_cleanup_cache()",
@@ -5058,10 +5009,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L831",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._async_cleanup_cache()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._async_cleanup_cache()"
     },
     {
       "label": "._lock_order_guard()",
@@ -5069,10 +5019,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L855",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._lock_order_guard()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._lock_order_guard()"
     },
     {
       "label": "._write_register()",
@@ -5080,10 +5029,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L875",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._write_register()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._write_register()"
     },
     {
       "label": "._wait_for_write_done()",
@@ -5091,10 +5039,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L916",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._wait_for_write_done()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._wait_for_write_done()"
     },
     {
       "label": "._read_registers()",
@@ -5102,10 +5049,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L936",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "._read_registers()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "._read_registers()"
     },
     {
       "label": ".merge_write_register()",
@@ -5113,10 +5059,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L960",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": ".merge_write_register()",
       "id": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": ".merge_write_register()"
     },
     {
       "label": "SAJ Modbus Hub with optimized processing and fixed interval system.",
@@ -5124,10 +5069,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "saj modbus hub with optimized processing and fixed interval system.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_1",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "saj modbus hub with optimized processing and fixed interval system."
     },
     {
       "label": "Initialise all asyncio locks and synchronisation primitives.",
@@ -5135,10 +5079,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L192",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "initialise all asyncio locks and synchronisation primitives.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_192",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "initialise all asyncio locks and synchronisation primitives."
     },
     {
       "label": "Initialise fast/ultra-fast polling callback handles and listener registry.",
@@ -5146,10 +5089,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L229",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "initialise fast/ultra-fast polling callback handles and listener registry.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_229",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "initialise fast/ultra-fast polling callback handles and listener registry."
     },
     {
       "label": "Initialise charge/discharge control handler, setters and cache cleanup timer.",
@@ -5157,10 +5099,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L253",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "initialise charge/discharge control handler, setters and cache cleanup timer.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_253",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "initialise charge/discharge control handler, setters and cache cleanup timer."
     },
     {
       "label": "Initializes dynamic setters.",
@@ -5168,10 +5109,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L269",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "initializes dynamic setters.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_269",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "initializes dynamic setters."
     },
     {
       "label": "Set a power state with pending flag and trigger processing.",
@@ -5179,10 +5119,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L288",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "set a power state with pending flag and trigger processing.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_288",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "set a power state with pending flag and trigger processing."
     },
     {
       "label": "Immediately process pending settings.",
@@ -5190,10 +5129,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L304",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "immediately process pending settings.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_304",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "immediately process pending settings."
     },
     {
       "label": "Regular poll cycle (slow).",
@@ -5201,10 +5139,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L313",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "regular poll cycle (slow).",
       "id": "custom_components_saj_h2_modbus_hub_rationale_313",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "regular poll cycle (slow)."
     },
     {
       "label": "Executes all readers using the provided client.",
@@ -5212,10 +5149,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L344",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "executes all readers using the provided client.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_344",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "executes all readers using the provided client."
     },
     {
       "label": "Start an update loop with the given interval.",
@@ -5223,10 +5159,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L426",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "start an update loop with the given interval.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_426",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "start an update loop with the given interval."
     },
     {
       "label": "Schedule an update loop robustly based on HA startup state.",
@@ -5234,10 +5169,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L450",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "schedule an update loop robustly based on ha startup state.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_450",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "schedule an update loop robustly based on ha startup state."
     },
     {
       "label": "Start fast update loops based on configuration.",
@@ -5245,10 +5179,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L487",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "start fast update loops based on configuration.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_487",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "start fast update loops based on configuration."
     },
     {
       "label": "Execute Modbus read with one-shot retry for fast poll cycle.          Returns th",
@@ -5256,10 +5189,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L524",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "execute modbus read with one-shot retry for fast poll cycle.          returns th",
       "id": "custom_components_saj_h2_modbus_hub_rationale_524",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "execute modbus read with one-shot retry for fast poll cycle.          returns th"
     },
     {
       "label": "Publish fast-poll sensor values to MQTT.",
@@ -5267,10 +5199,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L556",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "publish fast-poll sensor values to mqtt.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_556",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "publish fast-poll sensor values to mqtt."
     },
     {
       "label": "Notify HA entity listeners about updated fast-poll sensor data.          Only ca",
@@ -5278,10 +5209,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L560",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "notify ha entity listeners about updated fast-poll sensor data.          only ca",
       "id": "custom_components_saj_h2_modbus_hub_rationale_560",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "notify ha entity listeners about updated fast-poll sensor data.          only ca"
     },
     {
       "label": "Perform fast update of sensor data with performance optimizations.          PERF",
@@ -5289,10 +5219,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L569",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "perform fast update of sensor data with performance optimizations.          perf",
       "id": "custom_components_saj_h2_modbus_hub_rationale_569",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "perform fast update of sensor data with performance optimizations.          perf"
     },
     {
       "label": "Update connection settings. Full signature restored to support positional argume",
@@ -5300,10 +5229,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L680",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "update connection settings. full signature restored to support positional argume",
       "id": "custom_components_saj_h2_modbus_hub_rationale_680",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "update connection settings. full signature restored to support positional argume"
     },
     {
       "label": "Clean up all fast update callbacks.",
@@ -5311,10 +5239,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L768",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "clean up all fast update callbacks.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_768",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "clean up all fast update callbacks."
     },
     {
       "label": "Clean up stale RMW locks (idle > TTL).",
@@ -5322,10 +5249,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L805",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "clean up stale rmw locks (idle > ttl).",
       "id": "custom_components_saj_h2_modbus_hub_rationale_805",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "clean up stale rmw locks (idle > ttl)."
     },
     {
       "label": "Periodically clean up stale connection cache entries and reset daily exclusions.",
@@ -5333,10 +5259,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L832",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "periodically clean up stale connection cache entries and reset daily exclusions.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_832",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "periodically clean up stale connection cache entries and reset daily exclusions."
     },
     {
       "label": "Track lock ordering to detect potential deadlocks in nested paths.",
@@ -5344,10 +5269,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L856",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "track lock ordering to detect potential deadlocks in nested paths.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_856",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "track lock ordering to detect potential deadlocks in nested paths."
     },
     {
       "label": "Helper for charge_control.py to write via connection service.          Uses dedi",
@@ -5355,10 +5279,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L878",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "helper for charge_control.py to write via connection service.          uses dedi",
       "id": "custom_components_saj_h2_modbus_hub_rationale_878",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "helper for charge_control.py to write via connection service.          uses dedi"
     },
     {
       "label": "Wait for any pending write operation to finish \u2013 bounded to prevent         infi",
@@ -5366,10 +5289,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L917",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "wait for any pending write operation to finish \u2013 bounded to prevent         infi",
       "id": "custom_components_saj_h2_modbus_hub_rationale_917",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "wait for any pending write operation to finish \u2013 bounded to prevent         infi"
     },
     {
       "label": "Helper for charge_control.py to read via connection service.          Waits for",
@@ -5377,10 +5299,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L937",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "helper for charge_control.py to read via connection service.          waits for",
       "id": "custom_components_saj_h2_modbus_hub_rationale_937",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "helper for charge_control.py to read via connection service.          waits for"
     },
     {
       "label": "Read-modify-write with per-register lock to preserve shared bits.",
@@ -5388,10 +5309,9 @@
       "source_file": "custom_components/saj_h2_modbus/hub.py",
       "source_location": "L966",
       "_origin": "ast",
-      "community": 1,
-      "norm_label": "read-modify-write with per-register lock to preserve shared bits.",
       "id": "custom_components_saj_h2_modbus_hub_rationale_966",
-      "community_name": "SAJModbusHub"
+      "community": 1,
+      "norm_label": "read-modify-write with per-register lock to preserve shared bits."
     },
     {
       "label": "sensor.py",
@@ -5399,10 +5319,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "sensor.py",
       "id": "custom_components_saj_h2_modbus_sensor",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "sensor.py"
     },
     {
       "label": "async_setup_entry()",
@@ -5410,10 +5329,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L20",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "async_setup_entry()",
       "id": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "async_setup_entry()"
     },
     {
       "label": "AddConfigEntryEntitiesCallback",
@@ -5421,10 +5339,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "addconfigentryentitiescallback",
       "id": "addconfigentryentitiescallback",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "addconfigentryentitiescallback"
     },
     {
       "label": "SajSensor",
@@ -5432,10 +5349,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L53",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "sajsensor",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "sajsensor"
     },
     {
       "label": ".__init__()",
@@ -5443,10 +5359,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L56",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".__init__()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".__init__()"
     },
     {
       "label": ".native_value()",
@@ -5454,10 +5369,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L108",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".native_value()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_native_value",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".native_value()"
     },
     {
       "label": ".available()",
@@ -5465,10 +5379,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L118",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".available()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_available",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".available()"
     },
     {
       "label": ".async_added_to_hass()",
@@ -5476,10 +5389,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L122",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".async_added_to_hass()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".async_added_to_hass()"
     },
     {
       "label": ".async_will_remove_from_hass()",
@@ -5487,10 +5399,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L135",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".async_will_remove_from_hass()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".async_will_remove_from_hass()"
     },
     {
       "label": "._handle_coordinator_update()",
@@ -5498,10 +5409,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L143",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "._handle_coordinator_update()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "._handle_coordinator_update()"
     },
     {
       "label": "._update_fast_listener_registration()",
@@ -5509,10 +5419,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L155",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "._update_fast_listener_registration()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "._update_fast_listener_registration()"
     },
     {
       "label": "._handle_fast_update()",
@@ -5520,10 +5429,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L189",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "._handle_fast_update()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_fast_update",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "._handle_fast_update()"
     },
     {
       "label": "._cleanup_fast_listener()",
@@ -5531,10 +5439,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L227",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "._cleanup_fast_listener()",
       "id": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "._cleanup_fast_listener()"
     },
     {
       "label": "FastPollSensor",
@@ -5542,10 +5449,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L248",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "fastpollsensor",
       "id": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "fastpollsensor"
     },
     {
       "label": ".__init__()",
@@ -5553,10 +5459,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L259",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": ".__init__()",
       "id": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": ".__init__()"
     },
     {
       "label": "Set up SAJ sensors from a config entry.",
@@ -5564,10 +5469,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L23",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "set up saj sensors from a config entry.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_23",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "set up saj sensors from a config entry."
     },
     {
       "label": "Base class for SAJ Modbus sensors.",
@@ -5575,10 +5479,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L54",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "base class for saj modbus sensors.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_54",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "base class for saj modbus sensors."
     },
     {
       "label": "Initialize the sensor.",
@@ -5586,10 +5489,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L63",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "initialize the sensor.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_63",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "initialize the sensor."
     },
     {
       "label": "Return the state of the sensor.",
@@ -5597,10 +5499,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L109",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "return the state of the sensor.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_109",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "return the state of the sensor."
     },
     {
       "label": "Return if entity is available.",
@@ -5608,10 +5509,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L119",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "return if entity is available.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_119",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "return if entity is available."
     },
     {
       "label": "When entity is added to hass.",
@@ -5619,10 +5519,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L123",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "when entity is added to hass.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_123",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "when entity is added to hass."
     },
     {
       "label": "When entity will be removed from hass.",
@@ -5630,10 +5529,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L136",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "when entity will be removed from hass.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_136",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "when entity will be removed from hass."
     },
     {
       "label": "Handle updated data from the main coordinator.",
@@ -5641,10 +5539,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L144",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "handle updated data from the main coordinator.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_144",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "handle updated data from the main coordinator."
     },
     {
       "label": "Register or unregister fast listener based on current hub config.",
@@ -5652,10 +5549,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L156",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "register or unregister fast listener based on current hub config.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_156",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "register or unregister fast listener based on current hub config."
     },
     {
       "label": "Handle fast update notification (10s interval).",
@@ -5663,10 +5559,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L190",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "handle fast update notification (10s interval).",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_190",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "handle fast update notification (10s interval)."
     },
     {
       "label": "Ensure fast listener is removed exactly once when entity is torn down.",
@@ -5674,10 +5569,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L228",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "ensure fast listener is removed exactly once when entity is torn down.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_228",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "ensure fast listener is removed exactly once when entity is torn down."
     },
     {
       "label": "Sensor for fast-polling (10s) - NO state_class to prevent DB logging.      These",
@@ -5685,10 +5579,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L249",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "sensor for fast-polling (10s) - no state_class to prevent db logging.      these",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_249",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "sensor for fast-polling (10s) - no state_class to prevent db logging.      these"
     },
     {
       "label": "Initialize the fast-poll sensor.",
@@ -5696,10 +5589,9 @@
       "source_file": "custom_components/saj_h2_modbus/sensor.py",
       "source_location": "L266",
       "_origin": "ast",
-      "community": 4,
-      "norm_label": "initialize the fast-poll sensor.",
       "id": "custom_components_saj_h2_modbus_sensor_rationale_266",
-      "community_name": "SajSensor"
+      "community": 4,
+      "norm_label": "initialize the fast-poll sensor."
     }
   ],
   "links": [
@@ -6669,9 +6561,9 @@
       "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup",
-      "target": "custom_components_saj_h2_modbus_init_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_init_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6681,9 +6573,9 @@
       "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_init_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_init_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6693,9 +6585,9 @@
       "source_location": "L78",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_unload_entry",
-      "target": "custom_components_saj_h2_modbus_init_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_init_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6705,9 +6597,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_update_options",
-      "target": "custom_components_saj_h2_modbus_init_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_init_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6717,9 +6609,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_create_hub",
-      "target": "custom_components_saj_h2_modbus_init_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_init_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6729,9 +6621,9 @@
       "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "sajconfigentry"
+      "target": "sajconfigentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6741,9 +6633,9 @@
       "source_location": "L78",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_unload_entry",
-      "target": "sajconfigentry"
+      "target": "sajconfigentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6753,9 +6645,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_update_options",
-      "target": "sajconfigentry"
+      "target": "sajconfigentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6765,9 +6657,9 @@
       "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_create_device_info",
-      "target": "custom_components_saj_h2_modbus_init_py_configentry"
+      "target": "custom_components_saj_h2_modbus_init_py_configentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6777,9 +6669,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_create_hub",
-      "target": "custom_components_saj_h2_modbus_init_py_configentry"
+      "target": "custom_components_saj_h2_modbus_init_py_configentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -8479,9 +8371,9 @@
       "source_location": "L75",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
-      "target": "sensorentitydescription"
+      "target": "sensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -8491,9 +8383,9 @@
       "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "target": "custom_components_saj_h2_modbus_hub_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_hub_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -8503,9 +8395,9 @@
       "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "target": "custom_components_saj_h2_modbus_hub_py_configentry"
+      "target": "custom_components_saj_h2_modbus_hub_py_configentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -8515,9 +8407,9 @@
       "source_location": "L27",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub",
-      "target": "custom_components_saj_h2_modbus_modbus_readers"
+      "target": "custom_components_saj_h2_modbus_modbus_readers",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -11724,9 +11616,9 @@
       "source_location": "L20",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_sensor_py_homeassistant"
+      "target": "custom_components_saj_h2_modbus_sensor_py_homeassistant",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -11736,9 +11628,9 @@
       "source_location": "L20",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_sensor_py_configentry"
+      "target": "custom_components_saj_h2_modbus_sensor_py_configentry",
+      "confidence_score": 1.0
     },
     {
       "relation": "inherits",
@@ -11747,9 +11639,9 @@
       "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "sensorentity"
+      "target": "sensorentity",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -13832,9 +13724,9 @@
       "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "coordinatorentity"
+      "target": "coordinatorentity",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14155,24 +14047,24 @@
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
-      "source_location": "L19",
+      "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_const"
+      "target": "custom_components_saj_h2_modbus_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "re_exports",
       "context": "export",
       "confidence": "EXTRACTED",
       "source_file": "custom_components/saj_h2_modbus/__init__.py",
-      "source_location": "L30",
+      "source_location": "L19",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_hub"
+      "target": "custom_components_saj_h2_modbus_const",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -14182,9 +14074,9 @@
       "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14193,9 +14085,9 @@
       "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_async_setup"
+      "target": "custom_components_saj_h2_modbus_init_async_setup",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14204,9 +14096,9 @@
       "source_location": "L50",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_async_setup_entry"
+      "target": "custom_components_saj_h2_modbus_init_async_setup_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14215,9 +14107,9 @@
       "source_location": "L78",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_async_unload_entry"
+      "target": "custom_components_saj_h2_modbus_init_async_unload_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14226,9 +14118,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_async_update_options"
+      "target": "custom_components_saj_h2_modbus_init_async_update_options",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14237,9 +14129,9 @@
       "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_create_device_info"
+      "target": "custom_components_saj_h2_modbus_init_create_device_info",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14248,9 +14140,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_create_hub"
+      "target": "custom_components_saj_h2_modbus_init_create_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14259,9 +14151,9 @@
       "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init",
-      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data"
+      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14270,9 +14162,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_1",
-      "target": "custom_components_saj_h2_modbus_init"
+      "target": "custom_components_saj_h2_modbus_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14281,9 +14173,9 @@
       "source_location": "L45",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_45",
-      "target": "custom_components_saj_h2_modbus_init_async_setup"
+      "target": "custom_components_saj_h2_modbus_init_async_setup",
+      "confidence_score": 1.0
     },
     {
       "relation": "indirect_call",
@@ -14293,9 +14185,9 @@
       "source_location": "L61",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 0.5,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_init_async_update_options"
+      "target": "custom_components_saj_h2_modbus_init_async_update_options",
+      "confidence_score": 0.5
     },
     {
       "relation": "calls",
@@ -14305,9 +14197,9 @@
       "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_init_create_device_info"
+      "target": "custom_components_saj_h2_modbus_init_create_device_info",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -14317,9 +14209,9 @@
       "source_location": "L55",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_init_create_hub"
+      "target": "custom_components_saj_h2_modbus_init_create_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -14329,9 +14221,9 @@
       "source_location": "L57",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data"
+      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14340,9 +14232,9 @@
       "source_location": "L51",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_51",
-      "target": "custom_components_saj_h2_modbus_init_async_setup_entry"
+      "target": "custom_components_saj_h2_modbus_init_async_setup_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14351,9 +14243,9 @@
       "source_location": "L79",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_79",
-      "target": "custom_components_saj_h2_modbus_init_async_unload_entry"
+      "target": "custom_components_saj_h2_modbus_init_async_unload_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14362,9 +14254,9 @@
       "source_location": "L101",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_101",
-      "target": "custom_components_saj_h2_modbus_init_async_update_options"
+      "target": "custom_components_saj_h2_modbus_init_async_update_options",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -14374,9 +14266,9 @@
       "source_location": "L124",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_create_hub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14385,9 +14277,9 @@
       "source_location": "L125",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_125",
-      "target": "custom_components_saj_h2_modbus_init_create_hub"
+      "target": "custom_components_saj_h2_modbus_init_create_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14396,9 +14288,9 @@
       "source_location": "L161",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_161",
-      "target": "custom_components_saj_h2_modbus_init_create_device_info"
+      "target": "custom_components_saj_h2_modbus_init_create_device_info",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14407,9 +14299,9 @@
       "source_location": "L171",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_rationale_171",
-      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data"
+      "target": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -14419,9 +14311,9 @@
       "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_init_update_device_info_from_inverter_data",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14430,9 +14322,9 @@
       "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const",
-      "target": "custom_components_saj_h2_modbus_const_create_sensor_descriptions"
+      "target": "custom_components_saj_h2_modbus_const_create_sensor_descriptions",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14441,9 +14333,9 @@
       "source_location": "L75",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14452,9 +14344,9 @@
       "source_location": "L66",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const",
-      "target": "custom_components_saj_h2_modbus_const_sensorgroup"
+      "target": "custom_components_saj_h2_modbus_const_sensorgroup",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -14464,9 +14356,9 @@
       "source_location": "L19",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub",
-      "target": "custom_components_saj_h2_modbus_const"
+      "target": "custom_components_saj_h2_modbus_const",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -14476,9 +14368,9 @@
       "source_location": "L14",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_const"
+      "target": "custom_components_saj_h2_modbus_const",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -14488,9 +14380,9 @@
       "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const_create_sensor_descriptions",
-      "target": "custom_components_saj_h2_modbus_const_sensorgroup"
+      "target": "custom_components_saj_h2_modbus_const_sensorgroup",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -14500,9 +14392,9 @@
       "source_location": "L188",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const_create_sensor_descriptions",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14511,9 +14403,9 @@
       "source_location": "L76",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_const_rationale_76",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -14523,9 +14415,9 @@
       "source_location": "L14",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "uses",
@@ -14534,9 +14426,9 @@
       "source_location": "L14",
       "weight": 0.8,
       "_origin": "ast",
-      "confidence_score": 0.5,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 0.5
     },
     {
       "relation": "references",
@@ -14546,9 +14438,9 @@
       "source_location": "L259",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "uses",
@@ -14557,9 +14449,9 @@
       "source_location": "L14",
       "weight": 0.8,
       "_origin": "ast",
-      "confidence_score": 0.5,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 0.5
     },
     {
       "relation": "references",
@@ -14569,9 +14461,9 @@
       "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
-      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription"
+      "target": "custom_components_saj_h2_modbus_const_sajmodbussensorentitydescription",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -14580,9 +14472,9 @@
       "source_location": "L129",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -14591,9 +14483,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_1",
-      "target": "custom_components_saj_h2_modbus_hub"
+      "target": "custom_components_saj_h2_modbus_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -14603,9 +14495,9 @@
       "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_hub"
+      "target": "custom_components_saj_h2_modbus_hub",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14614,9 +14506,9 @@
       "source_location": "L652",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_add_fast_listener"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_add_fast_listener",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14625,9 +14517,9 @@
       "source_location": "L831",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14636,9 +14528,9 @@
       "source_location": "L784",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_unload_entry"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_unload_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14647,9 +14539,9 @@
       "source_location": "L312",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14658,9 +14550,9 @@
       "source_location": "L568",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14669,9 +14561,9 @@
       "source_location": "L767",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14680,9 +14572,9 @@
       "source_location": "L804",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14691,9 +14583,9 @@
       "source_location": "L130",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14702,9 +14594,9 @@
       "source_location": "L252",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14713,9 +14605,9 @@
       "source_location": "L228",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14724,9 +14616,9 @@
       "source_location": "L191",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14735,9 +14627,9 @@
       "source_location": "L268",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14746,9 +14638,9 @@
       "source_location": "L855",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14757,9 +14649,9 @@
       "source_location": "L960",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14768,9 +14660,9 @@
       "source_location": "L559",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14779,9 +14671,9 @@
       "source_location": "L303",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14790,9 +14682,9 @@
       "source_location": "L555",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14801,9 +14693,9 @@
       "source_location": "L936",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14812,9 +14704,9 @@
       "source_location": "L521",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14823,9 +14715,9 @@
       "source_location": "L343",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14834,9 +14726,9 @@
       "source_location": "L447",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14845,9 +14737,9 @@
       "source_location": "L294",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_charging_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_charging_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14856,9 +14748,9 @@
       "source_location": "L297",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_discharging_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_discharging_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14867,9 +14759,9 @@
       "source_location": "L300",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_passive_mode"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_passive_mode",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14878,9 +14770,9 @@
       "source_location": "L285",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14889,9 +14781,9 @@
       "source_location": "L486",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14900,9 +14792,9 @@
       "source_location": "L423",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14911,9 +14803,9 @@
       "source_location": "L665",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14922,9 +14814,9 @@
       "source_location": "L916",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -14933,9 +14825,9 @@
       "source_location": "L875",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -14945,9 +14837,9 @@
       "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "uses",
@@ -14956,9 +14848,9 @@
       "source_location": "L15",
       "weight": 0.8,
       "_origin": "ast",
-      "confidence_score": 0.5,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 0.5
     },
     {
       "relation": "references",
@@ -14968,9 +14860,9 @@
       "source_location": "L259",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "uses",
@@ -14979,9 +14871,9 @@
       "source_location": "L15",
       "weight": 0.8,
       "_origin": "ast",
-      "confidence_score": 0.5,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 0.5
     },
     {
       "relation": "references",
@@ -14991,9 +14883,9 @@
       "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15003,9 +14895,9 @@
       "source_location": "L189",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15015,9 +14907,9 @@
       "source_location": "L188",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15027,9 +14919,9 @@
       "source_location": "L187",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15038,9 +14930,9 @@
       "source_location": "L192",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_192",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15050,9 +14942,9 @@
       "source_location": "L203",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_locks",
-      "target": "lock"
+      "target": "lock",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15061,9 +14953,9 @@
       "source_location": "L229",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_229",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_fast_poll_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15072,9 +14964,9 @@
       "source_location": "L253",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_253",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15084,9 +14976,9 @@
       "source_location": "L260",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_charge_control",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15095,9 +14987,9 @@
       "source_location": "L269",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_269",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_init_setters",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15106,9 +14998,9 @@
       "source_location": "L288",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_288",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15118,9 +15010,9 @@
       "source_location": "L295",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_charging_state",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15130,9 +15022,9 @@
       "source_location": "L298",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_discharging_state",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15142,9 +15034,9 @@
       "source_location": "L301",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_passive_mode",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15154,9 +15046,9 @@
       "source_location": "L292",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_set_power_state",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15165,9 +15057,9 @@
       "source_location": "L304",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_304",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_process_pending_now",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15176,9 +15068,9 @@
       "source_location": "L313",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_313",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15188,9 +15080,9 @@
       "source_location": "L312",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data",
-      "target": "any"
+      "target": "any",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15200,9 +15092,9 @@
       "source_location": "L319",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_data",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15212,9 +15104,9 @@
       "source_location": "L555",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt",
-      "target": "any"
+      "target": "any",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15224,9 +15116,9 @@
       "source_location": "L521",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
-      "target": "any"
+      "target": "any",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15236,9 +15128,9 @@
       "source_location": "L343",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods",
-      "target": "any"
+      "target": "any",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15247,9 +15139,9 @@
       "source_location": "L344",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_344",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_reader_methods",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15258,9 +15150,9 @@
       "source_location": "L426",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_426",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15270,9 +15162,9 @@
       "source_location": "L472",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15281,9 +15173,9 @@
       "source_location": "L450",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_450",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15293,9 +15185,9 @@
       "source_location": "L497",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_schedule_update_loop",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15304,9 +15196,9 @@
       "source_location": "L487",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_487",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15316,9 +15208,9 @@
       "source_location": "L759",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_start_fast_updates",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15327,9 +15219,9 @@
       "source_location": "L524",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_524",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15339,9 +15231,9 @@
       "source_location": "L605",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15351,9 +15243,9 @@
       "source_location": "L521",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_run_fast_modbus_read",
-      "target": "lock"
+      "target": "lock",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15363,9 +15255,9 @@
       "source_location": "L984",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "target": "lock"
+      "target": "lock",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15374,9 +15266,9 @@
       "source_location": "L556",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_556",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15386,9 +15278,9 @@
       "source_location": "L631",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_publish_fast_mqtt",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15397,9 +15289,9 @@
       "source_location": "L560",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_560",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15409,9 +15301,9 @@
       "source_location": "L635",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_notify_fast_listeners",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15420,9 +15312,9 @@
       "source_location": "L569",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_569",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15432,9 +15324,9 @@
       "source_location": "L604",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15444,9 +15336,9 @@
       "source_location": "L913",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_update_fast",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15455,9 +15347,9 @@
       "source_location": "L680",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_680",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15467,9 +15359,9 @@
       "source_location": "L755",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_update_connection_settings",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15478,9 +15370,9 @@
       "source_location": "L768",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_768",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15490,9 +15382,9 @@
       "source_location": "L785",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_unload_entry",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_fast_update_callbacks",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15501,9 +15393,9 @@
       "source_location": "L805",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_805",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15513,9 +15405,9 @@
       "source_location": "L834",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_cleanup_rmw_locks",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15524,9 +15416,9 @@
       "source_location": "L832",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_832",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_async_cleanup_cache",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15535,9 +15427,9 @@
       "source_location": "L856",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_856",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15547,9 +15439,9 @@
       "source_location": "L967",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15559,9 +15451,9 @@
       "source_location": "L944",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15571,9 +15463,9 @@
       "source_location": "L900",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_lock_order_guard",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15582,9 +15474,9 @@
       "source_location": "L878",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_878",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15594,9 +15486,9 @@
       "source_location": "L1003",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_write_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15605,9 +15497,9 @@
       "source_location": "L917",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_917",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15617,9 +15509,9 @@
       "source_location": "L993",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15629,9 +15521,9 @@
       "source_location": "L942",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_wait_for_write_done",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15640,9 +15532,9 @@
       "source_location": "L937",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_937",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15652,9 +15544,9 @@
       "source_location": "L996",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_read_registers",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15663,9 +15555,9 @@
       "source_location": "L966",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_hub_rationale_966",
-      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register"
+      "target": "custom_components_saj_h2_modbus_hub_sajmodbushub_merge_write_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -15674,9 +15566,9 @@
       "source_location": "L20",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_sensor_async_setup_entry"
+      "target": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -15685,9 +15577,9 @@
       "source_location": "L248",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -15696,9 +15588,9 @@
       "source_location": "L53",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -15708,9 +15600,9 @@
       "source_location": "L20",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "target": "addconfigentryentitiescallback"
+      "target": "addconfigentryentitiescallback",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15720,9 +15612,9 @@
       "source_location": "L37",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15732,9 +15624,9 @@
       "source_location": "L34",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15743,9 +15635,9 @@
       "source_location": "L23",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_23",
-      "target": "custom_components_saj_h2_modbus_sensor_async_setup_entry"
+      "target": "custom_components_saj_h2_modbus_sensor_async_setup_entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "inherits",
@@ -15754,9 +15646,9 @@
       "source_location": "L248",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15765,9 +15657,9 @@
       "source_location": "L54",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_54",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15776,9 +15668,9 @@
       "source_location": "L122",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15787,9 +15679,9 @@
       "source_location": "L135",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15798,9 +15690,9 @@
       "source_location": "L118",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_available"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_available",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15809,9 +15701,9 @@
       "source_location": "L227",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15820,9 +15712,9 @@
       "source_location": "L143",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15831,9 +15723,9 @@
       "source_location": "L189",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_fast_update"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_fast_update",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15842,9 +15734,9 @@
       "source_location": "L56",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_init"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15853,9 +15745,9 @@
       "source_location": "L108",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_native_value"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_native_value",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -15864,9 +15756,9 @@
       "source_location": "L155",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15875,9 +15767,9 @@
       "source_location": "L63",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_63",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_init"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15887,9 +15779,9 @@
       "source_location": "L64",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_init",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15898,9 +15790,9 @@
       "source_location": "L109",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_109",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_native_value"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_native_value",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15909,9 +15801,9 @@
       "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_119",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_available"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_available",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15920,9 +15812,9 @@
       "source_location": "L123",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_123",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15932,9 +15824,9 @@
       "source_location": "L127",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15944,9 +15836,9 @@
       "source_location": "L133",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_async_added_to_hass",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15955,9 +15847,9 @@
       "source_location": "L136",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_136",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15967,9 +15859,9 @@
       "source_location": "L137",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_async_will_remove_from_hass",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -15978,9 +15870,9 @@
       "source_location": "L144",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_144",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15990,9 +15882,9 @@
       "source_location": "L146",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_coordinator_update",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -16001,9 +15893,9 @@
       "source_location": "L156",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_156",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_update_fast_listener_registration",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -16012,9 +15904,9 @@
       "source_location": "L190",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_190",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_fast_update"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_handle_fast_update",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -16023,9 +15915,9 @@
       "source_location": "L228",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_228",
-      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener"
+      "target": "custom_components_saj_h2_modbus_sensor_sajsensor_cleanup_fast_listener",
+      "confidence_score": 1.0
     },
     {
       "relation": "method",
@@ -16034,9 +15926,9 @@
       "source_location": "L259",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -16045,9 +15937,9 @@
       "source_location": "L249",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_249",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -16056,9 +15948,9 @@
       "source_location": "L266",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "custom_components_saj_h2_modbus_sensor_rationale_266",
-      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init"
+      "target": "custom_components_saj_h2_modbus_sensor_fastpollsensor_init",
+      "confidence_score": 1.0
     }
   ],
   "hyperedges": [],
