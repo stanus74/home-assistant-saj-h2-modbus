@@ -85,7 +85,6 @@ power_sensors_group = SensorGroup(
     device_class=SensorDeviceClass.POWER,
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:solar-power",
-    force_update=True,  # enable force_update for the entire group
 )
 
 apparent_power_sensors_group = SensorGroup(
@@ -93,7 +92,6 @@ apparent_power_sensors_group = SensorGroup(
     device_class=SensorDeviceClass.APPARENT_POWER,
     state_class=SensorStateClass.MEASUREMENT,
     icon="mdi:flash-outline",
-    force_update=True,
 )
 
 voltage_sensors_group = SensorGroup(
