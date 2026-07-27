@@ -54,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool:
 
     hub = await _create_hub(hass, entry)
     hub.device_info = _create_device_info(entry)
+    _update_device_info_from_inverter_data(hub)
     entry.runtime_data = hub
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -162,4 +163,34 @@ def _create_device_info(entry: ConfigEntry) -> dict:
         "identifiers": {(DOMAIN, entry.data[CONF_NAME])},
         "name": entry.data[CONF_NAME],
         "manufacturer": ATTR_MANUFACTURER,
+        "model": "SAJ H2",
     }
+
+
+def _update_device_info_from_inverter_data(hub: SAJModbusHub) -> None:
+    """Enrich device info with firmware/hardware data after first refresh."""
+    data = hub.inverter_data
+    if not data:
+        return
+
+    sw_parts = [
+        data.get("dv"),
+        data.get("mcv"),
+        data.get("scv"),
+    ]
+    sw_version = ".".join(str(v) for v in sw_parts if v is not None)
+    if sw_version:
+        hub.device_info["sw_version"] = sw_version
+
+    hw_parts = [
+        data.get("disphwversion"),
+        data.get("ctrlhwversion"),
+        data.get("powerhwversion"),
+    ]
+    hw_version = ".".join(str(v) for v in hw_parts if v is not None)
+    if hw_version:
+        hub.device_info["hw_version"] = hw_version
+
+    model = data.get("devtype")
+    if model is not None:
+        hub.device_info["model"] = f"SAJ H2 ({model})"

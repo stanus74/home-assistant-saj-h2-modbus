@@ -63,6 +63,8 @@
         "/^git add -A && git commit -m \"fix\\(sensor\\): reduce DB writes by disabling force_update for power sensors\"$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "git add": true,
+        "git commit": true
     }
 }
