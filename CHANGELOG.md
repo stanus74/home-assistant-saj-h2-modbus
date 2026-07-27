@@ -1,3 +1,17 @@
+## v3.0.1
+
+> **Bugfix release:** Follow-up to v3.0.0 with code-quality improvements and a fix for input entity initialization after restart.
+
+### Code Quality
+
+- **Consistent Future Annotations:** Added `from __future__ import annotations` to `const.py`, `config_flow.py`, `sensor.py`, `text.py`, and `utils.py` for consistent forward-reference handling and modern type annotations across the integration.
+
+### Fixed
+
+- **Number and Time Inputs Now Initialize from Live Inverter Data:** After a Home Assistant restart, writable Number and Text entities for charge/discharge settings used to show hard-coded default values until the next 60-second poll refreshed them. They now read their current value from the hub cache as soon as the entity is added, so the UI reflects the inverter's actual state immediately.
+
+---
+
 ## v3.0.0
 
 > **Home Assistant 2026 readiness:** This release brings the integration in line with the current
@@ -5,10 +19,6 @@
 > `integration_type`, a modernized options flow, config-entry `runtime_data`, and the current
 > config-entry entity callbacks — without changing any entity IDs, so existing automations and
 > dashboards keep working.
-
-### Code Quality
-
-- **Consistent Future Annotations:** Added `from __future__ import annotations` to `const.py`, `config_flow.py`, `sensor.py`, `text.py`, and `utils.py` for consistent forward-reference handling and modern type annotations across the integration.
 
 ### Added New Sensors
 

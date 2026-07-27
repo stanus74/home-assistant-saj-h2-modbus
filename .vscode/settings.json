@@ -7,6 +7,30 @@
         "/^git add -A && git commit -m \"style\\(typing\\): add future annotations import consistently\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^graphify query \"race conditions locks Modbus socket write priority reconnect\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify query \"entity initialization number text sensor hub\\.inverter_data\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify query \"home assistant spec compliance manifest config flow runtime_data unique_id has_entity_name\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify explain \"SajGenericNumberEntity\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify explain \"SajTimeTextEntity\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"fix\\(number,text\\): initialize input values from hub cache\"$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

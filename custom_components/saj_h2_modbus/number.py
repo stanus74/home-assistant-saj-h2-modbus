@@ -241,6 +241,7 @@ class SajGenericNumberEntity(SajNumberEntity):
     def __init__(
         self,
         hub: SAJModbusHub,
+        key: str,
         name: str,
         unique_id: str,
         min_val: float,
@@ -255,8 +256,17 @@ class SajGenericNumberEntity(SajNumberEntity):
         super().__init__(
             hub, name, unique_id, min_val, max_val, step, default, device_info, unit
         )
+        self._key = key
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
         self._allowed_values = allowed_values
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the current value from the hub cache if available."""
+        await super().async_added_to_hass()
+        current = self._hub.inverter_data.get(self._key)
+        if current is not None:
+            self._attr_native_value = current
+            self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
         val = int(value)
@@ -290,6 +300,7 @@ async def async_setup_entry(
     for desc in NUMBER_DEFINITIONS:
         entity = SajGenericNumberEntity(
             hub=hub,
+            key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
             unique_id=f"{hub.name}_{desc['key']}_input",
             min_val=desc["min"],
@@ -308,6 +319,7 @@ async def async_setup_entry(
     for desc in charge_definitions["number"]:
         entity = SajGenericNumberEntity(
             hub=hub,
+            key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
             unique_id=f"{hub.name}_{desc['key']}_input",
             min_val=desc["min"],
@@ -325,6 +337,7 @@ async def async_setup_entry(
     for desc in discharge_definitions["number"]:
         entity = SajGenericNumberEntity(
             hub=hub,
+            key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
             unique_id=f"{hub.name}_{desc['key']}_input",
             min_val=desc["min"],
