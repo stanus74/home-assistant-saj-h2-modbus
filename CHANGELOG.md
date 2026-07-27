@@ -12,6 +12,7 @@
 - **Fast-Poll Listener Active Flag Renamed:** The internal `_is_removed_event` flag in `sensor.py` was inverted (`set()` meant "active"). It is now named `_is_active` and its semantics are explicit, making the cleanup path easier to follow and reducing the chance of mis-reading the listener state.
 - **Reduced Database Writes for Power Sensors:** Power and apparent-power sensors no longer use `force_update=True`, so Home Assistant only records a state change when the value actually changes instead of writing every 10-second fast-poll tick to the database.
 - **Device Info Shows Firmware and Hardware Versions:** The SAJ device page now displays the inverter's software and hardware versions (read from the static inverter data after the first successful refresh) and a model hint.
+- **Defensive Circuit Breaker Context Reset:** The ContextVar that routes each Modbus call to the correct per-instance circuit breaker is now reset defensively. If a task is cancelled during cleanup, the reset no longer raises an unhandled exception.
 
 ---
 

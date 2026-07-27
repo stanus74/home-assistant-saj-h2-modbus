@@ -409,7 +409,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
             return new_cache
         finally:
-            _CIRCUIT_BREAKER_CTX.reset(cb_token)
+            try:
+                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+            except LookupError:
+                _LOGGER.debug(
+                    "Circuit breaker context reset skipped in _run_reader_methods "
+                    "(task cancelled?)"
+                )
 
     # --- FAST POLLING ---
 
@@ -628,7 +634,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     if not ultra:
                         self._notify_fast_listeners()
             finally:
-                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                try:
+                    _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                except LookupError:
+                    _LOGGER.debug(
+                        "Circuit breaker context reset skipped in fast update "
+                        "(task cancelled?)"
+                    )
 
         except ReconnectionNeededError:
             await self.connection.notify_error()
@@ -937,7 +949,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     client, self._read_lock, 1, address, count
                 )
             finally:
-                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                try:
+                    _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                except LookupError:
+                    _LOGGER.debug(
+                        "Circuit breaker context reset skipped in _read_registers "
+                        "(task cancelled?)"
+                    )
 
     async def merge_write_register(
         self,
