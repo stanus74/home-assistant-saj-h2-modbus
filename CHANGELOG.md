@@ -1,3 +1,11 @@
+## Unreleased
+
+### Fixed
+
+- **MQTT Topics No Longer Vanish After Restart:** Sensor values are now published with the MQTT `retain` flag set, so the broker keeps the last known value for each topic. Previously, if no publisher (Realtime/Ultra-Fast polling or "Publish all sensors") ran again after a Home Assistant restart, the whole `saj` topic tree stayed empty until a value was published again.
+
+---
+
 ## v3.0.1
 
 > **Bugfix release:** Follow-up to v3.0.0 with code-quality improvements and fixes for input entity initialization and fast-poll listener clarity.

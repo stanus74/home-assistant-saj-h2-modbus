@@ -453,7 +453,7 @@ class MqttPublisher:
         if not self._paho_client:
             return
         await self.hass.async_add_executor_job(
-            self._paho_client.publish, topic, payload
+            self._paho_client.publish, topic, payload, 0, True
         )
 
     def _on_paho_connect(self, client, userdata, flags, rc, *args):
@@ -588,7 +588,7 @@ class MqttPublisher:
                     for key, payload in messages:
                         topic = f"{self.topic_prefix}/{key}"
                         await self._circuit_breaker.call(
-                            mqtt.async_publish, self.hass, topic, payload
+                            mqtt.async_publish, self.hass, topic, payload, 0, True
                         )
                 else:
                     # Log throttling
