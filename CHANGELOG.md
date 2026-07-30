@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- **App Mode 10 (Peak Shaving) Allowed Again:** `number.saj_app_mode` had its allowed values locked down in v2.8.6 to `[0, 1, 2, 3, 12]` to block undefined intermediate values, but this accidentally also blocked the valid and documented mode `10` (Peak Shaving Mode). It is now back in the whitelist.
 - **MQTT Topics No Longer Vanish After Restart:** Sensor values are now published with the MQTT `retain` flag set, so the broker keeps the last known value for each topic. Previously, if no publisher (Realtime/Ultra-Fast polling or "Publish all sensors") ran again after a Home Assistant restart, the whole `saj` topic tree stayed empty until a value was published again.
 
 ---

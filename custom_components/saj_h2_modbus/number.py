@@ -35,7 +35,7 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_app_mode",
-        "allowed_values": [0, 1, 2, 3, 12],
+        "allowed_values": [0, 1, 2, 3, 10, 12],
     },
     {
         "key": "export_limit",
