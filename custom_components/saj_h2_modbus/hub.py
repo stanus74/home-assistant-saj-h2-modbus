@@ -342,6 +342,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _run_reader_methods(self, client: Any) -> dict[str, Any]:
         """Executes all readers using the provided client."""
+        # Give writes priority over the slow poll, same as the ultra-fast loop
+        # (_async_update_fast) and the RMW read path (_read_registers) already
+        # do. A full slow poll runs through every reader group and takes several
+        # seconds; without this wait it can interleave with an in-flight write
+        # sequence and overwrite inverter_data with pre-write values, which a
+        # subsequent merge_write_register() would then read back as "current".
+        await self._wait_for_write_done()
+
         # Activate the per-instance circuit breaker for the entire read session.
         # All downstream try_read_registers() calls pick this up via the ContextVar.
         cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
