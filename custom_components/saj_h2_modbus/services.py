@@ -26,6 +26,12 @@ _LOGGER = logging.getLogger(__name__)
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 
+# Minimum interval between two publishes of the same key. Must stay below the
+# active poll interval (1 s ultra-fast / 10 s fast / 60 s slow) or updates are
+# dropped instead of merely throttled.
+_ULTRA_FAST_PUBLISH_INTERVAL = 0.5
+_DEFAULT_PUBLISH_INTERVAL = 2.0
+
 
 class ModbusConnectionManager:
     """
@@ -254,9 +260,14 @@ class MqttPublisher:
         self._paho_available: bool | None = None
         self._last_strategy_log = 0.0
 
-        # Publish rate-limiting tracking
+        # Publish rate-limiting tracking. The interval has to stay below the
+        # poll interval, otherwise it silently drops updates: with the default
+        # 2 s and ultra-fast polling at 1 s, every second tick was discarded
+        # and MQTT never delivered the 1 s resolution the mode promises.
         self._publish_timestamps: dict[str, float] = {}
-        self._min_publish_interval: float = 2.0  # Min 2s between repeats
+        self._min_publish_interval: float = (
+            _ULTRA_FAST_PUBLISH_INTERVAL if ultra_fast_enabled else _DEFAULT_PUBLISH_INTERVAL
+        )
         self._publish_timestamps_ttl: float = 3600.0  # Prune entries idle > 1h
         self._last_publish_timestamps_cleanup: float = 0.0
 
@@ -521,6 +532,11 @@ class MqttPublisher:
         # Update CB
         self._circuit_breaker.failure_threshold = 3 if ultra_fast_enabled else 5
         self._circuit_breaker.timeout = 30 if ultra_fast_enabled else 60
+
+        # Keep the publish rate limit in sync with the poll mode (see __init__)
+        self._min_publish_interval = (
+            _ULTRA_FAST_PUBLISH_INTERVAL if ultra_fast_enabled else _DEFAULT_PUBLISH_INTERVAL
+        )
 
         # Re-evaluate strategy only when strategy inputs change
         prev_strategy = self.strategy
