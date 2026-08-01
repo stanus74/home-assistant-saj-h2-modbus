@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- **No More Concurrent Command Queue Workers:** Settings writes are serialized through a single command queue worker, but `process_pending()` — called on every 60-second poll — checked the "worker already running" flag without holding the queue lock. If that check happened to interleave with a write triggered from an entity, a second worker could start and drain the same queue in parallel. Two workers issuing read-modify-write sequences at the same time could clobber each other on the shared charge/discharge registers (`0x3604`/`0x3605`), so a slot enable/disable could silently get lost. Worker startup now happens in one place under the queue lock, and the worker task is always tracked so it is reliably cancelled on unload.
 - **App Mode 10 (Peak Shaving) Allowed Again:** `number.saj_app_mode` had its allowed values locked down in v2.8.6 to `[0, 1, 2, 3, 12]` to block undefined intermediate values, but this accidentally also blocked the valid and documented mode `10` (Peak Shaving Mode). It is now back in the whitelist.
 - **MQTT Topics No Longer Vanish After Restart:** Sensor values are now published with the MQTT `retain` flag set, so the broker keeps the last known value for each topic. Previously, if no publisher (Realtime/Ultra-Fast polling or "Publish all sensors") ran again after a Home Assistant restart, the whole `saj` topic tree stayed empty until a value was published again.
 

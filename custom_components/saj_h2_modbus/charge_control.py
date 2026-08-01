@@ -228,20 +228,34 @@ class ChargeSettingHandler:
 
     # ========== QUEUE MANAGEMENT ==========
 
+    async def _ensure_worker(self) -> None:
+        """Start the queue worker unless one is already running.
+
+        This is the ONLY place that may create a `_process_queue()` task. The
+        `_is_processing` check and the task creation have to happen together
+        under `_processing_lock`: without that, two callers can both observe
+        `_is_processing == False` and start a worker each, so two workers drain
+        the same queue in parallel and issue concurrent read-modify-write
+        sequences on shared registers (0x3604/0x3605), clobbering each other.
+        Assigning `_worker_task` here also keeps the task cancellable from
+        `shutdown()`.
+        """
+        async with self._processing_lock:
+            if self._is_processing:
+                return
+            self._is_processing = True
+            self._worker_task = asyncio.create_task(self._process_queue())
+            self._worker_task.add_done_callback(
+                lambda _: setattr(self, "_worker_task", None)
+            )
+
     async def queue_command(self, command: Command) -> None:
         """Adds a new command to the queue and starts processing if needed."""
         if self._stop_processing:
             _LOGGER.debug("Queue is stopped; ignoring command %s", command.type)
             return
-        async with self._processing_lock:
-            await self._command_queue.put(command)
-            if not self._is_processing:
-                self._is_processing = True
-                self._stop_processing = False
-                self._worker_task = asyncio.create_task(self._process_queue())
-                self._worker_task.add_done_callback(
-                    lambda _: setattr(self, "_worker_task", None)
-                )
+        await self._command_queue.put(command)
+        await self._ensure_worker()
 
     async def _process_queue(self) -> None:
         """Processes the command queue."""
@@ -832,10 +846,11 @@ class ChargeSettingHandler:
 
     async def process_pending(self) -> None:
         """Legacy method. Queue processing is now automatic."""
-        # Ensure processing is running if queue is not empty
-        if not self._command_queue.empty() and not self._is_processing:
-            self._is_processing = True
-            create_logged_task(self.hub.hass, self._process_queue(), logger=_LOGGER)
+        # Ensure processing is running if queue is not empty. Goes through
+        # _ensure_worker() so this cannot race with queue_command() and spawn
+        # a second worker on the same queue.
+        if not self._command_queue.empty():
+            await self._ensure_worker()
 
     def get_optimistic_overlay(
         self, current_data: dict[str, Any]

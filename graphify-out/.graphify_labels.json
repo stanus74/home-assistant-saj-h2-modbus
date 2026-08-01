@@ -1,1 +1,23 @@
-{"0": "ChargeSettingHandler", "1": "SAJModbusHub", "2": "modbus_utils.py", "3": "modbus_readers.py", "4": "SajSensor", "5": "SajTimeTextEntity", "6": "MqttPublisher", "7": "CodeAnalyzer", "8": "CodeAnalyzer", "9": "utils.py", "10": "ModbusConnectionManager", "11": "BaseSajSwitch", "12": "__init__.py", "13": "Any", "14": "Lock", "15": "AddConfigEntryEntitiesCallback", "16": "CoordinatorEntity", "17": "SAJModbusHub", "18": "Logger"}
+{
+  "0": "ChargeSettingHandler",
+  "1": "SAJModbusHub",
+  "2": "ConnectionCache",
+  "3": "modbus_readers.py",
+  "4": "SajSensor",
+  "5": "SajTimeTextEntity",
+  "6": "MqttPublisher",
+  "7": "CodeAnalyzer",
+  "8": "CodeAnalyzer",
+  "9": "__init__.py",
+  "10": "ModbusConnectionManager",
+  "11": "BaseSajSwitch",
+  "12": "hub.py",
+  "13": "._async_update_fast",
+  "14": ".__init__",
+  "15": "number.py",
+  "16": "_create_retry_handlers",
+  "17": ".merge_write_register",
+  "18": "._schedule_update_loop",
+  "19": "ModbusCircuitBreaker",
+  "20": "._async_cleanup_cache"
+}
