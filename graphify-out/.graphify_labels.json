@@ -16,5 +16,6 @@
   "14": ".__init__",
   "15": "._write_register",
   "16": "._schedule_update_loop",
-  "17": "._cleanup_fast_update_callbacks"
+  "17": "._cleanup_fast_update_callbacks",
+  "18": "ConnectionCache"
 }

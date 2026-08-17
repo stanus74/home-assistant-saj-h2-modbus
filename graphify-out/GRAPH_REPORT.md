@@ -1,16 +1,16 @@
 # Graph Report - home-assistant-saj-h2-modbus  (2026-08-17)
 
 ## Corpus Check
-- 15 files · ~25,631 words
+- 15 files · ~25,730 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 520 nodes · 937 edges · 18 communities
+- 520 nodes · 937 edges · 19 communities
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 32 edges (avg confidence: 0.51)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e1ae331b`
+- Built from commit: `41629239`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -33,6 +33,7 @@
 - ._write_register
 - ._schedule_update_loop
 - ._cleanup_fast_update_callbacks
+- ConnectionCache
 
 ## God Nodes (most connected - your core abstractions)
 1. `SAJModbusHub` - 56 edges
@@ -61,7 +62,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (18 total, 0 thin omitted)
+## Communities (19 total, 0 thin omitted)
 
 ### Community 0 - "SAJModbusHub"
 Cohesion: 0.20
@@ -76,8 +77,8 @@ Cohesion: 0.13
 Nodes (47): decode_time(), _decode_time_power_slots(), _log_partial_errors(), Lock, ModbusTcpClient, Emit a single log entry for partial decode failures., Helper function to read and decode Modbus data with partial-error resilience., Reads basic inverter data using the pymodbus 3.9 API. (+39 more)
 
 ### Community 3 - "hub.py"
-Cohesion: 0.07
-Nodes (42): SAJ Modbus Hub with optimized processing and fixed interval system., CircuitBreaker, _connect_client_inplace(), ConnectionCache, _create_retry_handlers(), _exponential_backoff(), get_modbus_circuit_breaker(), ModbusCircuitBreaker (+34 more)
+Cohesion: 0.12
+Nodes (32): SAJ Modbus Hub with optimized processing and fixed interval system., CircuitBreaker, _connect_client_inplace(), _create_retry_handlers(), _exponential_backoff(), get_modbus_circuit_breaker(), ModbusCircuitBreaker, _on_modbus_retry() (+24 more)
 
 ### Community 4 - "SajSensor"
 Cohesion: 0.08
@@ -125,7 +126,7 @@ Nodes (6): ConfigEntry, HomeAssistant, Initialise all asyncio locks and synchron
 
 ### Community 15 - "._write_register"
 Cohesion: 0.27
-Nodes (5): Helper for charge_control.py to read via connection service. Waits for any…, Read-modify-write with per-register lock to preserve shared bits., Track lock ordering to detect potential deadlocks in nested paths., Helper for charge_control.py to write via connection service. Uses dedicated…, Wait for any pending write operation to finish – bounded to prevent infinite…
+Nodes (5): Wait for any pending write operation to finish – bounded to prevent infinite…, Helper for charge_control.py to read via connection service. Waits for any…, Read-modify-write with per-register lock to preserve shared bits., Track lock ordering to detect potential deadlocks in nested paths., Helper for charge_control.py to write via connection service. Uses dedicated…
 
 ### Community 16 - "._schedule_update_loop"
 Cohesion: 0.40
@@ -135,6 +136,10 @@ Nodes (3): callback, Start an update loop with the given interval., Schedule an 
 Cohesion: 0.29
 Nodes (3): Start fast update loops based on configuration., Update connection settings. Full signature restored to support positional…, Clean up all fast update callbacks.
 
+### Community 18 - "ConnectionCache"
+Cohesion: 0.13
+Nodes (10): ConnectionCache, Caches Modbus client connections to reduce connection overhead. PERFORMANCE…, Initialize connection cache. Args: cache_ttl: Time to live for cached…, Internal invalidate without lock. Must be called while holding _cache_lock., Get cached client if still valid. Returns: Cached client if valid, None…, Set cached client with TTL. Args: client: The client to cache, Invalidate the cached connection., Mark cache as immediately expired after a connection error. Faster than… (+2 more)
+
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
@@ -142,7 +147,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.374) - this node is a cross-community bridge._
 - **Why does `ChargeSettingHandler` connect `ChargeSettingHandler` to `SAJModbusHub`, `BaseSajSwitch`, `hub.py`, `.__init__`?**
   _High betweenness centrality (0.204) - this node is a cross-community bridge._
-- **Why does `ModbusConnectionManager` connect `ModbusConnectionManager` to `SAJModbusHub`, `hub.py`, `.__init__`?**
+- **Why does `ModbusConnectionManager` connect `ModbusConnectionManager` to `SAJModbusHub`, `ConnectionCache`, `hub.py`, `.__init__`?**
   _High betweenness centrality (0.107) - this node is a cross-community bridge._
 - **Are the 14 inferred relationships involving `SAJModbusHub` (e.g. with `ChargeSettingHandler` and `BlockUnsupportedError`) actually correct?**
   _`SAJModbusHub` has 14 INFERRED edges - model-reasoned connections that need verification._
@@ -151,4 +156,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `modbus_readers.py` be split into smaller, more focused modules?**
   _Cohesion score 0.12677304964539007 - nodes in this community are weakly interconnected._
 - **Should `hub.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.06818181818181818 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11561561561561562 - nodes in this community are weakly interconnected._

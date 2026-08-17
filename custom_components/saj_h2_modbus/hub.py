@@ -810,18 +810,28 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     "Updating scan interval: %s -> %ss", old_seconds, int(scan_interval)
                 )
 
-                # DataUpdateCoordinator does not guarantee automatic rescheduling when
-                # update_interval changes. Reschedule explicitly so Options changes take effect.
+                # DataUpdateCoordinator's update_interval setter does not reschedule the
+                # running timer, so a changed interval would otherwise only take effect
+                # after the next ordinary cycle. Reschedule explicitly to apply it now.
+                #
+                # _schedule_refresh() cancels the existing timer itself, so we must NOT
+                # cancel it beforehand: if the call below then failed, polling would be
+                # left with no timer at all and the integration would simply go quiet
+                # until reloaded, with nothing in the log explaining why.
                 try:
-                    unsub = getattr(self, "_unsub_refresh", None)
-                    if unsub:
-                        unsub()
                     schedule = getattr(self, "_schedule_refresh", None)
                     if callable(schedule):
                         schedule()
+                    else:
+                        _LOGGER.error(
+                            "Coordinator has no _schedule_refresh(); the new scan "
+                            "interval only takes effect after the next cycle."
+                        )
                 except Exception as e:
-                    _LOGGER.debug(
-                        "Failed to reschedule coordinator after interval change: %s", e
+                    _LOGGER.error(
+                        "Failed to reschedule coordinator after interval change: %s. "
+                        "The new scan interval takes effect after the next cycle.",
+                        e,
                     )
 
             self.fast_enabled = fast_enabled
