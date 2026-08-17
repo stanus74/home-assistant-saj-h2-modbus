@@ -1,32 +1,47 @@
 ## v3.1.0
 
+> **Stability release:** Closes three separate paths that could silently stop polling —
+> the integration would go completely quiet, with no log output, until it was manually
+> reloaded (issue #197). Also fixes a race in the settings write queue, makes ultra-fast
+> MQTT actually deliver its 1-second resolution, and makes degraded devices visible in
+> the log instead of silently dropping whole groups of sensors.
+>
+> Includes everything previously listed under v3.0.1, which was never released.
+
 ### Fixed
 
-- **A Single Bad Poll No Longer Blanks Every Sensor (#197):** The integration replaced its entire data cache with each poll cycle's result. If one cycle came back with little or nothing — likely when several register blocks are unsupported and already excluded — every other sensor lost its value and showed as `unknown`, while the update still counted as successful so the entities stayed "available". Cycle results are now merged into the cache, so a degraded cycle leaves previously known values intact. Values belonging to a register block that gets permanently disabled are dropped explicitly, so nothing keeps displaying a frozen reading.
-- **Changing the Scan Interval Can No Longer Stop Polling (#197):** When the scan interval was changed in the options, the integration cancelled the coordinator's refresh timer and then scheduled a new one. If that second step failed, polling was left with no timer at all — the integration went quiet until it was reloaded, and the only trace was a debug message invisible at normal log levels. The manual cancellation is gone (Home Assistant's scheduler already replaces the timer itself), so the window no longer exists, and any failure is now logged as an error.
-- **Polling No Longer Stops Silently (#197):** If a Modbus operation stalled — most commonly a connect against an unresponsive communication module, which pymodbus performs without any timeout of its own — the poll cycle never returned. Home Assistant's coordinator does not impose a timeout on an integration's update method, so it waited on that cycle forever: no further refresh was ever scheduled and nothing at all was logged. Polling stayed dead until the integration was manually reloaded, in one report for over 10 hours. Connect attempts are now capped at 10 seconds and the whole poll cycle is bounded, so a stalled cycle fails visibly and the next one runs as normal.
-- **Ultra-Fast Mode Now Actually Publishes Every Second:** MQTT publishing throttled repeat values of the same key to one every 2 seconds — but ultra-fast polling reads every 1 second, so every second update was silently discarded and topics only refreshed every 2-3 seconds. The rate limit now follows the poll mode (0.5 s with ultra-fast enabled, 2 s otherwise), so ultra-fast delivers the resolution it promises. Behaviour in the 10-second and 60-second modes is unchanged.
-- **Settings Writes No Longer Wait Behind a Full Poll Cycle:** The 60-second poll now waits for any in-flight register write to finish before it starts reading, which the 1-second ultra-fast loop and the read-modify-write path already did. Previously a poll could start mid-write and refresh the cached inverter data with pre-write values, so a following read-modify-write operation read a stale value as "current" — and writes triggered from the UI could be delayed by the length of a poll cycle.
+#### Polling stability (#197)
+
+- **Polling No Longer Stops Silently:** If a Modbus operation stalled — most commonly a connect against an unresponsive communication module, which pymodbus performs without any timeout of its own — the poll cycle never returned. Home Assistant's coordinator does not impose a timeout on an integration's update method, so it waited on that cycle forever: no further refresh was ever scheduled and nothing at all was logged. Polling stayed dead until the integration was manually reloaded, in one report for over 10 hours. Connect attempts are now capped at 10 seconds and the whole poll cycle is bounded, so a stalled cycle fails visibly and the next one runs as normal.
+- **A Single Bad Poll No Longer Blanks Every Sensor:** The integration replaced its entire data cache with each poll cycle's result. If one cycle came back with little or nothing — likely when several register blocks are unsupported and already excluded — every other sensor lost its value and showed as `unknown`, while the update still counted as successful so the entities stayed "available". Cycle results are now merged into the cache, so a degraded cycle leaves previously known values intact. Values belonging to a register block that gets permanently disabled are dropped explicitly, so nothing keeps displaying a frozen reading.
+- **Changing the Scan Interval Can No Longer Stop Polling:** When the scan interval was changed in the options, the integration cancelled the coordinator's refresh timer and then scheduled a new one. If that second step failed, polling was left with no timer at all — the integration went quiet until it was reloaded, and the only trace was a debug message invisible at normal log levels. The manual cancellation is gone (Home Assistant's scheduler already replaces the timer itself), so the window no longer exists, and any failure is now logged as an error.
+
+#### Settings writes
+
 - **No More Concurrent Command Queue Workers:** Settings writes are serialized through a single command queue worker, but `process_pending()` — called on every 60-second poll — checked the "worker already running" flag without holding the queue lock. If that check happened to interleave with a write triggered from an entity, a second worker could start and drain the same queue in parallel. Two workers issuing read-modify-write sequences at the same time could clobber each other on the shared charge/discharge registers (`0x3604`/`0x3605`), so a slot enable/disable could silently get lost. Worker startup now happens in one place under the queue lock, and the worker task is always tracked so it is reliably cancelled on unload.
+- **Settings Writes No Longer Wait Behind a Full Poll Cycle:** The 60-second poll now waits for any in-flight register write to finish before it starts reading, which the 1-second ultra-fast loop and the read-modify-write path already did. Previously a poll could start mid-write and refresh the cached inverter data with pre-write values, so a following read-modify-write operation read a stale value as "current" — and writes triggered from the UI could be delayed by the length of a poll cycle.
 - **App Mode 10 (Peak Shaving) Allowed Again:** `number.saj_app_mode` had its allowed values locked down in v2.8.6 to `[0, 1, 2, 3, 12]` to block undefined intermediate values, but this accidentally also blocked the valid and documented mode `10` (Peak Shaving Mode). It is now back in the whitelist.
+
+#### MQTT
+
+- **Ultra-Fast Mode Now Actually Publishes Every Second:** MQTT publishing throttled repeat values of the same key to one every 2 seconds — but ultra-fast polling reads every 1 second, so every second update was silently discarded and topics only refreshed every 2-3 seconds. The rate limit now follows the poll mode (0.5 s with ultra-fast enabled, 2 s otherwise), so ultra-fast delivers the resolution it promises. Behaviour in the 10-second and 60-second modes is unchanged.
 - **MQTT Topics No Longer Vanish After Restart:** Sensor values are now published with the MQTT `retain` flag set, so the broker keeps the last known value for each topic. Previously, if no publisher (Realtime/Ultra-Fast polling or "Publish all sensors") ran again after a Home Assistant restart, the whole `saj` topic tree stayed empty until a value was published again.
+
+#### Entities
+
+- **Number and Time Inputs Now Initialize from Live Inverter Data:** After a Home Assistant restart, writable Number and Text entities for charge/discharge settings used to show hard-coded default values until the next 60-second poll refreshed them. They now read their current value from the hub cache as soon as the entity is added, so the UI reflects the inverter's actual state immediately.
+- **Device Info Shows Firmware and Hardware Versions:** The SAJ device page now displays the inverter's software and hardware versions (read from the static inverter data after the first successful refresh) and a model hint.
+- **Reduced Database Writes for Power Sensors:** Power and apparent-power sensors no longer use `force_update=True`, so Home Assistant only records a state change when the value actually changes instead of writing every 10-second fast-poll tick to the database.
+- **Defensive Circuit Breaker Context Reset:** The ContextVar that routes each Modbus call to the correct per-instance circuit breaker is now reset defensively. If a task is cancelled during cleanup, the reset no longer raises an unhandled exception.
 
 ### Changed
 
 - **Disabled Register Blocks Are Now Reported Regularly (#197):** When a register block turns out to be unsupported by the inverter's firmware, it is excluded from polling and logged once. After that there was no trace of it at all, so a partially degraded device looked completely healthy in the log while entire groups of sensors silently stopped updating. The integration now logs a summary of all currently excluded blocks once an hour.
 
-
 ### Code Quality
 
 - **Consistent Future Annotations:** Added `from __future__ import annotations` to `const.py`, `config_flow.py`, `sensor.py`, `text.py`, and `utils.py` for consistent forward-reference handling and modern type annotations across the integration.
-
-### Fixed
-
-- **Number and Time Inputs Now Initialize from Live Inverter Data:** After a Home Assistant restart, writable Number and Text entities for charge/discharge settings used to show hard-coded default values until the next 60-second poll refreshed them. They now read their current value from the hub cache as soon as the entity is added, so the UI reflects the inverter's actual state immediately.
 - **Fast-Poll Listener Active Flag Renamed:** The internal `_is_removed_event` flag in `sensor.py` was inverted (`set()` meant "active"). It is now named `_is_active` and its semantics are explicit, making the cleanup path easier to follow and reducing the chance of mis-reading the listener state.
-- **Reduced Database Writes for Power Sensors:** Power and apparent-power sensors no longer use `force_update=True`, so Home Assistant only records a state change when the value actually changes instead of writing every 10-second fast-poll tick to the database.
-- **Device Info Shows Firmware and Hardware Versions:** The SAJ device page now displays the inverter's software and hardware versions (read from the static inverter data after the first successful refresh) and a model hint.
-- **Defensive Circuit Breaker Context Reset:** The ContextVar that routes each Modbus call to the correct per-instance circuit breaker is now reset defensively. If a task is cancelled during cleanup, the reset no longer raises an unhandled exception.
 
 ---
 
