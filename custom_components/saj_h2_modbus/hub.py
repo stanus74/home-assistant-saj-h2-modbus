@@ -249,6 +249,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._permanently_failed_blocks: set = set()
         self._last_exclusion_reset_time: float = time.monotonic()
 
+        # Keys each reader produced on its last successful run. Needed because
+        # inverter_data is merged rather than replaced (see _async_update_data):
+        # when a block is permanently disabled its values would otherwise stay
+        # frozen at whatever was read last, which is worse than showing nothing.
+        self._block_keys: dict[str, set[str]] = {}
+        self._stale_keys_to_drop: set[str] = set()
+
     def _init_charge_control(self, use_ha_mqtt: bool) -> None:
         """Initialise charge/discharge control handler, setters and cache cleanup timer."""
         self._pending_charging_state = None
@@ -341,8 +348,25 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 await self._setting_handler.process_pending()
 
                 cache = await self._run_reader_methods(client)
+
+                if not cache:
+                    _LOGGER.warning(
+                        "Poll cycle returned no data at all – keeping the previous "
+                        "values. Check whether the device is still responding."
+                    )
+
                 async with self._data_lock:
-                    self.inverter_data = cache
+                    # Merge instead of replace. A single degraded cycle (one bad
+                    # read, or several blocks already excluded) must not wipe every
+                    # other sensor: entities would report no value at all, which HA
+                    # shows as "unknown" while still counting the update as a
+                    # success. Keys of permanently disabled blocks are dropped
+                    # explicitly, so nothing keeps showing a frozen reading.
+                    if self._stale_keys_to_drop:
+                        for key in self._stale_keys_to_drop:
+                            self.inverter_data.pop(key, None)
+                        self._stale_keys_to_drop.clear()
+                    self.inverter_data.update(cache)
 
                 if self.mqtt.publish_all and self.inverter_data:
                     # Prevent duplicate MQTT publishing by excluding fast-poll sensors
@@ -420,6 +444,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         res = await method(client, self._read_lock)
                         if isinstance(res, dict):
                             new_cache.update(res)
+                            if res:
+                                # Remember which keys this block owns, so they can
+                                # be dropped again if it is ever disabled.
+                                self._block_keys[method.__name__] = set(res)
                         # Clear any previous failure streak on success
                         self._block_failure_counts.pop(method.__name__, None)
                     except ReconnectionNeededError:
@@ -431,6 +459,12 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         self._block_failure_counts[method.__name__] = count
                         if count >= _BLOCK_PERMANENT_FAILURE_THRESHOLD:
                             self._permanently_failed_blocks.add(method)
+                            # Values from this block will never be refreshed
+                            # again this session – drop them instead of leaving
+                            # stale readings behind once the merge takes over.
+                            self._stale_keys_to_drop |= self._block_keys.pop(
+                                method.__name__, set()
+                            )
                             _LOGGER.warning(
                                 "Block %s permanently disabled: not supported by this "
                                 "device firmware. Skipping for the rest of this session. "

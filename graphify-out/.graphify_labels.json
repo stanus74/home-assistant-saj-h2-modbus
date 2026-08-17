@@ -14,7 +14,7 @@
   "12": "._async_update_fast",
   "13": "ChargeSettingHandler",
   "14": ".__init__",
-  "15": ".merge_write_register",
+  "15": "._write_register",
   "16": "._schedule_update_loop",
-  "17": "._async_cleanup_cache"
+  "17": "._cleanup_fast_update_callbacks"
 }
