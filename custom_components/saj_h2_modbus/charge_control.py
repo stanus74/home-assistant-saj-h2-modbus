@@ -407,11 +407,13 @@ class ChargeSettingHandler:
         if field in ["start", "end"]:
             reg_val = self._parse_time_to_register(value)
             if reg_val is not None:
-                await self._write_and_cache(
+                # No cache update: the slot time entities are inputs, and the
+                # matching sensors are filled by the reader under its own keys
+                # (charge_start_time / charge2_start_time / ...) on the next poll.
+                await self._write_register_with_backoff(
                     slot_defs[field],
                     reg_val,
                     f"{label} {field}",
-                    {f"{label}_{field}": value},
                 )
             else:
                 _LOGGER.error("Invalid time format for %s %s: %s", label, field, value)

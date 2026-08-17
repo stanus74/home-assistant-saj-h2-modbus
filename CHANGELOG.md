@@ -40,6 +40,7 @@
 ### Code Quality
 
 - **Consistent Future Annotations:** Added `from __future__ import annotations` to `const.py`, `config_flow.py`, `sensor.py`, `text.py`, and `utils.py` for consistent forward-reference handling and modern type annotations across the integration.
+- **Removed a Dead Cache Write on Slot Time Changes:** After writing a charge/discharge slot start or end time, the handler stored the new value in the hub cache under a key (`charge1_start`) that no reader, sensor or entity ever reads. The entry had no effect and is gone. The writable time entities are input fields; the inverter's actual slot times are shown by the corresponding sensors, which the reader refreshes on the next poll.
 - **Fast-Poll Listener Active Flag Renamed:** The internal `_is_removed_event` flag in `sensor.py` was inverted (`set()` meant "active"). It is now named `_is_active` and its semantics are explicit, making the cleanup path easier to follow and reducing the chance of mis-reading the listener state.
 
 ---
