@@ -1,4 +1,4 @@
-## Unreleased
+## v3.1.0
 
 ### Fixed
 
@@ -15,11 +15,6 @@
 
 - **Disabled Register Blocks Are Now Reported Regularly (#197):** When a register block turns out to be unsupported by the inverter's firmware, it is excluded from polling and logged once. After that there was no trace of it at all, so a partially degraded device looked completely healthy in the log while entire groups of sensors silently stopped updating. The integration now logs a summary of all currently excluded blocks once an hour.
 
----
-
-## v3.0.1
-
-> **Bugfix release:** Follow-up to v3.0.0 with code-quality improvements and fixes for input entity initialization and fast-poll listener clarity.
 
 ### Code Quality
 
