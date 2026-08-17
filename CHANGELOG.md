@@ -5,8 +5,7 @@
 > reloaded (issue #197). Also fixes a race in the settings write queue, makes ultra-fast
 > MQTT actually deliver its 1-second resolution, and makes degraded devices visible in
 > the log instead of silently dropping whole groups of sensors.
->
-> Includes everything previously listed under v3.0.1, which was never released.
+
 
 ### Fixed
 
