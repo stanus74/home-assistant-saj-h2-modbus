@@ -291,22 +291,26 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self.set_passive_mode = self._set_passive_mode
 
     def _set_power_state(
-        self, value: bool | int | None, state_attr: str, handler_method: str
+        self, value: bool | int | None, handler_method: str
     ) -> None:
-        """Set a power state with pending flag and trigger processing."""
-        setattr(self, f"_pending_{state_attr}", value)
-        self.async_set_updated_data(self.inverter_data)
+        """Set a power state with pending flag and trigger processing.
+
+        The handler owns _pending_<x>_state and queues the command; queue_command()
+        starts the worker itself, so no extra processing task is needed here. It runs
+        before the state push so the switch's pending_write attribute is already set
+        when HA reads it.
+        """
         getattr(self._setting_handler, handler_method)(value)
-        create_logged_task(self.hass, self.process_pending_now(), logger=_LOGGER)
+        self.async_set_updated_data(self.inverter_data)
 
     async def _set_charging_state(self, value: bool) -> None:
-        self._set_power_state(value, "charging_state", "set_charging_state")
+        self._set_power_state(value, "set_charging_state")
 
     async def _set_discharging_state(self, value: bool) -> None:
-        self._set_power_state(value, "discharging_state", "set_discharging_state")
+        self._set_power_state(value, "set_discharging_state")
 
     async def _set_passive_mode(self, value: int | None) -> None:
-        self._set_power_state(value, "passive_mode_state", "set_passive_mode")
+        self._set_power_state(value, "set_passive_mode")
 
     async def process_pending_now(self) -> None:
         """Immediately process pending settings."""
