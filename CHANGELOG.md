@@ -10,6 +10,10 @@
 - **App Mode 10 (Peak Shaving) Allowed Again:** `number.saj_app_mode` had its allowed values locked down in v2.8.6 to `[0, 1, 2, 3, 12]` to block undefined intermediate values, but this accidentally also blocked the valid and documented mode `10` (Peak Shaving Mode). It is now back in the whitelist.
 - **MQTT Topics No Longer Vanish After Restart:** Sensor values are now published with the MQTT `retain` flag set, so the broker keeps the last known value for each topic. Previously, if no publisher (Realtime/Ultra-Fast polling or "Publish all sensors") ran again after a Home Assistant restart, the whole `saj` topic tree stayed empty until a value was published again.
 
+### Changed
+
+- **Disabled Register Blocks Are Now Reported Regularly (#197):** When a register block turns out to be unsupported by the inverter's firmware, it is excluded from polling and logged once. After that there was no trace of it at all, so a partially degraded device looked completely healthy in the log while entire groups of sensors silently stopped updating. The integration now logs a summary of all currently excluded blocks once an hour.
+
 ---
 
 ## v3.0.1

@@ -248,6 +248,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._block_failure_counts: dict[str, int] = {}
         self._permanently_failed_blocks: set = set()
         self._last_exclusion_reset_time: float = time.monotonic()
+        self._last_exclusion_report_time: float = time.monotonic()
 
         # Keys each reader produced on its last successful run. Needed because
         # inverter_data is merged rather than replaced (see _async_update_data):
@@ -909,10 +910,29 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         await self.connection.cleanup_cache()
         await self._cleanup_rmw_locks()
 
+        now_time = time.monotonic()
+
+        # Remind once an hour which register blocks are currently excluded. Without
+        # this the only trace is a single warning at the moment of exclusion, so a
+        # partially degraded device looks perfectly healthy in the log while whole
+        # groups of sensors silently never update.
+        if (
+            self._permanently_failed_blocks
+            and now_time - self._last_exclusion_report_time > 3600
+        ):
+            self._last_exclusion_report_time = now_time
+            _LOGGER.info(
+                "%d register block(s) currently disabled and not being polled: %s. "
+                "Their sensors will not update. The list is retried once every 24 h.",
+                len(self._permanently_failed_blocks),
+                ", ".join(
+                    sorted(m.__name__ for m in self._permanently_failed_blocks)
+                ),
+            )
+
         # Reset exclusion-liste every 24 hours to allow firmware updates to take effect
         # without requiring an HA restart. If a block is still unsupported, it will
         # be re-excluded after failing again.
-        now_time = time.monotonic()
         if now_time - self._last_exclusion_reset_time > 86400:  # 24 hours in seconds
             if self._permanently_failed_blocks:
                 excluded_count = len(self._permanently_failed_blocks)

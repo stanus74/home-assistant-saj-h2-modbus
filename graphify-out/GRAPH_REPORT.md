@@ -1,7 +1,7 @@
 # Graph Report - home-assistant-saj-h2-modbus  (2026-08-17)
 
 ## Corpus Check
-- 15 files · ~25,423 words
+- 15 files · ~25,631 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3c85a7e8`
+- Built from commit: `e1ae331b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -125,7 +125,7 @@ Nodes (6): ConfigEntry, HomeAssistant, Initialise all asyncio locks and synchron
 
 ### Community 15 - "._write_register"
 Cohesion: 0.27
-Nodes (5): Read-modify-write with per-register lock to preserve shared bits., Track lock ordering to detect potential deadlocks in nested paths., Helper for charge_control.py to write via connection service. Uses dedicated…, Wait for any pending write operation to finish – bounded to prevent infinite…, Helper for charge_control.py to read via connection service. Waits for any…
+Nodes (5): Helper for charge_control.py to read via connection service. Waits for any…, Read-modify-write with per-register lock to preserve shared bits., Track lock ordering to detect potential deadlocks in nested paths., Helper for charge_control.py to write via connection service. Uses dedicated…, Wait for any pending write operation to finish – bounded to prevent infinite…
 
 ### Community 16 - "._schedule_update_loop"
 Cohesion: 0.40
