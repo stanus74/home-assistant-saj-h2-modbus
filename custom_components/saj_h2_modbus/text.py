@@ -7,8 +7,9 @@ import re
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.text import TextEntity
 
 from .utils import generate_slot_definitions
@@ -58,11 +59,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class SajTimeTextEntity(TextEntity):
+class SajTimeTextEntity(CoordinatorEntity, TextEntity):
     """Base class for SAJ writable time entities."""
 
     def __init__(self, hub, key, name, unique_id, set_method, device_info):
         """Initialize the entity."""
+        super().__init__(hub)
         self._hub = hub
         self._key = key
         self._attr_name = name
@@ -92,22 +94,25 @@ class SajTimeTextEntity(TextEntity):
         self.set_method = set_method
         self._attr_device_info = device_info
 
+    @property
+    def available(self) -> bool:
+        """Config inputs stay editable even when a poll cycle fails."""
+        return True
+
     async def async_added_to_hass(self) -> None:
         """Restore the current time from the hub cache if available."""
         await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Adopt the slot time the last poll read back from the inverter."""
         current = self._hub.inverter_data.get(self._key)
         if isinstance(current, int):
             self._attr_native_value = f"{(current >> 8) & 0xFF:02d}:{current & 0xFF:02d}"
-            self.async_write_ha_state()
         elif isinstance(current, str) and re.match(self._attr_pattern, current):
             self._attr_native_value = current
-            self.async_write_ha_state()
-
-    async def async_update(self) -> None:
-        """Update is not used here to avoid additional Modbus requests."""
-        # We intentionally leave this update block empty,
-        # so that modbus registers are not queried again here.
-        pass
+        self.async_write_ha_state()
 
     async def async_set_value(self, value) -> None:
         """Set a new time value (Format 'HH:MM')."""

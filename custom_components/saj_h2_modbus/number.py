@@ -6,8 +6,9 @@ from typing import Any, TYPE_CHECKING
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .utils import generate_slot_definitions
 
 if TYPE_CHECKING:
@@ -202,12 +203,11 @@ NUMBER_DEFINITIONS = [
 ]
 
 
-class SajNumberEntity(NumberEntity):
+class SajNumberEntity(CoordinatorEntity["SAJModbusHub"], NumberEntity):
     """Base class for SAJ writable number entities."""
 
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
-
     def __init__(
         self,
         hub: SAJModbusHub,
@@ -220,6 +220,7 @@ class SajNumberEntity(NumberEntity):
         device_info: dict[str, Any],
         unit: str | None = None,
     ) -> None:
+        super().__init__(hub)
         self._hub = hub
         self._attr_name = name
         self._attr_unique_id = unique_id
@@ -233,6 +234,11 @@ class SajNumberEntity(NumberEntity):
     @property
     def native_value(self) -> float | None:
         return self._attr_native_value
+
+    @property
+    def available(self) -> bool:
+        """Config inputs stay editable even when a poll cycle fails."""
+        return True
 
 
 class SajGenericNumberEntity(SajNumberEntity):
@@ -263,10 +269,15 @@ class SajGenericNumberEntity(SajNumberEntity):
     async def async_added_to_hass(self) -> None:
         """Restore the current value from the hub cache if available."""
         await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Adopt the value the last poll read back from the inverter."""
         current = self._hub.inverter_data.get(self._key)
         if current is not None:
             self._attr_native_value = current
-            self.async_write_ha_state()
+        self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
         val = int(value)
