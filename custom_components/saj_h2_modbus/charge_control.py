@@ -198,6 +198,7 @@ class ChargeSettingHandler:
 
         # Locks & Caches
         self._app_mode_before_passive: int | None = None
+        self._app_mode_before_tou: int | None = None
 
         # Debounce for HA state flushes
         self._flush_pending: bool = False
@@ -656,6 +657,21 @@ class ChargeSettingHandler:
             _LOGGER.debug("Invalid time format '%s': %s", time_str, e)
         return None
 
+    def _capture_app_mode_before_tou(self) -> None:
+        """Remember the mode in effect before a slot forced Time of Use."""
+        if self._app_mode_before_tou is not None:
+            return
+        current_mode = self.hub.inverter_data.get("AppMode")
+        if current_mode is None:
+            return
+        try:
+            current = int(current_mode)
+        except (TypeError, ValueError):
+            return
+        # Only a mode the user can return to; 1 is the state we are leaving.
+        if current != APP_MODE_FORCE_CHARGE_DISCHARGE:
+            self._app_mode_before_tou = current
+
     def _capture_app_mode_before_passive(self) -> None:
         if self._app_mode_before_passive is not None:
             return
@@ -696,14 +712,18 @@ class ChargeSettingHandler:
         # 1 = Force Charge/Discharge (priority 2)
         # 0 = Self Consumption (priority 3)
 
-        desired_app_mode = 0  # Default
-
         if passive_active:
-            desired_app_mode = 3
+            desired_app_mode = APP_MODE_PASSIVE
         elif charge_enabled or discharge_enabled:
-            desired_app_mode = 1
+            # A slot became active: remember the mode the user had chosen so
+            # clearing the last slot can put it back instead of assuming 0.
+            self._capture_app_mode_before_tou()
+            desired_app_mode = APP_MODE_FORCE_CHARGE_DISCHARGE
+        elif self._app_mode_before_tou is not None:
+            desired_app_mode = self._app_mode_before_tou
+            self._app_mode_before_tou = None
         else:
-            desired_app_mode = 0
+            desired_app_mode = APP_MODE_SELF_CONSUMPTION
 
         # Apply
         await self._set_app_mode(desired_app_mode, "state synchronization", force=force)
