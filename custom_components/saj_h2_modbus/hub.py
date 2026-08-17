@@ -309,31 +309,65 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
     # --- COORDINATOR METHODS ---
 
+    @property
+    def _poll_timeout(self) -> float:
+        """Upper bound for one full poll cycle, in seconds.
+
+        DataUpdateCoordinator does NOT impose a timeout on its update method –
+        that is the integration's job. Without one, a single await that never
+        returns (e.g. a connect against an unresponsive host) leaves the
+        coordinator waiting forever: it never schedules another refresh and
+        logs nothing at all, so polling stops dead until the user reloads the
+        integration.
+
+        The bound is deliberately generous rather than tight. Its job is to turn
+        "never" into "eventually", not to police slow-but-healthy cycles: a
+        degraded cycle that retries several unresponsive register blocks can
+        legitimately run longer than the scan interval, and timing those out
+        would trade a silent stall for a permanent failure loop.
+        """
+        interval = (
+            self.update_interval.total_seconds() if self.update_interval else 60.0
+        )
+        return min(max(interval * 2.0, 90.0), 300.0)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Regular poll cycle (slow)."""
+        timeout = self._poll_timeout
         try:
-            client = await self.connection.get_client()  # Ensure connected
+            async with asyncio.timeout(timeout):
+                client = await self.connection.get_client()  # Ensure connected
 
-            await self._setting_handler.process_pending()
+                await self._setting_handler.process_pending()
 
-            cache = await self._run_reader_methods(client)
-            async with self._data_lock:
-                self.inverter_data = cache
+                cache = await self._run_reader_methods(client)
+                async with self._data_lock:
+                    self.inverter_data = cache
 
-            if self.mqtt.publish_all and self.inverter_data:
-                # Prevent duplicate MQTT publishing by excluding fast-poll sensors
-                # from the slow loop if they are already handled by fast/ultra-fast loops.
-                if self.fast_enabled or self.ultra_fast_enabled:
-                    publish_cache = {
-                        k: v for k, v in self.inverter_data.items()
-                        if k not in self._fast_poll_sensor_keys
-                    }
-                else:
-                    publish_cache = self.inverter_data
-                if publish_cache:
-                    await self.mqtt.publish_data(publish_cache)
+                if self.mqtt.publish_all and self.inverter_data:
+                    # Prevent duplicate MQTT publishing by excluding fast-poll sensors
+                    # from the slow loop if they are already handled by fast/ultra-fast loops.
+                    if self.fast_enabled or self.ultra_fast_enabled:
+                        publish_cache = {
+                            k: v for k, v in self.inverter_data.items()
+                            if k not in self._fast_poll_sensor_keys
+                        }
+                    else:
+                        publish_cache = self.inverter_data
+                    if publish_cache:
+                        await self.mqtt.publish_data(publish_cache)
 
-            return self.inverter_data
+                return self.inverter_data
+        except TimeoutError as err:
+            # Something inside the cycle stalled. Raising lets the coordinator
+            # log the failure and schedule the next refresh, instead of waiting
+            # on this cycle forever and silently stopping to poll.
+            _LOGGER.error(
+                "Poll cycle exceeded %.0fs and was aborted – the connection or a "
+                "register read appears stalled. Polling continues with the next cycle.",
+                timeout,
+            )
+            raise UpdateFailed(f"Poll cycle timed out after {timeout:.0f}s") from err
         except (ConnectionError, ReconnectionNeededError) as err:
             raise UpdateFailed(f"Connection error: {err}") from err
         except Exception as err:
