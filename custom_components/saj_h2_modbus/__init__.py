@@ -54,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool:
 
     hub = await _create_hub(hass, entry)
     hub.device_info = _create_device_info(entry)
+    _update_device_info_from_inverter_data(hub)
     entry.runtime_data = hub
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -61,11 +62,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool:
 
     # Start fast updates only after the entity platforms are set up, so the
     # first fast tick never fires before the fast listeners are registered.
-    if hub.fast_enabled:
+    #
+    # Both flags have to be checked here, exactly as update_connection_settings()
+    # does: start_fast_updates() starts the 1 s ultra-fast loop from its own
+    # branch, independent of fast_enabled. Checking fast_enabled alone left an
+    # ultra-fast-only setup — the sensible choice for anyone consuming the live
+    # data over MQTT — without any loop after every restart, while still working
+    # right after saving the options.
+    if hub.fast_enabled or hub.ultra_fast_enabled:
         await hub.start_fast_updates()
-        _LOGGER.info("Fast coordinator started (10s interval)")
+        _LOGGER.info(
+            "Fast update loops started (fast=%s, ultra_fast=%s)",
+            hub.fast_enabled,
+            hub.ultra_fast_enabled,
+        )
     else:
-        _LOGGER.info("Fast coordinator not started (disabled).")
+        _LOGGER.info("Fast update loops not started (both disabled).")
 
     end_time = time.monotonic()
     elapsed_time = end_time - start_time
@@ -162,4 +174,34 @@ def _create_device_info(entry: ConfigEntry) -> dict:
         "identifiers": {(DOMAIN, entry.data[CONF_NAME])},
         "name": entry.data[CONF_NAME],
         "manufacturer": ATTR_MANUFACTURER,
+        "model": "SAJ H2",
     }
+
+
+def _update_device_info_from_inverter_data(hub: SAJModbusHub) -> None:
+    """Enrich device info with firmware/hardware data after first refresh."""
+    data = hub.inverter_data
+    if not data:
+        return
+
+    sw_parts = [
+        data.get("dv"),
+        data.get("mcv"),
+        data.get("scv"),
+    ]
+    sw_version = ".".join(str(v) for v in sw_parts if v is not None)
+    if sw_version:
+        hub.device_info["sw_version"] = sw_version
+
+    hw_parts = [
+        data.get("disphwversion"),
+        data.get("ctrlhwversion"),
+        data.get("powerhwversion"),
+    ]
+    hw_version = ".".join(str(v) for v in hw_parts if v is not None)
+    if hw_version:
+        hub.device_info["hw_version"] = hw_version
+
+    model = data.get("devtype")
+    if model is not None:
+        hub.device_info["model"] = f"SAJ H2 ({model})"

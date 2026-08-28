@@ -248,6 +248,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._block_failure_counts: dict[str, int] = {}
         self._permanently_failed_blocks: set = set()
         self._last_exclusion_reset_time: float = time.monotonic()
+        self._last_exclusion_report_time: float = time.monotonic()
+
+        # Keys each reader produced on its last successful run. Needed because
+        # inverter_data is merged rather than replaced (see _async_update_data):
+        # when a block is permanently disabled its values would otherwise stay
+        # frozen at whatever was read last, which is worse than showing nothing.
+        self._block_keys: dict[str, set[str]] = {}
+        self._stale_keys_to_drop: set[str] = set()
 
     def _init_charge_control(self, use_ha_mqtt: bool) -> None:
         """Initialise charge/discharge control handler, setters and cache cleanup timer."""
@@ -283,22 +291,26 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self.set_passive_mode = self._set_passive_mode
 
     def _set_power_state(
-        self, value: bool | int | None, state_attr: str, handler_method: str
+        self, value: bool | int | None, handler_method: str
     ) -> None:
-        """Set a power state with pending flag and trigger processing."""
-        setattr(self, f"_pending_{state_attr}", value)
-        self.async_set_updated_data(self.inverter_data)
+        """Set a power state with pending flag and trigger processing.
+
+        The handler owns _pending_<x>_state and queues the command; queue_command()
+        starts the worker itself, so no extra processing task is needed here. It runs
+        before the state push so the switch's pending_write attribute is already set
+        when HA reads it.
+        """
         getattr(self._setting_handler, handler_method)(value)
-        create_logged_task(self.hass, self.process_pending_now(), logger=_LOGGER)
+        self.async_set_updated_data(self.inverter_data)
 
     async def _set_charging_state(self, value: bool) -> None:
-        self._set_power_state(value, "charging_state", "set_charging_state")
+        self._set_power_state(value, "set_charging_state")
 
     async def _set_discharging_state(self, value: bool) -> None:
-        self._set_power_state(value, "discharging_state", "set_discharging_state")
+        self._set_power_state(value, "set_discharging_state")
 
     async def _set_passive_mode(self, value: int | None) -> None:
-        self._set_power_state(value, "passive_mode_state", "set_passive_mode")
+        self._set_power_state(value, "set_passive_mode")
 
     async def process_pending_now(self) -> None:
         """Immediately process pending settings."""
@@ -309,31 +321,82 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
     # --- COORDINATOR METHODS ---
 
+    @property
+    def _poll_timeout(self) -> float:
+        """Upper bound for one full poll cycle, in seconds.
+
+        DataUpdateCoordinator does NOT impose a timeout on its update method –
+        that is the integration's job. Without one, a single await that never
+        returns (e.g. a connect against an unresponsive host) leaves the
+        coordinator waiting forever: it never schedules another refresh and
+        logs nothing at all, so polling stops dead until the user reloads the
+        integration.
+
+        The bound is deliberately generous rather than tight. Its job is to turn
+        "never" into "eventually", not to police slow-but-healthy cycles: a
+        degraded cycle that retries several unresponsive register blocks can
+        legitimately run longer than the scan interval, and timing those out
+        would trade a silent stall for a permanent failure loop.
+        """
+        interval = (
+            self.update_interval.total_seconds() if self.update_interval else 60.0
+        )
+        return min(max(interval * 2.0, 90.0), 300.0)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Regular poll cycle (slow)."""
+        timeout = self._poll_timeout
         try:
-            client = await self.connection.get_client()  # Ensure connected
+            async with asyncio.timeout(timeout):
+                client = await self.connection.get_client()  # Ensure connected
 
-            await self._setting_handler.process_pending()
+                await self._setting_handler.process_pending()
 
-            cache = await self._run_reader_methods(client)
-            async with self._data_lock:
-                self.inverter_data = cache
+                cache = await self._run_reader_methods(client)
 
-            if self.mqtt.publish_all and self.inverter_data:
-                # Prevent duplicate MQTT publishing by excluding fast-poll sensors
-                # from the slow loop if they are already handled by fast/ultra-fast loops.
-                if self.fast_enabled or self.ultra_fast_enabled:
-                    publish_cache = {
-                        k: v for k, v in self.inverter_data.items()
-                        if k not in self._fast_poll_sensor_keys
-                    }
-                else:
-                    publish_cache = self.inverter_data
-                if publish_cache:
-                    await self.mqtt.publish_data(publish_cache)
+                if not cache:
+                    _LOGGER.warning(
+                        "Poll cycle returned no data at all – keeping the previous "
+                        "values. Check whether the device is still responding."
+                    )
 
-            return self.inverter_data
+                async with self._data_lock:
+                    # Merge instead of replace. A single degraded cycle (one bad
+                    # read, or several blocks already excluded) must not wipe every
+                    # other sensor: entities would report no value at all, which HA
+                    # shows as "unknown" while still counting the update as a
+                    # success. Keys of permanently disabled blocks are dropped
+                    # explicitly, so nothing keeps showing a frozen reading.
+                    if self._stale_keys_to_drop:
+                        for key in self._stale_keys_to_drop:
+                            self.inverter_data.pop(key, None)
+                        self._stale_keys_to_drop.clear()
+                    self.inverter_data.update(cache)
+
+                if self.mqtt.publish_all and self.inverter_data:
+                    # Prevent duplicate MQTT publishing by excluding fast-poll sensors
+                    # from the slow loop if they are already handled by fast/ultra-fast loops.
+                    if self.fast_enabled or self.ultra_fast_enabled:
+                        publish_cache = {
+                            k: v for k, v in self.inverter_data.items()
+                            if k not in self._fast_poll_sensor_keys
+                        }
+                    else:
+                        publish_cache = self.inverter_data
+                    if publish_cache:
+                        await self.mqtt.publish_data(publish_cache)
+
+                return self.inverter_data
+        except TimeoutError as err:
+            # Something inside the cycle stalled. Raising lets the coordinator
+            # log the failure and schedule the next refresh, instead of waiting
+            # on this cycle forever and silently stopping to poll.
+            _LOGGER.error(
+                "Poll cycle exceeded %.0fs and was aborted – the connection or a "
+                "register read appears stalled. Polling continues with the next cycle.",
+                timeout,
+            )
+            raise UpdateFailed(f"Poll cycle timed out after {timeout:.0f}s") from err
         except (ConnectionError, ReconnectionNeededError) as err:
             raise UpdateFailed(f"Connection error: {err}") from err
         except Exception as err:
@@ -342,6 +405,14 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _run_reader_methods(self, client: Any) -> dict[str, Any]:
         """Executes all readers using the provided client."""
+        # Give writes priority over the slow poll, same as the ultra-fast loop
+        # (_async_update_fast) and the RMW read path (_read_registers) already
+        # do. A full slow poll runs through every reader group and takes several
+        # seconds; without this wait it can interleave with an in-flight write
+        # sequence and overwrite inverter_data with pre-write values, which a
+        # subsequent merge_write_register() would then read back as "current".
+        await self._wait_for_write_done()
+
         # Activate the per-instance circuit breaker for the entire read session.
         # All downstream try_read_registers() calls pick this up via the ContextVar.
         cb_token = _CIRCUIT_BREAKER_CTX.set(self.connection.circuit_breaker)
@@ -378,6 +449,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         res = await method(client, self._read_lock)
                         if isinstance(res, dict):
                             new_cache.update(res)
+                            if res:
+                                # Remember which keys this block owns, so they can
+                                # be dropped again if it is ever disabled.
+                                self._block_keys[method.__name__] = set(res)
                         # Clear any previous failure streak on success
                         self._block_failure_counts.pop(method.__name__, None)
                     except ReconnectionNeededError:
@@ -389,6 +464,12 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         self._block_failure_counts[method.__name__] = count
                         if count >= _BLOCK_PERMANENT_FAILURE_THRESHOLD:
                             self._permanently_failed_blocks.add(method)
+                            # Values from this block will never be refreshed
+                            # again this session – drop them instead of leaving
+                            # stale readings behind once the merge takes over.
+                            self._stale_keys_to_drop |= self._block_keys.pop(
+                                method.__name__, set()
+                            )
                             _LOGGER.warning(
                                 "Block %s permanently disabled: not supported by this "
                                 "device firmware. Skipping for the rest of this session. "
@@ -409,7 +490,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
 
             return new_cache
         finally:
-            _CIRCUIT_BREAKER_CTX.reset(cb_token)
+            try:
+                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+            except LookupError:
+                _LOGGER.debug(
+                    "Circuit breaker context reset skipped in _run_reader_methods "
+                    "(task cancelled?)"
+                )
 
     # --- FAST POLLING ---
 
@@ -628,7 +715,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     if not ultra:
                         self._notify_fast_listeners()
             finally:
-                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                try:
+                    _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                except LookupError:
+                    _LOGGER.debug(
+                        "Circuit breaker context reset skipped in fast update "
+                        "(task cancelled?)"
+                    )
 
         except ReconnectionNeededError:
             await self.connection.notify_error()
@@ -721,18 +814,28 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     "Updating scan interval: %s -> %ss", old_seconds, int(scan_interval)
                 )
 
-                # DataUpdateCoordinator does not guarantee automatic rescheduling when
-                # update_interval changes. Reschedule explicitly so Options changes take effect.
+                # DataUpdateCoordinator's update_interval setter does not reschedule the
+                # running timer, so a changed interval would otherwise only take effect
+                # after the next ordinary cycle. Reschedule explicitly to apply it now.
+                #
+                # _schedule_refresh() cancels the existing timer itself, so we must NOT
+                # cancel it beforehand: if the call below then failed, polling would be
+                # left with no timer at all and the integration would simply go quiet
+                # until reloaded, with nothing in the log explaining why.
                 try:
-                    unsub = getattr(self, "_unsub_refresh", None)
-                    if unsub:
-                        unsub()
                     schedule = getattr(self, "_schedule_refresh", None)
                     if callable(schedule):
                         schedule()
+                    else:
+                        _LOGGER.error(
+                            "Coordinator has no _schedule_refresh(); the new scan "
+                            "interval only takes effect after the next cycle."
+                        )
                 except Exception as e:
-                    _LOGGER.debug(
-                        "Failed to reschedule coordinator after interval change: %s", e
+                    _LOGGER.error(
+                        "Failed to reschedule coordinator after interval change: %s. "
+                        "The new scan interval takes effect after the next cycle.",
+                        e,
                     )
 
             self.fast_enabled = fast_enabled
@@ -821,10 +924,29 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         await self.connection.cleanup_cache()
         await self._cleanup_rmw_locks()
 
+        now_time = time.monotonic()
+
+        # Remind once an hour which register blocks are currently excluded. Without
+        # this the only trace is a single warning at the moment of exclusion, so a
+        # partially degraded device looks perfectly healthy in the log while whole
+        # groups of sensors silently never update.
+        if (
+            self._permanently_failed_blocks
+            and now_time - self._last_exclusion_report_time > 3600
+        ):
+            self._last_exclusion_report_time = now_time
+            _LOGGER.info(
+                "%d register block(s) currently disabled and not being polled: %s. "
+                "Their sensors will not update. The list is retried once every 24 h.",
+                len(self._permanently_failed_blocks),
+                ", ".join(
+                    sorted(m.__name__ for m in self._permanently_failed_blocks)
+                ),
+            )
+
         # Reset exclusion-liste every 24 hours to allow firmware updates to take effect
         # without requiring an HA restart. If a block is still unsupported, it will
         # be re-excluded after failing again.
-        now_time = time.monotonic()
         if now_time - self._last_exclusion_reset_time > 86400:  # 24 hours in seconds
             if self._permanently_failed_blocks:
                 excluded_count = len(self._permanently_failed_blocks)
@@ -937,7 +1059,13 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     client, self._read_lock, 1, address, count
                 )
             finally:
-                _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                try:
+                    _CIRCUIT_BREAKER_CTX.reset(cb_token)
+                except LookupError:
+                    _LOGGER.debug(
+                        "Circuit breaker context reset skipped in _read_registers "
+                        "(task cancelled?)"
+                    )
 
     async def merge_write_register(
         self,

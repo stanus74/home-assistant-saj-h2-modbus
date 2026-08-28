@@ -1,0 +1,5 @@
+*
+/graphify-out
+!*/
+!*.py
+!**/*.py

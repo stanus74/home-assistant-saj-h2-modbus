@@ -1,5 +1,7 @@
 """Platform for writable SAJ Modbus time entities."""
 
+from __future__ import annotations
+
 import datetime
 import re
 import logging
@@ -32,6 +34,7 @@ async def async_setup_entry(
     for desc in charge_definitions["text"]:
         entity = SajTimeTextEntity(
             hub=hub,
+            key=desc["key"],
             name=f"SAJ {desc['name']} (Time)",
             unique_id=f"{hub.name}{desc['unique_id_suffix']}",
             set_method=getattr(hub, desc["setter"]),
@@ -44,6 +47,7 @@ async def async_setup_entry(
     for desc in discharge_definitions["text"]:
         entity = SajTimeTextEntity(
             hub=hub,
+            key=desc["key"],
             name=f"SAJ {desc['name']} (Time)",
             unique_id=f"{hub.name}{desc['unique_id_suffix']}",
             set_method=getattr(hub, desc["setter"]),
@@ -57,9 +61,10 @@ async def async_setup_entry(
 class SajTimeTextEntity(TextEntity):
     """Base class for SAJ writable time entities."""
 
-    def __init__(self, hub, name, unique_id, set_method, device_info):
+    def __init__(self, hub, key, name, unique_id, set_method, device_info):
         """Initialize the entity."""
         self._hub = hub
+        self._key = key
         self._attr_name = name
         self._attr_unique_id = unique_id
         # Set default times:
@@ -86,6 +91,17 @@ class SajTimeTextEntity(TextEntity):
         self._attr_mode = "text"
         self.set_method = set_method
         self._attr_device_info = device_info
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the current time from the hub cache if available."""
+        await super().async_added_to_hass()
+        current = self._hub.inverter_data.get(self._key)
+        if isinstance(current, int):
+            self._attr_native_value = f"{(current >> 8) & 0xFF:02d}:{current & 0xFF:02d}"
+            self.async_write_ha_state()
+        elif isinstance(current, str) and re.match(self._attr_pattern, current):
+            self._attr_native_value = current
+            self.async_write_ha_state()
 
     async def async_update(self) -> None:
         """Update is not used here to avoid additional Modbus requests."""

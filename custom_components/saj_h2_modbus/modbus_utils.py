@@ -311,6 +311,15 @@ class ConnectionCache:
         return False
 
 
+# Upper bound for a single connect attempt. pymodbus' connect() has no timeout
+# of its own, so against an unresponsive host (SYN blackhole – typical for a
+# crashed WiFi module) it can block forever. Both callers hold a lock while
+# connecting (_on_modbus_retry holds the socket lock, get_client holds
+# _connection_lock), so an unbounded connect stalls every other Modbus
+# operation and, with it, the whole coordinator update cycle.
+CONNECT_TIMEOUT = 10.0
+
+
 async def _connect_client_inplace(
     client: ModbusTcpClient, host: str, port: int
 ) -> None:
@@ -325,10 +334,20 @@ async def _connect_client_inplace(
         return
     _LOGGER.debug("Connecting Modbus client to %s:%s", host, port)
     try:
-        await client.connect()
+        async with asyncio.timeout(CONNECT_TIMEOUT):
+            await client.connect()
         if not client.connected:
             raise ConnectionError("Client failed to connect to %s:%s" % (host, port))
         _LOGGER.info("ModbusTcpClient successfully connected to %s:%s", host, port)
+    except TimeoutError as e:
+        _LOGGER.error(
+            "Timeout after %.0fs connecting client to %s:%s", CONNECT_TIMEOUT, host, port
+        )
+        # Surface as ConnectionError so the existing retry/circuit-breaker paths
+        # treat it like any other connection failure.
+        raise ConnectionError(
+            "Timeout after %.0fs connecting to %s:%s" % (CONNECT_TIMEOUT, host, port)
+        ) from e
     except Exception as e:
         _LOGGER.error("Error connecting client to %s:%s: %s", host, port, e)
         raise ConnectionError(

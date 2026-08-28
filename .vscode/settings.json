@@ -1,0 +1,71 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python3 -m ruff check \\.$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"style\\(typing\\): add future annotations import consistently\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify query \"race conditions locks Modbus socket write priority reconnect\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify query \"entity initialization number text sensor hub\\.inverter_data\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify query \"home assistant spec compliance manifest config flow runtime_data unique_id has_entity_name\" --budget 2000$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify explain \"SajGenericNumberEntity\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify explain \"SajTimeTextEntity\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"fix\\(number,text\\): initialize input values from hub cache\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add CHANGELOG\\.md && git commit --amend --no-edit$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^ssh -o ConnectTimeout=10 holger@192\\.168\\.178\\.112 \"echo 'SSH-Verbindung OK' && uname -a\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^rsync -avz --exclude='__pycache__' --exclude='\\*\\.pyc' /home/pat/Dokumente/GitHub/home-assistant-saj-h2-modbus/custom_components/saj_h2_modbus/ holger@192\\.168\\.178\\.112:/config/custom_components/saj_h2_modbus/$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^rsync -avz -e \"ssh -p 22\" --exclude='__pycache__' --exclude='\\*\\.pyc' /home/pat/Dokumente/GitHub/home-assistant-saj-h2-modbus/custom_components/saj_h2_modbus/ root@192\\.168\\.178\\.112:/config/custom_components/saj_h2_modbus/$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify \\. --update --no-viz$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^graphify cluster-only \\.$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"refactor\\(sensor\\): clarify fast listener active flag semantics\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A && git commit -m \"fix\\(sensor\\): reduce DB writes by disabling force_update for power sensors\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "git add": true,
+        "git commit": true,
+        "ssh": true
+    }
+}
