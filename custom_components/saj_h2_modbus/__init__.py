@@ -62,11 +62,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool:
 
     # Start fast updates only after the entity platforms are set up, so the
     # first fast tick never fires before the fast listeners are registered.
-    if hub.fast_enabled:
+    #
+    # Both flags have to be checked here, exactly as update_connection_settings()
+    # does: start_fast_updates() starts the 1 s ultra-fast loop from its own
+    # branch, independent of fast_enabled. Checking fast_enabled alone left an
+    # ultra-fast-only setup — the sensible choice for anyone consuming the live
+    # data over MQTT — without any loop after every restart, while still working
+    # right after saving the options.
+    if hub.fast_enabled or hub.ultra_fast_enabled:
         await hub.start_fast_updates()
-        _LOGGER.info("Fast coordinator started (10s interval)")
+        _LOGGER.info(
+            "Fast update loops started (fast=%s, ultra_fast=%s)",
+            hub.fast_enabled,
+            hub.ultra_fast_enabled,
+        )
     else:
-        _LOGGER.info("Fast coordinator not started (disabled).")
+        _LOGGER.info("Fast update loops not started (both disabled).")
 
     end_time = time.monotonic()
     elapsed_time = end_time - start_time
