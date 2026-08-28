@@ -14,17 +14,19 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     CONF_FAST_ENABLED,
+    CONF_ULTRA_FAST_ENABLED,
+    CONF_MQTT_TOPIC_PREFIX,
+    CONF_MQTT_PUBLISH_ALL,
+    CONF_USE_HA_MQTT,
 )
 from .utils import get_config_value
 
-CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
+# Connection keys without a const.py counterpart; DEFAULT_CONFIG_SCHEMA still
+# spells these out as literals.
 CONF_MQTT_HOST = "mqtt_host"
 CONF_MQTT_PORT = "mqtt_port"
 CONF_MQTT_USER = "mqtt_user"
 CONF_MQTT_PASSWORD = "mqtt_password"
-CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
-CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
-CONF_USE_HA_MQTT = "use_ha_mqtt"
 
 _LOGGER = logging.getLogger(__name__)
 

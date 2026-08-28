@@ -22,10 +22,6 @@ PAHO_AVAILABLE = None  # None=unknown, True/False once attempted
 
 _LOGGER = logging.getLogger(__name__)
 
-# Define constants locally to avoid ImportError with existing const.py
-CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
-CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
-
 # Minimum interval between two publishes of the same key. Must stay below the
 # active poll interval (1 s ultra-fast / 10 s fast / 60 s slow) or updates are
 # dropped instead of merely throttled.
