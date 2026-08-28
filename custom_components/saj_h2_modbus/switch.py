@@ -79,7 +79,13 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = (
             f"{hub.name}_{self._switch_type}{description['unique_id_suffix']}"
         )
-        self._attr_name = f"{hub.name} {description['name']}"
+        # has_entity_name lets HA prefix the device name itself. Without it the
+        # name was built as "<device> <label>" and HA prefixed the device again,
+        # so the UI showed "SAJ H2 SAJ H2 Charging Control". unique_id is
+        # deliberately left untouched: display names may change, entity_ids are
+        # registry-persisted and keep working.
+        self._attr_has_entity_name = True
+        self._attr_name = description["name"]
         self._attr_entity_registry_enabled_default = True
         self._attr_assumed_state = True
         self._attr_should_poll = False

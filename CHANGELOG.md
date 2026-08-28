@@ -37,6 +37,7 @@
 
 ### Changed
 
+- **Switch Names No Longer Repeat the Device Name:** The four control switches built their name as `"<device> <label>"` while Home Assistant prefixed the device name again, so the UI showed entries like *SAJ H2 SAJ H2 Charging Control*. They now use `has_entity_name`, matching how the sensors already worked, and display as *Charging Control*, *Discharging Control*, *Passive Charge Control* and *Passive Discharge Control* under the device. **Only the displayed names change** — `unique_id` and `entity_id` are untouched, so existing automations, scripts and dashboards keep working. Anything that referenced a switch by its friendly name will need updating.
 - **Disabled Register Blocks Are Now Reported Regularly (#197):** When a register block turns out to be unsupported by the inverter's firmware, it is excluded from polling and logged once. After that there was no trace of it at all, so a partially degraded device looked completely healthy in the log while entire groups of sensors silently stopped updating. The integration now logs a summary of all currently excluded blocks once an hour.
 
 ### Code Quality
