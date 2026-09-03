@@ -8,6 +8,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from .entity import SajBaseEntity
 from .utils import generate_slot_definitions
 
 if TYPE_CHECKING:
@@ -202,7 +203,7 @@ NUMBER_DEFINITIONS = [
 ]
 
 
-class SajNumberEntity(NumberEntity):
+class SajNumberEntity(NumberEntity, SajBaseEntity):
     """Base class for SAJ writable number entities."""
 
     _attr_mode = NumberMode.BOX
@@ -220,7 +221,7 @@ class SajNumberEntity(NumberEntity):
         device_info: dict[str, Any],
         unit: str | None = None,
     ) -> None:
-        self._hub = hub
+        SajBaseEntity.__init__(self, hub, device_info)
         self._attr_name = name
         self._attr_unique_id = unique_id
         self._attr_native_min_value = min_val
@@ -228,7 +229,6 @@ class SajNumberEntity(NumberEntity):
         self._attr_native_step = step
         self._attr_native_value = default
         self._attr_native_unit_of_measurement = unit
-        self._attr_device_info = device_info
 
     @property
     def native_value(self) -> float | None:

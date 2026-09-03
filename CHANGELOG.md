@@ -1,3 +1,9 @@
+## Unreleased
+
+### Code Quality
+
+- **Shared Base Class for Entity Init:** `sensor.py`, `switch.py`, `number.py` and `text.py` each set `self._hub = hub` and `self._attr_device_info = device_info` identically in their constructors. Extracted into `entity.py`'s `SajBaseEntity`, called explicitly from each constructor rather than through `super()`, so it doesn't interact with `CoordinatorEntity`'s own `__init__` in `sensor.py`/`switch.py` or require `number.py`/`text.py` to become coordinator entities (see the F4 decision to keep those as plain input fields).
+
 ## v3.1.0
 
 > **Stability release:** Closes three separate paths that could silently stop polling —

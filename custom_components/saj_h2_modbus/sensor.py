@@ -12,6 +12,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import SENSOR_TYPES, SajModbusSensorEntityDescription
+from .entity import SajBaseEntity
 from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ async def async_setup_entry(
     )
 
 
-class SajSensor(CoordinatorEntity, SensorEntity):
+class SajSensor(CoordinatorEntity, SensorEntity, SajBaseEntity):
     """Base class for SAJ Modbus sensors."""
 
     def __init__(
@@ -62,10 +63,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     ):
         """Initialize the sensor."""
         super().__init__(coordinator=hub)
+        SajBaseEntity.__init__(self, hub, device_info)
 
         self.entity_description = description
-        self._attr_device_info = device_info
-        self._hub = hub
         self._is_fast_variant = is_fast_variant
 
         # Stable unique_id: independent of coordinator name

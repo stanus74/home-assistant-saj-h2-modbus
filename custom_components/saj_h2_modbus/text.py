@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.components.text import TextEntity
 
+from .entity import SajBaseEntity
 from .utils import generate_slot_definitions
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,12 +59,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class SajTimeTextEntity(TextEntity):
+class SajTimeTextEntity(TextEntity, SajBaseEntity):
     """Base class for SAJ writable time entities."""
 
     def __init__(self, hub, key, name, unique_id, set_method, device_info):
         """Initialize the entity."""
-        self._hub = hub
+        SajBaseEntity.__init__(self, hub, device_info)
         self._key = key
         self._attr_name = name
         self._attr_unique_id = unique_id
@@ -90,7 +91,6 @@ class SajTimeTextEntity(TextEntity):
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"
         self.set_method = set_method
-        self._attr_device_info = device_info
 
     async def async_added_to_hass(self) -> None:
         """Restore the current time from the hub cache if available."""
