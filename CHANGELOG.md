@@ -2,6 +2,7 @@
 
 ### Code Quality
 
+- **Consolidated Read/Write Retry Scaffolding:** `try_read_registers` and `try_write_registers` in `modbus_utils.py` were structurally identical past the actual register operation — host/port validation, retry handler setup, circuit-breaker call, and reconnect-on-failure conversion to `ReconnectionNeededError` were duplicated once per function. Extracted into a shared `_try_modbus_operation` helper; the per-operation `read_once`/`write_once` closures and all retry counts, delays, and exception handling stay exactly as before. As a byproduct, this also removed a duplicate debug log line: `_retry_with_backoff` already logs each failed attempt, and thin `on_read_retry`/`on_write_retry` wrappers were logging the same event a second time in different words.
 - **Shared Base Class for Entity Init:** `sensor.py`, `switch.py`, `number.py` and `text.py` each set `self._hub = hub` and `self._attr_device_info = device_info` identically in their constructors. Extracted into `entity.py`'s `SajBaseEntity`, called explicitly from each constructor rather than through `super()`, so it doesn't interact with `CoordinatorEntity`'s own `__init__` in `sensor.py`/`switch.py` or require `number.py`/`text.py` to become coordinator entities (see the F4 decision to keep those as plain input fields).
 
 ## v3.1.0

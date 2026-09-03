@@ -550,6 +550,65 @@ async def _perform_modbus_operation(
         return await operation(*args, **kwargs)
 
 
+async def _try_modbus_operation(
+    client: ModbusTcpClient,
+    lock: Lock,
+    op_once: Callable[[], Awaitable[Any]],
+    *,
+    operation_name: str,
+    task_name: str,
+    max_retries: int,
+    base_delay: float,
+    cap_delay: float,
+) -> Any:
+    """Shared retry + circuit-breaker + reconnect scaffolding for a single
+    Modbus operation.
+
+    try_read_registers() and try_write_registers() were identical past this
+    point, differing only in op_once itself and in two log-string spellings
+    ("read"/"write" for reconnect logging, "Modbus-Read"/"Modbus-Write" for
+    retry-attempt logging). op_once performs exactly one attempt (already
+    lock-guarded via _perform_modbus_operation); retries, the circuit
+    breaker, and the reconnect-on-error path live here.
+    """
+    host = getattr(client, "_saj_host", None)
+    port = getattr(client, "_saj_port", None)
+    if host is None or port is None:
+        raise ReconnectionNeededError(
+            "Modbus client not configured with host and port."
+        )
+
+    should_retry, on_retry = _create_retry_handlers(
+        client, host, port, _LOGGER, operation_name, lock
+    )
+
+    try:
+        operation = functools.partial(
+            _retry_with_backoff,
+            func=op_once,
+            should_retry=should_retry,
+            retries=max_retries,
+            base_delay=base_delay,
+            cap=cap_delay,
+            on_retry=on_retry,
+            task_name=task_name,
+        )
+        return await get_modbus_circuit_breaker().call(
+            operation,
+            should_trip=_should_trip_circuit_breaker,
+        )
+    except (ConnectionException, ConnectionError, OSError) as final_e:
+        # All retries exhausted on a connection-class error.
+        # _on_modbus_retry already tried to reconnect on each attempt without success.
+        # Convert to ReconnectionNeededError so _run_reader_methods can trigger a
+        # hub-level reconnect and abort the poll cycle instead of continuing to
+        # hammer the broken socket with every remaining reader group.
+        raise ReconnectionNeededError(
+            f"Modbus {operation_name} failed after {max_retries} retries – "
+            f"connection lost: {final_e}"
+        ) from final_e
+
+
 async def try_read_registers(
     client: ModbusTcpClient,
     lock: Lock,
@@ -560,17 +619,6 @@ async def try_read_registers(
     base_delay: float = DEFAULT_READ_BASE_DELAY,
     cap_delay: float = DEFAULT_READ_CAP_DELAY,
 ) -> list[int]:
-    host = getattr(client, "_saj_host", None)
-    port = getattr(client, "_saj_port", None)
-    if host is None or port is None:
-        raise ReconnectionNeededError(
-            "Modbus client not configured with host and port."
-        )
-
-    should_retry, on_retry = _create_retry_handlers(
-        client, host, port, _LOGGER, "read", lock
-    )
-
     async def read_once():
         if ENABLE_DETAILED_MODBUS_READ_LOGGING:
             _LOGGER.debug("[read] unit=%s addr=%s count=%s", unit, hex(address), count)
@@ -607,34 +655,16 @@ async def try_read_registers(
             )
         return response.registers  # type: ignore
 
-    async def on_read_retry(attempt: int, e: Exception) -> None:
-        _LOGGER.debug("[Modbus-Read] Retry %d after error: %s", attempt, e)
-        await on_retry(attempt, e)
-
-    try:
-        operation = functools.partial(
-            _retry_with_backoff,
-            func=read_once,
-            should_retry=should_retry,
-            retries=max_retries,
-            base_delay=base_delay,
-            cap=cap_delay,
-            on_retry=on_read_retry,
-            task_name="Modbus-Read",
-        )
-        return await get_modbus_circuit_breaker().call(
-            operation,
-            should_trip=_should_trip_circuit_breaker,
-        )
-    except (ConnectionException, ConnectionError, OSError) as final_e:
-        # All retries exhausted on a connection-class error.
-        # _on_modbus_retry already tried to reconnect on each attempt without success.
-        # Convert to ReconnectionNeededError so _run_reader_methods can trigger a
-        # hub-level reconnect and abort the poll cycle instead of continuing to
-        # hammer the broken socket with every remaining reader group.
-        raise ReconnectionNeededError(
-            f"Modbus read failed after {max_retries} retries – connection lost: {final_e}"
-        ) from final_e
+    return await _try_modbus_operation(
+        client,
+        lock,
+        read_once,
+        operation_name="read",
+        task_name="Modbus-Read",
+        max_retries=max_retries,
+        base_delay=base_delay,
+        cap_delay=cap_delay,
+    )
 
 
 async def try_write_registers(
@@ -647,17 +677,6 @@ async def try_write_registers(
     base_delay: float = DEFAULT_WRITE_BASE_DELAY,
     cap_delay: float = DEFAULT_WRITE_CAP_DELAY,
 ) -> bool:
-    host = getattr(client, "_saj_host", None)
-    port = getattr(client, "_saj_port", None)
-    if host is None or port is None:
-        raise ReconnectionNeededError(
-            "Modbus client not configured with host and port."
-        )
-
-    should_retry, on_retry = _create_retry_handlers(
-        client, host, port, _LOGGER, "write", lock
-    )
-
     is_single = isinstance(values, int)
 
     async def write_once() -> bool:
@@ -688,26 +707,13 @@ async def try_write_registers(
             )
         return True
 
-    async def on_write_retry(attempt: int, e: Exception) -> None:
-        _LOGGER.debug("[Modbus-Write] Retry %d after error: %s", attempt, e)
-        await on_retry(attempt, e)
-
-    try:
-        operation = functools.partial(
-            _retry_with_backoff,
-            func=write_once,
-            should_retry=should_retry,
-            retries=max_retries,
-            base_delay=base_delay,
-            cap=cap_delay,
-            on_retry=on_write_retry,
-            task_name="Modbus-Write",
-        )
-        return await get_modbus_circuit_breaker().call(
-            operation,
-            should_trip=_should_trip_circuit_breaker,
-        )
-    except (ConnectionException, ConnectionError, OSError) as final_e:
-        raise ReconnectionNeededError(
-            f"Modbus write failed after {max_retries} retries – connection lost: {final_e}"
-        ) from final_e
+    return await _try_modbus_operation(
+        client,
+        lock,
+        write_once,
+        operation_name="write",
+        task_name="Modbus-Write",
+        max_retries=max_retries,
+        base_delay=base_delay,
+        cap_delay=cap_delay,
+    )
