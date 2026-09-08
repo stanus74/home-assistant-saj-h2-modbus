@@ -7,17 +7,17 @@
           "host": "O endereço IP do seu inversor SAJ com Modbus",
           "name": "O prefixo a ser usado para os sensores do seu inversor SAJ",
           "port": "A porta TCP para a ligação ao inversor SAJ",
-          "scan_interval": "A frequência de consulta (polling) dos registos Modbus em segundos"
+          "scan_interval": "A frequência de consulta (polling) dos registos Modbus em segundos. Mínimo 60"
         }
       }
+    },
+    "error": {
+      "already_configured": "O dispositivo já se encontra configurado",
+      "invalid_scan_interval": "O intervalo de varredura deve ser de pelo menos 60 segundos"
+    },
+    "abort": {
+      "already_configured": "O dispositivo já se encontra configurado"
     }
-  },
-  "error": {
-    "already_configured": "O dispositivo já se encontra configurado",
-    "invalid_scan_interval": "O intervalo de varredura deve ser de pelo menos 60 segundos"
-  },
-  "abort": {
-    "already_configured": "O dispositivo já se encontra configurado"
   },
   "options": {
     "step": {

@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Define la conexión Modbus de tu inversor SAJ",
+        "data": {
+          "host": "La dirección IP de tu dispositivo Modbus del inversor SAJ",
+          "name": "El prefijo que se usará para los sensores del inversor SAJ",
+          "port": "El puerto TCP para conectarse al inversor SAJ",
+          "scan_interval": "La frecuencia de consulta de los registros Modbus en segundos. Mínimo 60"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "El dispositivo ya está configurado",
+      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
+    },
+    "abort": {
+      "already_configured": "El dispositivo ya está configurado"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "fast_enabled": "Sensores en tiempo real (consulta cada 10s)",
+          "mqtt_topic_prefix": "Prefijo del tema MQTT (p. ej. saj/h2)",
+          "mqtt_publish_all": "Publicar todos los sensores en el intervalo principal",
+          "ultra_fast_enabled": "Ultra Rápido (1s por MQTT)",
+          "use_ha_mqtt": "Usar MQTT de Home Assistant (ignora los ajustes de host/puerto)"
+        },
+        "data_description": {
+          "fast_enabled": "Consulta los sensores de energía principales cada 10 segundos y actualiza las entidades de Home Assistant. Se desactiva automáticamente mientras Ultra Rápido está activo.",
+          "ultra_fast_enabled": "La resolución de 1 segundo se publica únicamente por MQTT. Mientras esta opción está activa, el ciclo de 10 s se desactiva: las entidades de Home Assistant pasan a actualizarse solo en el intervalo principal y la potencia PV1/PV2 no se consulta en absoluto."
+        }
+      }
+    }
+  }
+}
