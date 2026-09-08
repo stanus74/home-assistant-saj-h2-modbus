@@ -1,5 +1,14 @@
 ## v3.1.1
 
+> **Maintenance release:** No change to Modbus behaviour or to any sensor value. Most of
+> the work removes duplicated scaffolding — in the Modbus retry path, across the four
+> entity platforms, and in the options flow, which now reads its defaults from the same
+> table the hub already uses instead of repeating them as literals that could drift apart.
+> The user-visible parts are small: a Spanish translation, Portuguese error messages that
+> were never actually displayed, and help text explaining that Ultra Fast (1s) publishes
+> over MQTT only and switches the 10s loop off — behaviour that is easy to mistake for
+> PV1/PV2 having stopped working.
+
 ### Added
 
 - **Spanish Translation:** Added `es.json`, covering the config step, the error and abort messages, the options labels and the new help texts described under Documentation.
