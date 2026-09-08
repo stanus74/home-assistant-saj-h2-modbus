@@ -295,10 +295,14 @@ async def async_setup_entry(
     hub = entry.runtime_data
     device_info = hub.device_info
 
-    entities = []
+    all_definitions = (
+        NUMBER_DEFINITIONS
+        + generate_slot_definitions("charge")["number"]
+        + generate_slot_definitions("discharge")["number"]
+    )
 
-    for desc in NUMBER_DEFINITIONS:
-        entity = SajGenericNumberEntity(
+    entities = [
+        SajGenericNumberEntity(
             hub=hub,
             key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
@@ -312,42 +316,7 @@ async def async_setup_entry(
             device_info=device_info,
             allowed_values=desc.get("allowed_values"),
         )
-        entities.append(entity)
-
-    # Add charge slot entities (1-7) using utility function
-    charge_definitions = generate_slot_definitions("charge")
-    for desc in charge_definitions["number"]:
-        entity = SajGenericNumberEntity(
-            hub=hub,
-            key=desc["key"],
-            name=f"SAJ {desc['name']} (Input)",
-            unique_id=f"{hub.name}_{desc['key']}_input",
-            min_val=desc["min"],
-            max_val=desc["max"],
-            step=desc["step"],
-            default=desc["default"],
-            unit=desc["unit"],
-            set_method_name=desc["setter"],
-            device_info=device_info,
-        )
-        entities.append(entity)
-
-    # Add discharge slot entities (1-7) using utility function
-    discharge_definitions = generate_slot_definitions("discharge")
-    for desc in discharge_definitions["number"]:
-        entity = SajGenericNumberEntity(
-            hub=hub,
-            key=desc["key"],
-            name=f"SAJ {desc['name']} (Input)",
-            unique_id=f"{hub.name}_{desc['key']}_input",
-            min_val=desc["min"],
-            max_val=desc["max"],
-            step=desc["step"],
-            default=desc["default"],
-            unit=desc["unit"],
-            set_method_name=desc["setter"],
-            device_info=device_info,
-        )
-        entities.append(entity)
+        for desc in all_definitions
+    ]
 
     async_add_entities(entities)
