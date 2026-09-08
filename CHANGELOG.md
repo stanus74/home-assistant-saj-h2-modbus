@@ -1,9 +1,21 @@
 ## v3.1.1
 
+### Added
+
+- **Spanish Translation:** Added `es.json`, covering the config step, the error and abort messages, the options labels and the new help texts described under Documentation.
+
+### Fixed
+
+- **Portuguese Error Messages Were Never Displayed:** `pt.json` carried its `error` and `abort` blocks as siblings of `config` rather than inside it. Home Assistant resolves those under `config.error` / `config.abort`, so the Portuguese "already configured" and "invalid scan interval" messages silently fell back to untranslated text. Moved both blocks into `config` and added the missing minimum-interval hint to the Portuguese `scan_interval` label. All five language files now expose an identical set of key paths.
+- **Stopped Polling Text Entities That Never Fetch New Data:** `SajTimeTextEntity.async_update()` was an empty `pass` with a comment saying it exists "to avoid additional Modbus requests" — but `_attr_should_poll` was never set to `False`, so Home Assistant kept calling that empty method on a timer for all 14 time entities anyway. Set `_attr_should_poll = False` and removed the now-redundant `async_update()`; values still come from `async_added_to_hass()` and `async_set_value()` as before.
+
+### Documentation
+
+- **Documented the Realtime (10s) vs. Ultra Fast (1s) Trade-off:** The two polling options are not cumulative — enabling Ultra Fast switches the 10s loop off, so Home Assistant entities drop back to the main scan interval and `pv1Power`/`pv2Power` stop being polled entirely (they sit in the register block the 1s cycle deliberately skips to stay short). The 1s resolution only ever existed on MQTT. This was intended behaviour but invisible in the options dialog, where enabling Ultra Fast looks like a strict upgrade while it actually makes the HA entities slower. Added `data_description` help text for both options in every translation (en/de/es/nl/pt) and a comparison table to the README. No behaviour change.
+
 ### Code Quality
 
 - **Consolidated Read/Write Retry Scaffolding:** `try_read_registers` and `try_write_registers` in `modbus_utils.py` were structurally identical past the actual register operation — host/port validation, retry handler setup, circuit-breaker call, and reconnect-on-failure conversion to `ReconnectionNeededError` were duplicated once per function. Extracted into a shared `_try_modbus_operation` helper; the per-operation `read_once`/`write_once` closures and all retry counts, delays, and exception handling stay exactly as before. As a byproduct, this also removed a duplicate debug log line: `_retry_with_backoff` already logs each failed attempt, and thin `on_read_retry`/`on_write_retry` wrappers were logging the same event a second time in different words.
-- **Merged Stacked Section Headers:** `modbus_utils.py` had two `# ====` section headers (`CONNECTION MANAGEMENT` / `CONNECTION POOLING OPTIMIZATION`) back-to-back with no content between them, a leftover from an earlier refactor. Merged into one heading.
 - **Merged Triplicated Entity Setup Loop:** `number.py`'s `async_setup_entry` built `SajGenericNumberEntity` in three separate loops (static definitions, charge slots, discharge slots) with identical kwargs, differing only in the source list. Concatenated the three definition lists and replaced the loops with a single list comprehension; entity order, count (46), and all constructor arguments are unchanged.
 - **Merged Duplicated Entity Setup Loop in text.py:** Same pattern as the `number.py` fix above — `async_setup_entry` built `SajTimeTextEntity` in two identical loops (charge slots, discharge slots). Concatenated the definition lists into one list comprehension; entity order (charge before discharge) and count (28) are unchanged.
 - **Simplified Default-Time Lookup:** `SajTimeTextEntity.__init__` derived one of four default time strings via nested if/elif/else on the entity name. Replaced with a `_DEFAULT_TIMES` dict lookup; all four default values (charge 01:00/01:10, discharge 02:00/02:10) are unchanged.
@@ -11,14 +23,7 @@
 - **Extracted Version-Join Helper:** `_update_device_info_from_inverter_data()` in `__init__.py` built `sw_version` and `hw_version` with the same four-line pattern (collect parts, dot-join while skipping `None`, write to `device_info` if non-empty). Replaced with a `_join_version(data, *keys)` helper; output format is unchanged.
 - **Options Flow Reads Defaults From One Table:** `config_flow.py` spelled out every config default as a literal (`1883`, `"saj"`, `""`, `False`) in both `async_step_init()` and `_get_options_schema()`, while `const.py` already defines `DEFAULT_CONFIG_SCHEMA` — the table `__init__.py` reads via `get_config_values()`. The values agreed, but nothing enforced it: changing `DEFAULT_MQTT_PORT` would have updated the hub and silently left the options form behind. Both methods now read through one `_current()` accessor backed by that table, which also collapses the twelve-line `setdefault()` backfill in `async_step_init()` into a single dict merge. Behaviour is unchanged, including the deliberate asymmetry where a sub-minimum scan interval is clamped when prefilling the form but rejected when submitted; the topic-prefix fallback keeps its own strip-and-default handling, which a plain lookup cannot express.
 - **Shared Base Class for Entity Init:** `sensor.py`, `switch.py`, `number.py` and `text.py` each set `self._hub = hub` and `self._attr_device_info = device_info` identically in their constructors. Extracted into `entity.py`'s `SajBaseEntity`, called explicitly from each constructor rather than through `super()`, so it doesn't interact with `CoordinatorEntity`'s own `__init__` in `sensor.py`/`switch.py` or require `number.py`/`text.py` to become coordinator entities (see the F4 decision to keep those as plain input fields).
-
-### Documentation
-
-- **Documented the Realtime (10s) vs. Ultra Fast (1s) Trade-off:** The two polling options are not cumulative — enabling Ultra Fast switches the 10s loop off, so Home Assistant entities drop back to the main scan interval and `pv1Power`/`pv2Power` stop being polled entirely (they sit in the register block the 1s cycle deliberately skips to stay short). The 1s resolution only ever existed on MQTT. This was intended behaviour but invisible in the options dialog, where enabling Ultra Fast looks like a strict upgrade while it actually makes the HA entities slower. Added `data_description` help text for both options in all four translations (en/de/nl/pt) and a comparison table to the README. No behaviour change.
-
-### Fixed
-
-- **Stopped Polling Text Entities That Never Fetch New Data:** `SajTimeTextEntity.async_update()` was an empty `pass` with a comment saying it exists "to avoid additional Modbus requests" — but `_attr_should_poll` was never set to `False`, so Home Assistant kept calling that empty method on a timer for all 14 time entities anyway. Set `_attr_should_poll = False` and removed the now-redundant `async_update()`; values still come from `async_added_to_hass()` and `async_set_value()` as before.
+- **Merged Stacked Section Headers:** `modbus_utils.py` had two `# ====` section headers (`CONNECTION MANAGEMENT` / `CONNECTION POOLING OPTIMIZATION`) back-to-back with no content between them, a leftover from an earlier refactor. Merged into one heading.
 
 ## v3.1.0
 
