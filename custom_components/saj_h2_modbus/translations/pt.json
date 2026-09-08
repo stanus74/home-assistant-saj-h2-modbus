@@ -28,6 +28,10 @@
           "mqtt_publish_all": "Publicar todos os sensores no intervalo principal",
           "ultra_fast_enabled": "Ultra Rápido (1s via MQTT)",
           "use_ha_mqtt": "Usar MQTT do Home Assistant (ignora configurações de host/porta)"
+        },
+        "data_description": {
+          "fast_enabled": "Consulta os principais sensores de energia a cada 10 segundos e atualiza as entidades do Home Assistant. É desativado automaticamente enquanto o Ultra Rápido estiver ativo.",
+          "ultra_fast_enabled": "A resolução de 1 segundo é publicada apenas via MQTT. Enquanto esta opção estiver ativa, o ciclo de 10 s é desativado: as entidades do Home Assistant passam a atualizar apenas no intervalo principal e a potência PV1/PV2 não é consultada."
         }
       }
     }

@@ -53,6 +53,27 @@ select "SAJ H2 Modbus."
 
 You can be enabled/disable in Configuration Settings every time
 
+#### Realtime sensors (10s) vs. Ultra Fast (1s) — pick one
+
+The two options are **not** cumulative. Enabling *Ultra Fast* switches the 10s loop
+off, which changes where the live data ends up:
+
+| | Realtime sensors (10s) | Ultra Fast (1s) |
+|---|---|---|
+| Home Assistant entities | every 10 s | **only on the main scan interval (60 s)** |
+| MQTT | every 10 s | every 1 s |
+| PV1 / PV2 power | updated | **not polled** |
+| Other energy sensors | updated | updated over MQTT only |
+
+*Ultra Fast* exists for consumers that read the live values off MQTT, and it keeps
+the 1s cycle short by reading only the register block that carries the aggregate
+power values. `pv1Power` and `pv2Power` live in a different block that is not part
+of that cycle, so the per-string values only refresh on the main scan interval.
+
+If you want fast updates **inside Home Assistant**, use *Realtime sensors (10s)*.
+Enabling both does not give you both — Ultra Fast wins and the HA entities get
+slower, not faster.
+
 
 ### 🚀 Charging/Discharging Control
 

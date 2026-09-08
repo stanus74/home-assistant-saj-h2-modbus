@@ -28,6 +28,10 @@
           "mqtt_publish_all": "Alle sensoren publiceren bij het hoofdinterval",
           "ultra_fast_enabled": "Ultrasnel (1s via MQTT)",
           "use_ha_mqtt": "Gebruik Home Assistant MQTT (negeert host/port instellingen)"
+        },
+        "data_description": {
+          "fast_enabled": "Vraagt de belangrijkste energiesensoren elke 10 seconden op en werkt de Home Assistant-entiteiten bij. Wordt automatisch uitgeschakeld zolang Ultrasnel actief is.",
+          "ultra_fast_enabled": "De resolutie van 1 seconde gaat alleen naar MQTT. Zolang dit actief is wordt de 10s-lus uitgeschakeld: Home Assistant-entiteiten werken alleen nog bij op het hoofdinterval en PV1/PV2-vermogen wordt helemaal niet opgevraagd."
         }
       }
     }
