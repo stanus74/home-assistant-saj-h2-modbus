@@ -169,21 +169,27 @@ class SajSensor(CoordinatorEntity, SensorEntity, SajBaseEntity):
                     "Sensor %s registered for fast updates (10s)", self._attr_name
                 )
         elif not should_listen and is_listening:
-            if self._remove_fast_listener:
-                try:
-                    self._remove_fast_listener()
-                    if ADVANCED_LOGGING:
-                        _LOGGER.debug(
-                            "Sensor %s unregistered from fast updates", self._attr_name
-                        )
-                except Exception as e:
-                    _LOGGER.warning(
-                        "Error unregistering fast listener for %s: %s",
-                        self._attr_name,
-                        e,
-                    )
-                finally:
-                    self._remove_fast_listener = None
+            self._unregister_fast_listener()
+
+    @callback
+    def _unregister_fast_listener(self) -> None:
+        """Remove the fast listener if one is registered, clearing it either way."""
+        if self._remove_fast_listener is None:
+            return
+        try:
+            self._remove_fast_listener()
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    "Sensor %s unregistered from fast updates", self._attr_name
+                )
+        except Exception as e:
+            _LOGGER.warning(
+                "Error unregistering fast listener for %s: %s",
+                self._attr_name,
+                e,
+            )
+        finally:
+            self._remove_fast_listener = None
 
     @callback
     def _handle_fast_update(self) -> None:
@@ -229,20 +235,7 @@ class SajSensor(CoordinatorEntity, SensorEntity, SajBaseEntity):
         if not self._is_active.is_set():
             return
         self._is_active.clear()
-
-        if self._remove_fast_listener is not None:
-            try:
-                self._remove_fast_listener()
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug(
-                        "Sensor %s unregistered from fast updates", self._attr_name
-                    )
-            except Exception as e:
-                _LOGGER.warning(
-                    "Error unregistering fast listener for %s: %s", self._attr_name, e
-                )
-            finally:
-                self._remove_fast_listener = None
+        self._unregister_fast_listener()
 
 
 class FastPollSensor(SajSensor):
