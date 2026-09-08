@@ -28,12 +28,13 @@ async def async_setup_entry(
     hub = entry.runtime_data
     device_info = hub.device_info
 
-    entities = []
+    slot_definitions = (
+        generate_slot_definitions("charge")["text"]
+        + generate_slot_definitions("discharge")["text"]
+    )
 
-    # Add charge slot text entities (1-7) using utility function
-    charge_definitions = generate_slot_definitions("charge")
-    for desc in charge_definitions["text"]:
-        entity = SajTimeTextEntity(
+    entities = [
+        SajTimeTextEntity(
             hub=hub,
             key=desc["key"],
             name=f"SAJ {desc['name']} (Time)",
@@ -41,22 +42,13 @@ async def async_setup_entry(
             set_method=getattr(hub, desc["setter"]),
             device_info=device_info,
         )
-        entities.append(entity)
-
-    # Add discharge slot text entities (1-7) using utility function
-    discharge_definitions = generate_slot_definitions("discharge")
-    for desc in discharge_definitions["text"]:
-        entity = SajTimeTextEntity(
-            hub=hub,
-            key=desc["key"],
-            name=f"SAJ {desc['name']} (Time)",
-            unique_id=f"{hub.name}{desc['unique_id_suffix']}",
-            set_method=getattr(hub, desc["setter"]),
-            device_info=device_info,
-        )
-        entities.append(entity)
+        for desc in slot_definitions
+    ]
 
     async_add_entities(entities)
+
+
+_DEFAULT_TIMES = {"charge": ("01:00", "01:10"), "discharge": ("02:00", "02:10")}
 
 
 class SajTimeTextEntity(TextEntity, SajBaseEntity):
@@ -68,25 +60,17 @@ class SajTimeTextEntity(TextEntity, SajBaseEntity):
         self._key = key
         self._attr_name = name
         self._attr_unique_id = unique_id
-        # Set default times:
-        # - Charging: 01:00 for start, 01:10 for end
-        # - Discharging: 02:00 for start, 02:10 for end
-        if "discharge" in name.lower():
-            # Discharge slots use 02:00-02:10
-            if "start" in name.lower():
-                self._attr_native_value = "02:00"
-            elif "end" in name.lower():
-                self._attr_native_value = "02:10"
-            else:
-                self._attr_native_value = "02:00"  # Fallback
-        else:
-            # Charge slots use 01:00-01:10
-            if "start" in name.lower():
-                self._attr_native_value = "01:00"
-            elif "end" in name.lower():
-                self._attr_native_value = "01:10"
-            else:
-                self._attr_native_value = "01:00"  # Fallback
+        self._attr_should_poll = False
+        # Default times: charge slots start at 01:00/01:10, discharge slots at
+        # 02:00/02:10; "start"/"end" pick which of the pair applies, anything
+        # else (e.g. a future slot naming) falls back to the start time.
+        name_lower = name.lower()
+        start_default, end_default = _DEFAULT_TIMES[
+            "discharge" if "discharge" in name_lower else "charge"
+        ]
+        self._attr_native_value = (
+            end_default if "end" in name_lower else start_default
+        )
         # Regex that enforces HH:MM: Hours from 00 to 23, minutes from 00 to 59
         self._attr_pattern = r"^(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9])$"
         self._attr_mode = "text"
@@ -102,12 +86,6 @@ class SajTimeTextEntity(TextEntity, SajBaseEntity):
         elif isinstance(current, str) and re.match(self._attr_pattern, current):
             self._attr_native_value = current
             self.async_write_ha_state()
-
-    async def async_update(self) -> None:
-        """Update is not used here to avoid additional Modbus requests."""
-        # We intentionally leave this update block empty,
-        # so that modbus registers are not queried again here.
-        pass
 
     async def async_set_value(self, value) -> None:
         """Set a new time value (Format 'HH:MM')."""
