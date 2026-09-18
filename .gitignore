@@ -5,3 +5,5 @@
 .kilo
 .claude
 /graphify-out/
+# Added by code-review-graph
+.code-review-graph/
