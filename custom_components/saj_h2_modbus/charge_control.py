@@ -33,6 +33,11 @@ DEFAULT_POWER_PERCENT = 10
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
 
+# How long shutdown() waits for an in-flight command to finish before cancelling
+# it. A healthy write takes milliseconds; this only has to bridge that, not the
+# retry storm a dead device produces (see shutdown()).
+_SHUTDOWN_DRAIN_TIMEOUT: float = 10.0
+
 # Minimum interval between HA state flushes (debounce)
 _FIRST_FLUSH_DELAY: float = 0.2       # Erster Flush: 200ms
 _SUBSEQUENT_FLUSH_DELAY: float = 0.5   # Weitere Flushes: 500ms
@@ -296,6 +301,16 @@ class ChargeSettingHandler:
         else:
             _LOGGER.warning("No handler for command type: %s", command.type)
 
+    def _drain_queue(self) -> None:
+        """Discard every command that has not started executing yet."""
+        while not self._command_queue.empty():
+            try:
+                self._command_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
+                self._command_queue.task_done()
+
     async def shutdown(self) -> None:
         """Stop queue processing and drain pending commands."""
         self._stop_processing = True
@@ -308,20 +323,41 @@ class ChargeSettingHandler:
             self._flush_handle = None
         self._flush_pending = False
 
-        if self._worker_task and not self._worker_task.done():
-            self._worker_task.cancel()
-            try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
+        # Drop everything that has not started yet, so the worker only has to
+        # finish the command it is currently executing before its loop exits
+        # (it breaks on _stop_processing once the queue is empty).
+        self._drain_queue()
 
-        while not self._command_queue.empty():
+        if self._worker_task and not self._worker_task.done():
+            # A single command may write several registers in sequence – a
+            # schedule slot is three (start / end / day_mask_power). Cancelling
+            # between them leaves the inverter with a half-applied slot that
+            # nothing ever corrects, so give the in-flight command a chance to
+            # finish first. The Modbus connection is still open here: the hub
+            # closes it only after shutdown() returns.
+            #
+            # The wait is bounded because "finished" is not guaranteed: against
+            # an unresponsive device a single command can retry for minutes
+            # (3 handler attempts x 3 Modbus retries x socket/connect timeouts),
+            # far longer than Home Assistant will wait for an unload. The bound
+            # covers the healthy case, where the writes take milliseconds.
             try:
-                self._command_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            else:
-                self._command_queue.task_done()
+                await asyncio.wait_for(
+                    self._worker_task, timeout=_SHUTDOWN_DRAIN_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                # wait_for already cancelled and awaited the task.
+                _LOGGER.warning(
+                    "Command worker did not finish within %.0fs and was cancelled. "
+                    "A multi-register write may have been left incomplete – "
+                    "re-apply the affected charge/discharge slot to be sure.",
+                    _SHUTDOWN_DRAIN_TIMEOUT,
+                )
+            except asyncio.CancelledError:
+                # Our own task is being cancelled (HA teardown); pass it on.
+                raise
+
+        self._drain_queue()
 
         # Reset queue so new handler instances start clean after reload
         self._command_queue = asyncio.Queue()

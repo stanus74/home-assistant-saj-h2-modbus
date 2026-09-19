@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixed
+
+- **Half-Written Charge/Discharge Slots on Reload:** `ChargeSettingHandler.shutdown()` cancelled its command worker outright, without waiting for the command it was executing. One command can write several registers in sequence — a schedule slot is three (start, end, day mask + power) — so a cancellation between them left the inverter holding a partially applied slot: new start and end times paired with the old day mask, or vice versa. Nothing ever corrected it, because after the reload the integration read that mixed state back as the current one, and the device meanwhile charged or discharged on a schedule the user never set. The window opened on every integration reload, options change, HACS update and Home Assistant shutdown that happened to coincide with a slot write. `shutdown()` now discards commands that have not started yet and gives the in-flight one up to 10s to finish before falling back to cancelling it (the connection is still open at that point; the hub closes it only afterwards). The bound is deliberate rather than open-ended: against an unresponsive device a single command can retry for minutes, far longer than Home Assistant waits for an unload, so the wait covers the healthy case — where the writes take milliseconds — and logs a warning naming the affected slot when it does not.
+
 ## v3.1.1
 
 > **Maintenance release:** No change to Modbus behaviour or to any sensor value. Most of
