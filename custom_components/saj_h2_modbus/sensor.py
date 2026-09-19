@@ -12,6 +12,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import SENSOR_TYPES, SajModbusSensorEntityDescription
+from .entity import SajBaseEntity
 from .hub import SAJModbusHub, FAST_POLL_SENSORS, ADVANCED_LOGGING
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ async def async_setup_entry(
     )
 
 
-class SajSensor(CoordinatorEntity, SensorEntity):
+class SajSensor(CoordinatorEntity, SensorEntity, SajBaseEntity):
     """Base class for SAJ Modbus sensors."""
 
     def __init__(
@@ -62,10 +63,9 @@ class SajSensor(CoordinatorEntity, SensorEntity):
     ):
         """Initialize the sensor."""
         super().__init__(coordinator=hub)
+        SajBaseEntity.__init__(self, hub, device_info)
 
         self.entity_description = description
-        self._attr_device_info = device_info
-        self._hub = hub
         self._is_fast_variant = is_fast_variant
 
         # Stable unique_id: independent of coordinator name
@@ -169,21 +169,27 @@ class SajSensor(CoordinatorEntity, SensorEntity):
                     "Sensor %s registered for fast updates (10s)", self._attr_name
                 )
         elif not should_listen and is_listening:
-            if self._remove_fast_listener:
-                try:
-                    self._remove_fast_listener()
-                    if ADVANCED_LOGGING:
-                        _LOGGER.debug(
-                            "Sensor %s unregistered from fast updates", self._attr_name
-                        )
-                except Exception as e:
-                    _LOGGER.warning(
-                        "Error unregistering fast listener for %s: %s",
-                        self._attr_name,
-                        e,
-                    )
-                finally:
-                    self._remove_fast_listener = None
+            self._unregister_fast_listener()
+
+    @callback
+    def _unregister_fast_listener(self) -> None:
+        """Remove the fast listener if one is registered, clearing it either way."""
+        if self._remove_fast_listener is None:
+            return
+        try:
+            self._remove_fast_listener()
+            if ADVANCED_LOGGING:
+                _LOGGER.debug(
+                    "Sensor %s unregistered from fast updates", self._attr_name
+                )
+        except Exception as e:
+            _LOGGER.warning(
+                "Error unregistering fast listener for %s: %s",
+                self._attr_name,
+                e,
+            )
+        finally:
+            self._remove_fast_listener = None
 
     @callback
     def _handle_fast_update(self) -> None:
@@ -229,20 +235,7 @@ class SajSensor(CoordinatorEntity, SensorEntity):
         if not self._is_active.is_set():
             return
         self._is_active.clear()
-
-        if self._remove_fast_listener is not None:
-            try:
-                self._remove_fast_listener()
-                if ADVANCED_LOGGING:
-                    _LOGGER.debug(
-                        "Sensor %s unregistered from fast updates", self._attr_name
-                    )
-            except Exception as e:
-                _LOGGER.warning(
-                    "Error unregistering fast listener for %s: %s", self._attr_name, e
-                )
-            finally:
-                self._remove_fast_listener = None
+        self._unregister_fast_listener()
 
 
 class FastPollSensor(SajSensor):

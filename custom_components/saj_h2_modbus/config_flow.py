@@ -3,12 +3,14 @@ from __future__ import annotations
 import ipaddress
 import re
 import voluptuous as vol
+from typing import Any
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 import logging
 
 from .const import (
+    DEFAULT_CONFIG_SCHEMA,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
@@ -19,7 +21,7 @@ from .const import (
     CONF_MQTT_PUBLISH_ALL,
     CONF_USE_HA_MQTT,
 )
-from .utils import get_config_value
+from .utils import get_config_value, get_config_values
 
 # Connection keys without a const.py counterpart; DEFAULT_CONFIG_SCHEMA still
 # spells these out as literals.
@@ -106,6 +108,16 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle an options flow for SAJ Modbus."""
 
+    def _current(self) -> dict[str, Any]:
+        """Current value of every config key: options -> data -> schema default.
+
+        Single source of truth for reading; DEFAULT_CONFIG_SCHEMA in const.py
+        owns the defaults, so they cannot drift between the options form and
+        the hub (__init__.py reads the same table via get_config_values()).
+        Callers apply their own policy on top - this only reads.
+        """
+        return get_config_values(self.config_entry, DEFAULT_CONFIG_SCHEMA)
+
     def _get_topic_prefix_default(self) -> str:
         """Prefer non-empty option prefix, fallback to data, then 'saj'."""
         opt = (self.config_entry.options.get(CONF_MQTT_TOPIC_PREFIX) or "").strip()
@@ -120,45 +132,24 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         errors = {}
         if user_input is not None:
-            merged = dict(user_input)
-            merged.setdefault(
-                CONF_SCAN_INTERVAL,
-                get_config_value(
-                    self.config_entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-                ),
-            )
+            # user_input wins for every key it carries; anything it omits keeps
+            # the entry's current value. Same semantics as the per-key
+            # setdefault() chain this replaces, but the defaults now come from
+            # DEFAULT_CONFIG_SCHEMA instead of being re-spelled as literals.
+            merged = {**self._current(), **user_input}
 
-            # Enforce minimum scan interval of 60s
+            # Enforce minimum scan interval of 60s. Note the asymmetry with
+            # _get_options_schema(), which clamps instead: a legacy entry below
+            # the minimum should not block opening the form, but actively
+            # submitting such a value is an error worth showing.
             if merged[CONF_SCAN_INTERVAL] < 60:
                 errors[CONF_SCAN_INTERVAL] = "invalid_scan_interval"
 
-            merged.setdefault(
-                CONF_MQTT_HOST, get_config_value(self.config_entry, CONF_MQTT_HOST, "")
-            )
-            merged.setdefault(
-                CONF_MQTT_PORT,
-                get_config_value(self.config_entry, CONF_MQTT_PORT, 1883),
-            )
-            merged.setdefault(
-                CONF_MQTT_USER, get_config_value(self.config_entry, CONF_MQTT_USER, "")
-            )
-            merged.setdefault(
-                CONF_MQTT_PASSWORD,
-                get_config_value(self.config_entry, CONF_MQTT_PASSWORD, ""),
-            )
+            # The prefix needs more than a plain lookup: blank or whitespace-only
+            # values fall through to the data value and finally to "saj".
             topic_prefix_default = self._get_topic_prefix_default()
-            topic_prefix = (
-                merged.get(CONF_MQTT_TOPIC_PREFIX, topic_prefix_default) or ""
-            ).strip()
+            topic_prefix = (merged.get(CONF_MQTT_TOPIC_PREFIX) or "").strip()
             merged[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or topic_prefix_default
-            merged[CONF_MQTT_PUBLISH_ALL] = merged.get(
-                CONF_MQTT_PUBLISH_ALL,
-                get_config_value(self.config_entry, CONF_MQTT_PUBLISH_ALL, False),
-            )
-            merged.setdefault(
-                CONF_USE_HA_MQTT,
-                get_config_value(self.config_entry, CONF_USE_HA_MQTT, False),
-            )
 
             # If HA MQTT is forced, clear custom host to prevent Paho fallback
             if merged.get(CONF_USE_HA_MQTT, False):
@@ -172,63 +163,40 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
     def _get_options_schema(self):
-        host_default = get_config_value(
-            self.config_entry, CONF_HOST, self.config_entry.data.get(CONF_HOST)
-        )
-        port_default = get_config_value(
-            self.config_entry,
-            CONF_PORT,
-            self.config_entry.data.get(CONF_PORT, DEFAULT_PORT),
-        )
-        scan_default = get_config_value(
-            self.config_entry,
-            CONF_SCAN_INTERVAL,
-            self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-        )
-        if scan_default < 60:
-            scan_default = 60
+        cur = self._current()
 
-        fast_default = get_config_value(self.config_entry, CONF_FAST_ENABLED, False)
-        ultra_fast_default = get_config_value(
-            self.config_entry, CONF_ULTRA_FAST_ENABLED, False
-        )
-        mqtt_host_default = get_config_value(self.config_entry, CONF_MQTT_HOST, "")
-        mqtt_port_default = get_config_value(self.config_entry, CONF_MQTT_PORT, 1883)
-        mqtt_user_default = get_config_value(self.config_entry, CONF_MQTT_USER, "")
-        mqtt_password_default = get_config_value(
-            self.config_entry, CONF_MQTT_PASSWORD, ""
-        )
-        mqtt_prefix_default = self._get_topic_prefix_default()
-        mqtt_publish_all_default = get_config_value(
-            self.config_entry, CONF_MQTT_PUBLISH_ALL, False
-        )
-        use_ha_mqtt_default = get_config_value(
-            self.config_entry, CONF_USE_HA_MQTT, False
-        )
+        # Clamp rather than reject: a legacy entry stored below the minimum
+        # should prefill the minimum instead of an invalid value. Submitting
+        # a sub-minimum value is still an error (see async_step_init).
+        scan_default = max(cur[CONF_SCAN_INTERVAL], 60)
+        use_ha_mqtt_default = cur[CONF_USE_HA_MQTT]
+
         return vol.Schema(
             {
-                vol.Required(CONF_HOST, default=host_default): str,
-                vol.Required(CONF_PORT, default=port_default): int,
+                vol.Required(CONF_HOST, default=cur[CONF_HOST]): str,
+                vol.Required(CONF_PORT, default=cur[CONF_PORT]): int,
                 vol.Optional(CONF_SCAN_INTERVAL, default=scan_default): vol.All(
                     vol.Coerce(int), vol.Range(min=60, msg="invalid_scan_interval")
                 ),
-                vol.Optional(CONF_FAST_ENABLED, default=fast_default): bool,
+                vol.Optional(CONF_FAST_ENABLED, default=cur[CONF_FAST_ENABLED]): bool,
                 vol.Optional(
                     CONF_ULTRA_FAST_ENABLED,
-                    default=ultra_fast_default,
+                    default=cur[CONF_ULTRA_FAST_ENABLED],
                     description={"name": "Ultra Fast (1s over MQTT)"},
                 ): bool,
                 vol.Optional(
                     CONF_MQTT_HOST,
-                    default="" if use_ha_mqtt_default else mqtt_host_default,
+                    default="" if use_ha_mqtt_default else cur[CONF_MQTT_HOST],
                     description={"name": "MQTT Host (ignored when HA MQTT is active)"},
                 ): str,
-                vol.Optional(CONF_MQTT_PORT, default=mqtt_port_default): int,
-                vol.Optional(CONF_MQTT_USER, default=mqtt_user_default): str,
-                vol.Optional(CONF_MQTT_PASSWORD, default=mqtt_password_default): str,
-                vol.Optional(CONF_MQTT_TOPIC_PREFIX, default=mqtt_prefix_default): str,
+                vol.Optional(CONF_MQTT_PORT, default=cur[CONF_MQTT_PORT]): int,
+                vol.Optional(CONF_MQTT_USER, default=cur[CONF_MQTT_USER]): str,
+                vol.Optional(CONF_MQTT_PASSWORD, default=cur[CONF_MQTT_PASSWORD]): str,
                 vol.Optional(
-                    CONF_MQTT_PUBLISH_ALL, default=mqtt_publish_all_default
+                    CONF_MQTT_TOPIC_PREFIX, default=self._get_topic_prefix_default()
+                ): str,
+                vol.Optional(
+                    CONF_MQTT_PUBLISH_ALL, default=cur[CONF_MQTT_PUBLISH_ALL]
                 ): bool,
                 vol.Optional(
                     CONF_USE_HA_MQTT,

@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .entity import SajBaseEntity
 from .hub import SAJModbusHub
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,13 +65,12 @@ async def async_setup_entry(
     _LOGGER.info("Added SAJ switches")
 
 
-class BaseSajSwitch(CoordinatorEntity, SwitchEntity):
+class BaseSajSwitch(CoordinatorEntity, SwitchEntity, SajBaseEntity):
     def __init__(self, hub: SAJModbusHub, device_info, description: dict):
         super().__init__(hub)
-        self._hub = hub
+        SajBaseEntity.__init__(self, hub, device_info)
         self._definition = description
         self._switch_type = description["key"]
-        self._attr_device_info = device_info
         self._pending_attr = (
             PASSIVE_MODE_PENDING_ATTR
             if self._switch_type in PASSIVE_SWITCH_KEYS

@@ -178,27 +178,22 @@ def _create_device_info(entry: ConfigEntry) -> dict:
     }
 
 
+def _join_version(data: dict, *keys: str) -> str:
+    """Join the given version parts with dots, skipping missing ones."""
+    return ".".join(str(data[k]) for k in keys if data.get(k) is not None)
+
+
 def _update_device_info_from_inverter_data(hub: SAJModbusHub) -> None:
     """Enrich device info with firmware/hardware data after first refresh."""
     data = hub.inverter_data
     if not data:
         return
 
-    sw_parts = [
-        data.get("dv"),
-        data.get("mcv"),
-        data.get("scv"),
-    ]
-    sw_version = ".".join(str(v) for v in sw_parts if v is not None)
+    sw_version = _join_version(data, "dv", "mcv", "scv")
     if sw_version:
         hub.device_info["sw_version"] = sw_version
 
-    hw_parts = [
-        data.get("disphwversion"),
-        data.get("ctrlhwversion"),
-        data.get("powerhwversion"),
-    ]
-    hw_version = ".".join(str(v) for v in hw_parts if v is not None)
+    hw_version = _join_version(data, "disphwversion", "ctrlhwversion", "powerhwversion")
     if hw_version:
         hub.device_info["hw_version"] = hw_version
 

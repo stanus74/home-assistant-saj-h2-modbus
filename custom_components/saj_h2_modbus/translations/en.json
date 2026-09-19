@@ -28,6 +28,10 @@
           "mqtt_publish_all": "Publish all sensors on main interval",
           "ultra_fast_enabled": "Ultra Fast (1s over MQTT)",
           "use_ha_mqtt": "Use Home Assistant MQTT (ignores host/port settings)"
+        },
+        "data_description": {
+          "fast_enabled": "Polls the key energy sensors every 10 seconds and updates the Home Assistant entities. Switched off automatically while Ultra Fast is active.",
+          "ultra_fast_enabled": "The 1-second resolution is published over MQTT only. While this is active the 10s loop is switched off, so Home Assistant entities fall back to the main scan interval and PV1/PV2 power is not polled at all."
         }
       }
     }
