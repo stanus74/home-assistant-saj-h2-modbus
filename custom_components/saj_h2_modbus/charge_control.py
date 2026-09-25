@@ -251,9 +251,18 @@ class ChargeSettingHandler:
                 return
             self._is_processing = True
             self._worker_task = asyncio.create_task(self._process_queue())
-            self._worker_task.add_done_callback(
-                lambda _: setattr(self, "_worker_task", None)
-            )
+            self._worker_task.add_done_callback(self._clear_worker_task)
+
+    def _clear_worker_task(self, task: asyncio.Task) -> None:
+        """Drop the worker reference, unless a successor has already taken over.
+
+        Workers now retire whenever the queue drains, so a finished task's
+        callback can fire after the next one has been registered. An
+        unconditional reset would discard that live task's handle and leave
+        shutdown() with nothing to wait for.
+        """
+        if self._worker_task is task:
+            self._worker_task = None
 
     async def queue_command(self, command: Command) -> None:
         """Adds a new command to the queue and starts processing if needed."""
@@ -275,6 +284,8 @@ class ChargeSettingHandler:
                         self._command_queue.get(), timeout=0.5
                     )
                 except asyncio.TimeoutError:
+                    if await self._retire_if_idle():
+                        return
                     continue
 
                 try:
@@ -291,7 +302,28 @@ class ChargeSettingHandler:
             _LOGGER.debug("Command queue processing cancelled")
         finally:
             async with self._processing_lock:
-                self._is_processing = False
+                # Only clear the flag if we are still the registered worker. A
+                # successor may already have been started (see
+                # _retire_if_idle), and clearing it then would let a third
+                # worker start alongside it.
+                if self._worker_task is asyncio.current_task():
+                    self._is_processing = False
+
+    async def _retire_if_idle(self) -> bool:
+        """Stand down when the queue has drained. Returns True if the worker should stop.
+
+        Without this the loop spins for the lifetime of the integration, waking
+        twice a second forever after the first command. Clearing _is_processing
+        happens under the same lock _ensure_worker() checks it under, so a
+        concurrent queue_command() either still sees a live worker or starts a
+        fresh one – it can never observe neither and leave a command stranded.
+        """
+        async with self._processing_lock:
+            if not self._command_queue.empty():
+                return False
+            self._is_processing = False
+            self._worker_task = None
+            return True
 
     async def _execute_command(self, command: Command) -> None:
         """Executes a single command based on its type."""
