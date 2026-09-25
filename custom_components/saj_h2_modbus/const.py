@@ -39,6 +39,10 @@ CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 CONF_USE_HA_MQTT = "use_ha_mqtt"
+CONF_MQTT_HOST = "mqtt_host"
+CONF_MQTT_PORT = "mqtt_port"
+CONF_MQTT_USER = "mqtt_user"
+CONF_MQTT_PASSWORD = "mqtt_password"
 
 # MQTT defaults
 DEFAULT_MQTT_PORT = 1883
@@ -52,10 +56,10 @@ DEFAULT_CONFIG_SCHEMA: dict[str, Any] = {
     CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
     CONF_ULTRA_FAST_ENABLED: False,
     CONF_FAST_ENABLED: False,
-    "mqtt_host": "",
-    "mqtt_port": DEFAULT_MQTT_PORT,
-    "mqtt_user": "",
-    "mqtt_password": "",
+    CONF_MQTT_HOST: "",
+    CONF_MQTT_PORT: DEFAULT_MQTT_PORT,
+    CONF_MQTT_USER: "",
+    CONF_MQTT_PASSWORD: "",
     CONF_MQTT_TOPIC_PREFIX: DEFAULT_MQTT_TOPIC_PREFIX,
     CONF_MQTT_PUBLISH_ALL: False,
     CONF_USE_HA_MQTT: False,

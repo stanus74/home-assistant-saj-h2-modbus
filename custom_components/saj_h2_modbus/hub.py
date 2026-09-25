@@ -21,6 +21,10 @@ from .const import (
     CONF_MQTT_TOPIC_PREFIX,
     CONF_MQTT_PUBLISH_ALL,
     CONF_USE_HA_MQTT,
+    CONF_MQTT_HOST,
+    CONF_MQTT_PORT,
+    CONF_MQTT_USER,
+    CONF_MQTT_PASSWORD,
     DEFAULT_CONFIG_SCHEMA,
 )
 from . import modbus_readers
@@ -150,10 +154,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self.fast_enabled = config[CONF_FAST_ENABLED]
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
-        mqtt_host = config["mqtt_host"]
-        mqtt_port = config["mqtt_port"]
-        mqtt_user = config["mqtt_user"]
-        mqtt_password = config["mqtt_password"]
+        mqtt_host = config[CONF_MQTT_HOST]
+        mqtt_port = config[CONF_MQTT_PORT]
+        mqtt_user = config[CONF_MQTT_USER]
+        mqtt_password = config[CONF_MQTT_PASSWORD]
         mqtt_topic_prefix = config[CONF_MQTT_TOPIC_PREFIX]
         mqtt_publish_all = config[CONF_MQTT_PUBLISH_ALL]
         use_ha_mqtt = config[CONF_USE_HA_MQTT]

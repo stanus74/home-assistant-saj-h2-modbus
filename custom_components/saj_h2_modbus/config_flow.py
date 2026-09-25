@@ -20,15 +20,12 @@ from .const import (
     CONF_MQTT_TOPIC_PREFIX,
     CONF_MQTT_PUBLISH_ALL,
     CONF_USE_HA_MQTT,
+    CONF_MQTT_HOST,
+    CONF_MQTT_PORT,
+    CONF_MQTT_USER,
+    CONF_MQTT_PASSWORD,
 )
 from .utils import get_config_value, get_config_values
-
-# Connection keys without a const.py counterpart; DEFAULT_CONFIG_SCHEMA still
-# spells these out as literals.
-CONF_MQTT_HOST = "mqtt_host"
-CONF_MQTT_PORT = "mqtt_port"
-CONF_MQTT_USER = "mqtt_user"
-CONF_MQTT_PASSWORD = "mqtt_password"
 
 _LOGGER = logging.getLogger(__name__)
 
