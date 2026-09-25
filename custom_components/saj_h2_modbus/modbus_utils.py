@@ -440,9 +440,17 @@ def _should_retry_modbus_error(e: Exception) -> bool:
 
 
 def _should_trip_circuit_breaker(e: Exception) -> bool:
-    """Trip CB for connection-class errors only (protect against connection floods)."""
+    """Trip CB for connection-class errors only (protect against connection floods).
+
+    ReconnectionNeededError has to count as well. When the device is fully
+    unreachable, _on_modbus_retry's own reconnect fails and it raises that error
+    out of the retry loop, so it – not the original ConnectionException – is what
+    reaches the breaker. Leaving it out meant the failure counter never moved in
+    exactly the scenario the breaker exists for: every cycle ran the full retry
+    and reconnect sequence against a dead host, indefinitely.
+    """
     return isinstance(
-        e, (ConnectionException, ConnectionError, OSError)
+        e, (ConnectionException, ConnectionError, OSError, ReconnectionNeededError)
     )
 
 
