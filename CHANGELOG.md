@@ -32,6 +32,8 @@
 
 ### Code Quality
 
+- **Removed Two Unused Legacy Methods:** `ChargeSettingHandler.has_pending()` and `get_optimistic_overlay()` had no callers anywhere in the integration. `get_optimistic_overlay()` unconditionally returned `None` and documented why it was not needed; `has_pending()` read `_is_processing`, which was stuck at True for the lifetime of the integration before the worker fix above, so it would have answered "yes" even with an empty queue.
+
 - **Removed Unreachable Eviction Logic From the RMW Lock Registry:** `hub.py` guarded its per-register read-modify-write locks against unbounded growth with an `OrderedDict`, `move_to_end` bookkeeping, a parallel last-access dict, a one-hour TTL sweep on the five-minute cleanup timer, and a hard cap of 64 enforced in two separate places. The set of addresses that can ever reach it is fixed at import time, though: `RMW_REGISTER_ADDRESSES` is derived from the seven charge and seven discharge slots, so the dict tops out at 14 entries and the cap was never reachable. Replaced with a plain dict and `setdefault`, removing roughly 45 lines. Had the eviction ever run it would also have been wrong — it could drop a lock while it was held, letting the next caller create a second lock for the same register and lose the serialisation the mechanism exists to provide.
 
 ### Documentation

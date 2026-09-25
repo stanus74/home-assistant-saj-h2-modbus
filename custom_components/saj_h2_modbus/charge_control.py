@@ -930,10 +930,6 @@ class ChargeSettingHandler:
 
     # --- Legacy / Compatibility Methods ---
 
-    def has_pending(self) -> bool:
-        """Check if there are any pending settings."""
-        return not self._command_queue.empty() or self._is_processing
-
     async def process_pending(self) -> None:
         """Legacy method. Queue processing is now automatic."""
         # Ensure processing is running if queue is not empty. Goes through
@@ -941,9 +937,3 @@ class ChargeSettingHandler:
         # a second worker on the same queue.
         if not self._command_queue.empty():
             await self._ensure_worker()
-
-    def get_optimistic_overlay(
-        self, current_data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Returns None as optimistic UI is less relevant with immediate queue processing."""
-        return None
