@@ -276,9 +276,10 @@ class ConnectionCache:
     async def notify_error(self) -> None:
         """Mark cache as immediately expired after a connection error.
 
-        Faster than invalidate(): skips acquiring the lock for the expiry
-        reset so concurrent tasks stop receiving the stale client right away.
-        The next get_cached_client() call will fall through to a fresh connect.
+        Like invalidate(), this takes _cache_lock – do not call it while the
+        lock is already held. It differs in what it leaves behind: the client
+        reference stays, but the entry is expired and flagged unhealthy, so the
+        next get_cached_client() drops it and falls through to a fresh connect.
         """
         async with self._cache_lock:
             self._cache_expiry = 0.0
