@@ -30,6 +30,7 @@ from .modbus_utils import (
     try_write_registers,
     ReconnectionNeededError,
     BlockUnsupportedError,
+    CircuitBreakerOpenError,
     _CIRCUIT_BREAKER_CTX,
 )
 from .charge_control import (
@@ -455,6 +456,19 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                                 self._block_keys[method.__name__] = set(res)
                         # Clear any previous failure streak on success
                         self._block_failure_counts.pop(method.__name__, None)
+                    except CircuitBreakerOpenError:
+                        # The breaker is open: every remaining reader would be
+                        # rejected the same way, so end the cycle here. No
+                        # notify_error()/reconnect() – the breaker opened
+                        # precisely to stop contacting the device, and it closes
+                        # itself again once its timeout elapses. Propagates as a
+                        # ConnectionError subclass, so _async_update_data turns
+                        # it into UpdateFailed like any other failed cycle.
+                        _LOGGER.debug(
+                            "Aborting poll cycle at %s: circuit breaker is open",
+                            method.__name__,
+                        )
+                        raise
                     except ReconnectionNeededError:
                         await self.connection.notify_error()
                         await self.connection.reconnect()
@@ -723,6 +737,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         "(task cancelled?)"
                     )
 
+        except CircuitBreakerOpenError:
+            # Expected while the breaker is open. At a 1 s/10 s cadence this
+            # would otherwise emit a warning per tick for the whole outage.
+            _LOGGER.debug("Fast update skipped: circuit breaker is open")
         except ReconnectionNeededError:
             await self.connection.notify_error()
             await self.connection.reconnect()

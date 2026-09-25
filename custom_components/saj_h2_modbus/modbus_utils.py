@@ -48,6 +48,19 @@ class BlockUnsupportedError(Exception):
     pass
 
 
+class CircuitBreakerOpenError(ConnectionError):
+    """Raised when the circuit breaker rejected a call without contacting the device.
+
+    Deliberately a ConnectionError subclass so existing handlers keep treating a
+    rejection as "no data this cycle". The distinct type exists so the retry and
+    reconnect paths can tell it apart from a genuinely lost connection: the
+    socket may be perfectly fine here – the breaker simply declined to use it,
+    and reconnecting would be the opposite of what it is trying to achieve.
+    """
+
+    pass
+
+
 class CircuitBreaker:
     """Generic circuit breaker pattern for protecting against cascading failures.
 
@@ -110,11 +123,13 @@ class CircuitBreaker:
                         "%s Circuit Breaker transitioning to HALF_OPEN", self._name
                     )
                 else:
-                    raise ConnectionError(f"{self._name} Circuit Breaker is OPEN")
+                    raise CircuitBreakerOpenError(
+                        f"{self._name} Circuit Breaker is OPEN"
+                    )
             elif self.state == "HALF_OPEN":
                 # A probe is already in flight; reject further calls until it
                 # resolves instead of allowing concurrent probes.
-                raise ConnectionError(
+                raise CircuitBreakerOpenError(
                     f"{self._name} Circuit Breaker is HALF_OPEN (probe in progress)"
                 )
 
@@ -593,6 +608,12 @@ async def _try_modbus_operation(
             operation,
             should_trip=_should_trip_circuit_breaker,
         )
+    except CircuitBreakerOpenError:
+        # The breaker declined the call; the device was never contacted and the
+        # socket is not known to be broken. Converting this to
+        # ReconnectionNeededError would make the hub force a reconnect – exactly
+        # the traffic the breaker opened to suppress.
+        raise
     except (ConnectionException, ConnectionError, OSError) as final_e:
         # All retries exhausted on a connection-class error.
         # _on_modbus_retry already tried to reconnect on each attempt without success.
