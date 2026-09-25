@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import asyncio
-from collections import OrderedDict
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import logging
@@ -205,11 +204,12 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             0x3605: asyncio.Lock(),  # discharging state + discharge_time_enable mask
         }
 
-        # Read-modify-write locks for non-merge-locked registers.
-        # OrderedDict enables LRU eviction: oldest (front) entry is dropped first.
-        self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
-        self._rmw_locks_last_access: dict[int, float] = {}
-        self._rmw_lock_ttl: float = 3600.0  # 1 hour TTL
+        # Read-modify-write locks for non-merge-locked registers. One entry per
+        # register that is ever merged, created on first use. The set of
+        # reachable addresses is fixed at import time – the 14 day_mask_power
+        # registers of RMW_REGISTER_ADDRESSES (7 charge + 7 discharge slots) –
+        # so this dict cannot grow without bound and needs no eviction.
+        self._rmw_locks: dict[int, asyncio.Lock] = {}
         self._rmw_dict_lock = asyncio.Lock()
 
         # Writes share the same socket lock as reads (see above). Writer
@@ -910,37 +910,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         await self.connection.close()
         self._fast_listeners.clear()
 
-    async def _cleanup_rmw_locks(self) -> None:
-        """Clean up stale RMW locks (idle > TTL)."""
-        now = time.monotonic()
-        async with self._rmw_dict_lock:
-            # Phase 1: TTL expired locks
-            stale = [
-                addr
-                for addr, last_access in self._rmw_locks_last_access.items()
-                if now - last_access > self._rmw_lock_ttl
-            ]
-            for addr in stale:
-                if addr in self._rmw_locks:
-                    del self._rmw_locks[addr]
-                    del self._rmw_locks_last_access[addr]
-                    _LOGGER.debug("Cleaned up stale RMW lock for 0x%04x (TTL)", addr)
-
-            # Phase 2: Capacity check
-            if len(self._rmw_locks) >= 64:
-                # Evict oldest
-                evict_addr = next(iter(self._rmw_locks))
-                del self._rmw_locks[evict_addr]
-                if evict_addr in self._rmw_locks_last_access:
-                    del self._rmw_locks_last_access[evict_addr]
-                _LOGGER.warning(
-                    "RMW cache at capacity, evicted LRU lock for 0x%04x", evict_addr
-                )
-
     async def _async_cleanup_cache(self, now=None) -> None:
         """Periodically clean up stale connection cache entries and reset daily exclusions."""
         await self.connection.cleanup_cache()
-        await self._cleanup_rmw_locks()
 
         now_time = time.monotonic()
 
@@ -1096,24 +1068,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             lock = self._merge_locks.get(address)
             if lock is None:
                 async with self._rmw_dict_lock:
-                    if address not in self._rmw_locks:
-                        # Hard LRU cap: always evict the oldest entry before adding a new one.
-                        # Should never exceed ~20 entries in normal operation.
-                        if len(self._rmw_locks) >= 64:
-                            evict_addr = next(iter(self._rmw_locks))
-                            del self._rmw_locks[evict_addr]
-                            if evict_addr in self._rmw_locks_last_access:
-                                del self._rmw_locks_last_access[evict_addr]
-                            _LOGGER.warning(
-                                "merge_write_register: evicted RMW lock for 0x%04x "
-                                "(LRU, capacity=64)",
-                                evict_addr,
-                            )
-                        self._rmw_locks[address] = asyncio.Lock()
-                    # Move to end so this entry is considered most-recently-used.
-                    self._rmw_locks.move_to_end(address)
-                    self._rmw_locks_last_access[address] = time.monotonic()
-                lock = self._rmw_locks[address]
+                    lock = self._rmw_locks.setdefault(address, asyncio.Lock())
 
             # Wait for any in-flight write to finish BEFORE acquiring the
             # per-address RMW lock, so the lock isn't held for up to 15s
