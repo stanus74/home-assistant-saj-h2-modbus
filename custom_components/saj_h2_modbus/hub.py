@@ -84,6 +84,14 @@ FAST_POLL_SENSORS = {
     # update at 10 s in fast mode and at 60 s in ultra-fast mode.
     "pv1Power",
     "pv2Power",
+    # CT_GridPower_total is the sum of the three Meter A phase powers and comes
+    # from read_meter_a_data. Like the part_1 keys above it is read in the 10 s
+    # loop but not in the 1 s ultra-fast loop, so it updates at 10 s in fast
+    # mode and at 60 s in ultra-fast mode. It exists on the fast path because
+    # newer H1 firmware leaves the legacy CT register (0x40A1,
+    # CT_GridPowerWatt) at 0 while still serving the meter registers, so this
+    # is the only fast grid-meter reading available there (issue #196).
+    "CT_GridPower_total",
 }
 
 # TTL for static inverter data (serial, firmware, model). Re-read after this many seconds.
@@ -244,6 +252,11 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         # Keys the fast loop published on its last cycle. The slow loop skips
         # these when publishing to MQTT to avoid sending a value twice.
         self._fast_published_keys: set[str] = set()
+
+        # Set once the device rejects the Meter A block, so the 10 s loop stops
+        # asking for it. Reset by the daily exclusion reset in
+        # _async_cleanup_cache, same as _permanently_failed_blocks.
+        self._fast_meter_a_unsupported = False
 
         self._inverter_static_data: dict[str, Any] | None = None
         self._inverter_static_data_loaded_at: float | None = None
@@ -649,7 +662,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(
                     client, lock
                 )
-                return {**part_1, **part_2}
+                meter_a = await self._read_fast_meter_a(client, lock)
+                return {**part_1, **part_2, **meter_a}
             except ReconnectionNeededError:
                 raise
             except Exception as e:
@@ -660,6 +674,38 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         "Ultra-fast poll retry failed, skipping update cycle: %s", e
                     )
                     return None
+
+    async def _read_fast_meter_a(
+        self, client: Any, lock: asyncio.Lock
+    ) -> dict[str, Any]:
+        """Read the Meter A block for the 10 s loop. Never fatal.
+
+        Only CT_GridPower_total is kept downstream (it is the single Meter A key
+        in FAST_POLL_SENSORS); the rest of the block stays on the 60 s cycle.
+
+        Failures return {} instead of propagating. Not every installation has a
+        Meter A, and _run_fast_modbus_read turns an exception into a skipped
+        cycle for the WHOLE fast update – so letting this fail loudly would cost
+        those users every other fast sensor as well.
+        """
+        if self._fast_meter_a_unsupported:
+            return {}
+        try:
+            return await modbus_readers.read_meter_a_data(client, lock)
+        except ReconnectionNeededError:
+            raise
+        except BlockUnsupportedError as e:
+            self._fast_meter_a_unsupported = True
+            _LOGGER.info(
+                "Meter A block not supported by this device – dropping it from the "
+                "fast poll. CT_GridPower_total keeps updating on the %ss cycle. (%s)",
+                int(self.update_interval.total_seconds()) if self.update_interval else 60,
+                e,
+            )
+            return {}
+        except Exception as e:
+            _LOGGER.debug("Fast Meter A read failed, skipping it this cycle: %s", e)
+            return {}
 
     async def _publish_fast_mqtt(self, fast_data: dict[str, Any]) -> None:
         """Publish fast-poll sensor values to MQTT."""
@@ -968,6 +1014,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._permanently_failed_blocks.clear()
                 self._block_failure_counts.clear()
+            if self._fast_meter_a_unsupported:
+                _LOGGER.info("Daily exclusion-list reset: retrying Meter A on the fast poll")
+                self._fast_meter_a_unsupported = False
             self._last_exclusion_reset_time = now_time
 
     @asynccontextmanager
