@@ -241,6 +241,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._fast_listeners: set[Callable[[], None]] = set()
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
 
+        # Keys the fast loop published on its last cycle. The slow loop skips
+        # these when publishing to MQTT to avoid sending a value twice.
+        self._fast_published_keys: set[str] = set()
+
         self._inverter_static_data: dict[str, Any] | None = None
         self._inverter_static_data_loaded_at: float | None = None
         self._warned_missing_states: bool = False
@@ -379,15 +383,21 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     self.inverter_data.update(cache)
 
                 if self.mqtt.publish_all and self.inverter_data:
-                    # Prevent duplicate MQTT publishing by excluding fast-poll sensors
-                    # from the slow loop if they are already handled by fast/ultra-fast loops.
-                    if self.fast_enabled or self.ultra_fast_enabled:
-                        publish_cache = {
-                            k: v for k, v in self.inverter_data.items()
-                            if k not in self._fast_poll_sensor_keys
-                        }
-                    else:
-                        publish_cache = self.inverter_data
+                    # Skip keys the active fast loop already publishes, so the same
+                    # value is not sent twice.
+                    #
+                    # This tracks what the fast loop ACTUALLY published, not the
+                    # whole FAST_POLL_SENSORS set: the 1 s ultra-fast loop reads
+                    # only part_2, so excluding every fast key would silence the
+                    # part_1 ones (pv1Power/pv2Power) here without anything else
+                    # ever publishing them. The set is empty until the first fast
+                    # cycle runs and is cleared when the loops stop, so the slow
+                    # loop covers everything whenever no fast loop is live.
+                    publish_cache = {
+                        k: v
+                        for k, v in self.inverter_data.items()
+                        if k not in self._fast_published_keys
+                    }
                     if publish_cache:
                         await self.mqtt.publish_data(publish_cache)
 
@@ -727,6 +737,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     async with self._data_lock:
                         self.inverter_data.update(fast_data)
 
+                    self._fast_published_keys = set(fast_data)
                     await self._publish_fast_mqtt(fast_data)
 
                     # Only the 10s loop should push to HA entities to avoid DB spam.
@@ -893,6 +904,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._cancel_ultra_fast_update = None
         self._pending_fast_start_cancel = None
         self._pending_ultra_fast_start_cancel = None
+
+        # No fast loop is publishing any more, so the slow loop has to take
+        # these keys over again on its next MQTT cycle.
+        self._fast_published_keys = set()
 
     async def async_unload_entry(self) -> None:
         self._cleanup_fast_update_callbacks()
