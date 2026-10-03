@@ -9,7 +9,11 @@ from pymodbus.client.mixin import ModbusClientMixin
 from asyncio import Lock
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
-from .modbus_utils import try_read_registers, ReconnectionNeededError, BlockUnsupportedError
+from .modbus_utils import (
+    try_read_registers,
+    ReconnectionNeededError,
+    BlockUnsupportedError,
+)
 
 DataDict: TypeAlias = dict[str, Any]
 ReadResult: TypeAlias = tuple[DataDict, list[str]]
@@ -56,8 +60,18 @@ REALTIME_DATA_MAP = [
 ]
 
 ADDITIONAL_DATA_1_PART_1_MAP = [
-    ("BatTemp", "16i", 0.1),
-    ("batEnergyPercent", None),
+    # 0x4067-0x406D: inverter-side measurements. These are measured by the inverter
+    # itself, not reported by the BMS, so they stay available when the 0xA000 BMS
+    # block is silent or absent (some models do not implement it at all).
+    ("BusVoltMaster", None, 0.1),  # 0x4067
+    ("BusVoltSlave", None, 0.1),  # 0x4068
+    ("BatVolt", None, 0.1),  # 0x4069
+    ("BatCurr", "16i", 0.01),  # 0x406A
+    ("BatCurr1", "16i", 0.01),  # 0x406B - H2 only, undocumented for HS3
+    ("BatCurr2", "16i", 0.01),  # 0x406C - H2 only, undocumented for HS3
+    ("BatPower", "16i", 1),  # 0x406D
+    ("BatTemp", "16i", 0.1),  # 0x406E
+    ("batEnergyPercent", None),  # 0x406F
     (None, "skip_bytes", 2),
     ("pv1Voltage", None, 0.1),
     ("pv1TotalCurrent", None),
@@ -510,8 +524,8 @@ async def read_modbus_inverter_data(client: ModbusTcpClient, lock: Lock) -> Data
 
 _DATA_READ_CONFIG = {
     "additional_data_1_part_1": {
-        "address": 16494,
-        "count": 15,
+        "address": 0x4067,
+        "count": 22,
         "decode_map": ADDITIONAL_DATA_1_PART_1_MAP,
         "data_key": "additional_data_1_part_1",
         "default_factor": 0.01,

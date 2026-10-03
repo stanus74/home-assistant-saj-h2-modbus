@@ -211,6 +211,14 @@ power_sensors = [
     {"name": "Total Grid Power", "key": "totalgridPower", "icon": "power-socket"},
     {"name": "PV Power", "key": "pvPower", "icon": "solar-power"},
     {"name": "Battery Power", "key": "batteryPower", "icon": "battery-charging-100"},
+    # Inverter-side measurement (0x406D), independent of the 0xA000 BMS block.
+    # "Battery Power" above is the aggregate TotalBatteryPower at 0x40A6.
+    {
+        "name": "Battery Power (Inverter)",
+        "key": "BatPower",
+        "icon": "battery-charging-100",
+        "enable": True,
+    },
     {"name": "Inverter Power", "key": "inverterPower", "icon": "power-socket"},
     {"name": "PV1 Power", "key": "pv1Power", "icon": "flash"},
     {"name": "PV2 Power", "key": "pv2Power", "icon": "flash"},
@@ -377,6 +385,25 @@ voltage_sensors = [
         "name": "T-Phase Grid Voltage",
         "key": "TGridVolt",
         "icon": "sine-wave",
+        "enable": False,
+    },
+    # Inverter-side measurement (0x4069), independent of the 0xA000 BMS block.
+    {
+        "name": "Battery Voltage (Inverter)",
+        "key": "BatVolt",
+        "icon": "flash",
+        "enable": True,
+    },
+    {
+        "name": "BUS Voltage Master",
+        "key": "BusVoltMaster",
+        "icon": "flash",
+        "enable": False,
+    },
+    {
+        "name": "BUS Voltage Slave",
+        "key": "BusVoltSlave",
+        "icon": "flash",
         "enable": False,
     },
     {
@@ -625,6 +652,26 @@ current_sensors = [
     {
         "name": "T-Phase Grid Current",
         "key": "TGridCurr",
+        "icon": "current-dc",
+        "enable": False,
+    },
+    # Inverter-side measurement (0x406A), independent of the 0xA000 BMS block.
+    {
+        "name": "Battery Current (Inverter)",
+        "key": "BatCurr",
+        "icon": "current-dc",
+        "enable": True,
+    },
+    # 0x406B/0x406C are documented for H2/HS2 only, not for HS3.
+    {
+        "name": "Battery Controller 1 Current",
+        "key": "BatCurr1",
+        "icon": "current-dc",
+        "enable": False,
+    },
+    {
+        "name": "Battery Controller 2 Current",
+        "key": "BatCurr2",
         "icon": "current-dc",
         "enable": False,
     },
