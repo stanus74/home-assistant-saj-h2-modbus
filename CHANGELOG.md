@@ -1,4 +1,4 @@
-## Unreleased
+## v3.1.2
 
 > **Reliability release:** Four defects that only surfaced once something went wrong.
 > A reload during a schedule write could leave the inverter holding a half-applied
