@@ -20,6 +20,15 @@ ReadResult: TypeAlias = tuple[DataDict, list[str]]
 
 _LOGGER = logging.getLogger(__name__)
 
+# Devices report 0xFFFF on an unsigned register to mean "this value does not exist
+# on this unit" - seen on PV3/PV4 of inverters with fewer MPPT inputs and on the
+# slave-controller firmware version of single-controller models. Decoding it as a
+# measurement produces 6553.5 V / 655.35 A / 65535 W, which is not just wrong on
+# screen but poisons Home Assistant long-term statistics. Only unsigned values are
+# affected: on "16i" the same bit pattern is a legitimate -1 that real registers
+# use (directionBattery signals "discharging" that way).
+_UNAVAILABLE_UINT16 = 0xFFFF
+
 
 def _log_partial_errors(
     data_key: str, errors: list[str], log_level_on_error: int
@@ -428,6 +437,18 @@ async def _read_modbus_data(
 
         try:
             raw_value = regs[index]
+
+            if method == "16u" and raw_value == _UNAVAILABLE_UINT16:
+                if _LOGGER.isEnabledFor(logging.DEBUG):
+                    _LOGGER.debug(
+                        "%s: register 0x%04X reports 0xFFFF (not available), "
+                        "skipping key %s",
+                        data_key,
+                        start_address + index,
+                        key,
+                    )
+                continue
+
             if method == "16i":
                 value = client.convert_from_registers(
                     [raw_value], ModbusClientMixin.DATATYPE.INT16
