@@ -7,7 +7,6 @@ import time
 from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.const import (
     CONF_HOST,
     CONF_NAME,
@@ -138,49 +137,44 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
 
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
     """Helper function to create the SAJ Modbus hub."""
+    # No catch-all here: the constructor does no network I/O, so anything it
+    # raises is a permanent fault (bad options, a bug) that should surface as
+    # a setup error instead of a retry loop. Connection failures in the first
+    # refresh already arrive as ConfigEntryNotReady from the coordinator.
+
+    # Get fast_enabled setting from config entry options or data
+    fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
+
+    # Ensure the scan_interval is correctly passed to the hub
+    scan_interval = get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
+    _LOGGER.info("Starting hub with first refresh...")
+
+    from .hub import SAJModbusHub
+
+    hub = SAJModbusHub(
+        hass,
+        entry,  # Pass the full ConfigEntry object
+    )
+    hub.fast_enabled = fast_enabled
+
     try:
-        # Get fast_enabled setting from config entry options or data
-        fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
-
-        # Ensure the scan_interval is correctly passed to the hub
-        scan_interval = get_config_value(
-            entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-        )
-        _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
-        _LOGGER.info("Starting hub with first refresh...")
-
-        from .hub import SAJModbusHub
-
-        hub = SAJModbusHub(
-            hass,
-            entry,  # Pass the full ConfigEntry object
-        )
-        hub.fast_enabled = fast_enabled
-
+        await hub.async_config_entry_first_refresh()
+    except BaseException:
+        # The constructor already started the cache cleanup timer, the
+        # MQTT component listener and possibly the Paho client. HA retries
+        # a failed setup with a fresh hub, so without this teardown every
+        # retry while the inverter is unreachable would leak another set.
         try:
-            await hub.async_config_entry_first_refresh()
-        except BaseException:
-            # The constructor already started the cache cleanup timer, the
-            # MQTT component listener and possibly the Paho client. HA retries
-            # a failed setup with a fresh hub, so without this teardown every
-            # retry while the inverter is unreachable would leak another set.
-            try:
-                await hub.async_unload_entry()
-            except Exception as cleanup_err:
-                _LOGGER.debug("Ignoring hub teardown error: %s", cleanup_err)
-            raise
-        _LOGGER.info(
-            f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
-        )
-
-        return hub
-    except ConfigEntryNotReady:
+            await hub.async_unload_entry()
+        except Exception as cleanup_err:
+            _LOGGER.debug("Ignoring hub teardown error: %s", cleanup_err)
         raise
-    except Exception as e:
-        _LOGGER.error(f"Failed to set up SAJ Modbus hub: {e}")
-        raise ConfigEntryNotReady(
-            f"Failed to set up SAJ Modbus hub: {e}"
-        ) from e
+    _LOGGER.info(
+        f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
+    )
+
+    return hub
 
 
 def _create_device_info(entry: ConfigEntry) -> dict:
