@@ -33,6 +33,11 @@ DEFAULT_POWER_PERCENT = 10
 # Retry configuration for handler write operations
 MAX_HANDLER_RETRIES = 3
 
+# How long shutdown() waits for an in-flight command to finish before cancelling
+# it. A healthy write takes milliseconds; this only has to bridge that, not the
+# retry storm a dead device produces (see shutdown()).
+_SHUTDOWN_DRAIN_TIMEOUT: float = 10.0
+
 # Minimum interval between HA state flushes (debounce)
 _FIRST_FLUSH_DELAY: float = 0.2       # Erster Flush: 200ms
 _SUBSEQUENT_FLUSH_DELAY: float = 0.5   # Weitere Flushes: 500ms
@@ -246,9 +251,18 @@ class ChargeSettingHandler:
                 return
             self._is_processing = True
             self._worker_task = asyncio.create_task(self._process_queue())
-            self._worker_task.add_done_callback(
-                lambda _: setattr(self, "_worker_task", None)
-            )
+            self._worker_task.add_done_callback(self._clear_worker_task)
+
+    def _clear_worker_task(self, task: asyncio.Task) -> None:
+        """Drop the worker reference, unless a successor has already taken over.
+
+        Workers now retire whenever the queue drains, so a finished task's
+        callback can fire after the next one has been registered. An
+        unconditional reset would discard that live task's handle and leave
+        shutdown() with nothing to wait for.
+        """
+        if self._worker_task is task:
+            self._worker_task = None
 
     async def queue_command(self, command: Command) -> None:
         """Adds a new command to the queue and starts processing if needed."""
@@ -270,6 +284,8 @@ class ChargeSettingHandler:
                         self._command_queue.get(), timeout=0.5
                     )
                 except asyncio.TimeoutError:
+                    if await self._retire_if_idle():
+                        return
                     continue
 
                 try:
@@ -286,7 +302,28 @@ class ChargeSettingHandler:
             _LOGGER.debug("Command queue processing cancelled")
         finally:
             async with self._processing_lock:
-                self._is_processing = False
+                # Only clear the flag if we are still the registered worker. A
+                # successor may already have been started (see
+                # _retire_if_idle), and clearing it then would let a third
+                # worker start alongside it.
+                if self._worker_task is asyncio.current_task():
+                    self._is_processing = False
+
+    async def _retire_if_idle(self) -> bool:
+        """Stand down when the queue has drained. Returns True if the worker should stop.
+
+        Without this the loop spins for the lifetime of the integration, waking
+        twice a second forever after the first command. Clearing _is_processing
+        happens under the same lock _ensure_worker() checks it under, so a
+        concurrent queue_command() either still sees a live worker or starts a
+        fresh one – it can never observe neither and leave a command stranded.
+        """
+        async with self._processing_lock:
+            if not self._command_queue.empty():
+                return False
+            self._is_processing = False
+            self._worker_task = None
+            return True
 
     async def _execute_command(self, command: Command) -> None:
         """Executes a single command based on its type."""
@@ -295,6 +332,16 @@ class ChargeSettingHandler:
             await handler(command.payload)
         else:
             _LOGGER.warning("No handler for command type: %s", command.type)
+
+    def _drain_queue(self) -> None:
+        """Discard every command that has not started executing yet."""
+        while not self._command_queue.empty():
+            try:
+                self._command_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
+                self._command_queue.task_done()
 
     async def shutdown(self) -> None:
         """Stop queue processing and drain pending commands."""
@@ -308,20 +355,41 @@ class ChargeSettingHandler:
             self._flush_handle = None
         self._flush_pending = False
 
-        if self._worker_task and not self._worker_task.done():
-            self._worker_task.cancel()
-            try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
+        # Drop everything that has not started yet, so the worker only has to
+        # finish the command it is currently executing before its loop exits
+        # (it breaks on _stop_processing once the queue is empty).
+        self._drain_queue()
 
-        while not self._command_queue.empty():
+        if self._worker_task and not self._worker_task.done():
+            # A single command may write several registers in sequence – a
+            # schedule slot is three (start / end / day_mask_power). Cancelling
+            # between them leaves the inverter with a half-applied slot that
+            # nothing ever corrects, so give the in-flight command a chance to
+            # finish first. The Modbus connection is still open here: the hub
+            # closes it only after shutdown() returns.
+            #
+            # The wait is bounded because "finished" is not guaranteed: against
+            # an unresponsive device a single command can retry for minutes
+            # (3 handler attempts x 3 Modbus retries x socket/connect timeouts),
+            # far longer than Home Assistant will wait for an unload. The bound
+            # covers the healthy case, where the writes take milliseconds.
             try:
-                self._command_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            else:
-                self._command_queue.task_done()
+                await asyncio.wait_for(
+                    self._worker_task, timeout=_SHUTDOWN_DRAIN_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                # wait_for already cancelled and awaited the task.
+                _LOGGER.warning(
+                    "Command worker did not finish within %.0fs and was cancelled. "
+                    "A multi-register write may have been left incomplete – "
+                    "re-apply the affected charge/discharge slot to be sure.",
+                    _SHUTDOWN_DRAIN_TIMEOUT,
+                )
+            except asyncio.CancelledError:
+                # Our own task is being cancelled (HA teardown); pass it on.
+                raise
+
+        self._drain_queue()
 
         # Reset queue so new handler instances start clean after reload
         self._command_queue = asyncio.Queue()
@@ -862,10 +930,6 @@ class ChargeSettingHandler:
 
     # --- Legacy / Compatibility Methods ---
 
-    def has_pending(self) -> bool:
-        """Check if there are any pending settings."""
-        return not self._command_queue.empty() or self._is_processing
-
     async def process_pending(self) -> None:
         """Legacy method. Queue processing is now automatic."""
         # Ensure processing is running if queue is not empty. Goes through
@@ -873,9 +937,3 @@ class ChargeSettingHandler:
         # a second worker on the same queue.
         if not self._command_queue.empty():
             await self._ensure_worker()
-
-    def get_optimistic_overlay(
-        self, current_data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Returns None as optimistic UI is less relevant with immediate queue processing."""
-        return None

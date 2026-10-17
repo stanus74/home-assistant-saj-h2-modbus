@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import asyncio
-from collections import OrderedDict
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import logging
@@ -22,6 +21,10 @@ from .const import (
     CONF_MQTT_TOPIC_PREFIX,
     CONF_MQTT_PUBLISH_ALL,
     CONF_USE_HA_MQTT,
+    CONF_MQTT_HOST,
+    CONF_MQTT_PORT,
+    CONF_MQTT_USER,
+    CONF_MQTT_PASSWORD,
     DEFAULT_CONFIG_SCHEMA,
 )
 from . import modbus_readers
@@ -30,6 +33,7 @@ from .modbus_utils import (
     try_write_registers,
     ReconnectionNeededError,
     BlockUnsupportedError,
+    CircuitBreakerOpenError,
     _CIRCUIT_BREAKER_CTX,
 )
 from .charge_control import (
@@ -80,6 +84,14 @@ FAST_POLL_SENSORS = {
     # update at 10 s in fast mode and at 60 s in ultra-fast mode.
     "pv1Power",
     "pv2Power",
+    # CT_GridPower_total is the sum of the three Meter A phase powers and comes
+    # from read_meter_a_data. Like the part_1 keys above it is read in the 10 s
+    # loop but not in the 1 s ultra-fast loop, so it updates at 10 s in fast
+    # mode and at 60 s in ultra-fast mode. It exists on the fast path because
+    # newer H1 firmware leaves the legacy CT register (0x40A1,
+    # CT_GridPowerWatt) at 0 while still serving the meter registers, so this
+    # is the only fast grid-meter reading available there (issue #196).
+    "CT_GridPower_total",
 }
 
 # TTL for static inverter data (serial, firmware, model). Re-read after this many seconds.
@@ -150,10 +162,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self.fast_enabled = config[CONF_FAST_ENABLED]
 
         # Config extraction - MQTT (Fallback logic options -> data -> default)
-        mqtt_host = config["mqtt_host"]
-        mqtt_port = config["mqtt_port"]
-        mqtt_user = config["mqtt_user"]
-        mqtt_password = config["mqtt_password"]
+        mqtt_host = config[CONF_MQTT_HOST]
+        mqtt_port = config[CONF_MQTT_PORT]
+        mqtt_user = config[CONF_MQTT_USER]
+        mqtt_password = config[CONF_MQTT_PASSWORD]
         mqtt_topic_prefix = config[CONF_MQTT_TOPIC_PREFIX]
         mqtt_publish_all = config[CONF_MQTT_PUBLISH_ALL]
         use_ha_mqtt = config[CONF_USE_HA_MQTT]
@@ -204,11 +216,12 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             0x3605: asyncio.Lock(),  # discharging state + discharge_time_enable mask
         }
 
-        # Read-modify-write locks for non-merge-locked registers.
-        # OrderedDict enables LRU eviction: oldest (front) entry is dropped first.
-        self._rmw_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
-        self._rmw_locks_last_access: dict[int, float] = {}
-        self._rmw_lock_ttl: float = 3600.0  # 1 hour TTL
+        # Read-modify-write locks for non-merge-locked registers. One entry per
+        # register that is ever merged, created on first use. The set of
+        # reachable addresses is fixed at import time – the 14 day_mask_power
+        # registers of RMW_REGISTER_ADDRESSES (7 charge + 7 discharge slots) –
+        # so this dict cannot grow without bound and needs no eviction.
+        self._rmw_locks: dict[int, asyncio.Lock] = {}
         self._rmw_dict_lock = asyncio.Lock()
 
         # Writes share the same socket lock as reads (see above). Writer
@@ -235,6 +248,15 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._cache_cleanup_unsub = None
         self._fast_listeners: set[Callable[[], None]] = set()
         self._fast_poll_sensor_keys = FAST_POLL_SENSORS
+
+        # Keys the fast loop published on its last cycle. The slow loop skips
+        # these when publishing to MQTT to avoid sending a value twice.
+        self._fast_published_keys: set[str] = set()
+
+        # Set once the device rejects the Meter A block, so the 10 s loop stops
+        # asking for it. Reset by the daily exclusion reset in
+        # _async_cleanup_cache, same as _permanently_failed_blocks.
+        self._fast_meter_a_unsupported = False
 
         self._inverter_static_data: dict[str, Any] | None = None
         self._inverter_static_data_loaded_at: float | None = None
@@ -374,15 +396,21 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     self.inverter_data.update(cache)
 
                 if self.mqtt.publish_all and self.inverter_data:
-                    # Prevent duplicate MQTT publishing by excluding fast-poll sensors
-                    # from the slow loop if they are already handled by fast/ultra-fast loops.
-                    if self.fast_enabled or self.ultra_fast_enabled:
-                        publish_cache = {
-                            k: v for k, v in self.inverter_data.items()
-                            if k not in self._fast_poll_sensor_keys
-                        }
-                    else:
-                        publish_cache = self.inverter_data
+                    # Skip keys the active fast loop already publishes, so the same
+                    # value is not sent twice.
+                    #
+                    # This tracks what the fast loop ACTUALLY published, not the
+                    # whole FAST_POLL_SENSORS set: the 1 s ultra-fast loop reads
+                    # only part_2, so excluding every fast key would silence the
+                    # part_1 ones (pv1Power/pv2Power) here without anything else
+                    # ever publishing them. The set is empty until the first fast
+                    # cycle runs and is cleared when the loops stop, so the slow
+                    # loop covers everything whenever no fast loop is live.
+                    publish_cache = {
+                        k: v
+                        for k, v in self.inverter_data.items()
+                        if k not in self._fast_published_keys
+                    }
                     if publish_cache:
                         await self.mqtt.publish_data(publish_cache)
 
@@ -455,6 +483,19 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                                 self._block_keys[method.__name__] = set(res)
                         # Clear any previous failure streak on success
                         self._block_failure_counts.pop(method.__name__, None)
+                    except CircuitBreakerOpenError:
+                        # The breaker is open: every remaining reader would be
+                        # rejected the same way, so end the cycle here. No
+                        # notify_error()/reconnect() – the breaker opened
+                        # precisely to stop contacting the device, and it closes
+                        # itself again once its timeout elapses. Propagates as a
+                        # ConnectionError subclass, so _async_update_data turns
+                        # it into UpdateFailed like any other failed cycle.
+                        _LOGGER.debug(
+                            "Aborting poll cycle at %s: circuit breaker is open",
+                            method.__name__,
+                        )
+                        raise
                     except ReconnectionNeededError:
                         await self.connection.notify_error()
                         await self.connection.reconnect()
@@ -621,7 +662,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 part_2 = await modbus_readers.read_additional_modbus_data_1_part_2(
                     client, lock
                 )
-                return {**part_1, **part_2}
+                meter_a = await self._read_fast_meter_a(client, lock)
+                return {**part_1, **part_2, **meter_a}
             except ReconnectionNeededError:
                 raise
             except Exception as e:
@@ -632,6 +674,38 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         "Ultra-fast poll retry failed, skipping update cycle: %s", e
                     )
                     return None
+
+    async def _read_fast_meter_a(
+        self, client: Any, lock: asyncio.Lock
+    ) -> dict[str, Any]:
+        """Read the Meter A block for the 10 s loop. Never fatal.
+
+        Only CT_GridPower_total is kept downstream (it is the single Meter A key
+        in FAST_POLL_SENSORS); the rest of the block stays on the 60 s cycle.
+
+        Failures return {} instead of propagating. Not every installation has a
+        Meter A, and _run_fast_modbus_read turns an exception into a skipped
+        cycle for the WHOLE fast update – so letting this fail loudly would cost
+        those users every other fast sensor as well.
+        """
+        if self._fast_meter_a_unsupported:
+            return {}
+        try:
+            return await modbus_readers.read_meter_a_data(client, lock)
+        except ReconnectionNeededError:
+            raise
+        except BlockUnsupportedError as e:
+            self._fast_meter_a_unsupported = True
+            _LOGGER.info(
+                "Meter A block not supported by this device – dropping it from the "
+                "fast poll. CT_GridPower_total keeps updating on the %ss cycle. (%s)",
+                int(self.update_interval.total_seconds()) if self.update_interval else 60,
+                e,
+            )
+            return {}
+        except Exception as e:
+            _LOGGER.debug("Fast Meter A read failed, skipping it this cycle: %s", e)
+            return {}
 
     async def _publish_fast_mqtt(self, fast_data: dict[str, Any]) -> None:
         """Publish fast-poll sensor values to MQTT."""
@@ -709,6 +783,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                     async with self._data_lock:
                         self.inverter_data.update(fast_data)
 
+                    self._fast_published_keys = set(fast_data)
                     await self._publish_fast_mqtt(fast_data)
 
                     # Only the 10s loop should push to HA entities to avoid DB spam.
@@ -723,6 +798,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                         "(task cancelled?)"
                     )
 
+        except CircuitBreakerOpenError:
+            # Expected while the breaker is open. At a 1 s/10 s cadence this
+            # would otherwise emit a warning per tick for the whole outage.
+            _LOGGER.debug("Fast update skipped: circuit breaker is open")
         except ReconnectionNeededError:
             await self.connection.notify_error()
             await self.connection.reconnect()
@@ -872,6 +951,10 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_fast_start_cancel = None
         self._pending_ultra_fast_start_cancel = None
 
+        # No fast loop is publishing any more, so the slow loop has to take
+        # these keys over again on its next MQTT cycle.
+        self._fast_published_keys = set()
+
     async def async_unload_entry(self) -> None:
         self._cleanup_fast_update_callbacks()
         if self._cache_cleanup_unsub:
@@ -892,37 +975,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
         await self.connection.close()
         self._fast_listeners.clear()
 
-    async def _cleanup_rmw_locks(self) -> None:
-        """Clean up stale RMW locks (idle > TTL)."""
-        now = time.monotonic()
-        async with self._rmw_dict_lock:
-            # Phase 1: TTL expired locks
-            stale = [
-                addr
-                for addr, last_access in self._rmw_locks_last_access.items()
-                if now - last_access > self._rmw_lock_ttl
-            ]
-            for addr in stale:
-                if addr in self._rmw_locks:
-                    del self._rmw_locks[addr]
-                    del self._rmw_locks_last_access[addr]
-                    _LOGGER.debug("Cleaned up stale RMW lock for 0x%04x (TTL)", addr)
-
-            # Phase 2: Capacity check
-            if len(self._rmw_locks) >= 64:
-                # Evict oldest
-                evict_addr = next(iter(self._rmw_locks))
-                del self._rmw_locks[evict_addr]
-                if evict_addr in self._rmw_locks_last_access:
-                    del self._rmw_locks_last_access[evict_addr]
-                _LOGGER.warning(
-                    "RMW cache at capacity, evicted LRU lock for 0x%04x", evict_addr
-                )
-
     async def _async_cleanup_cache(self, now=None) -> None:
         """Periodically clean up stale connection cache entries and reset daily exclusions."""
         await self.connection.cleanup_cache()
-        await self._cleanup_rmw_locks()
 
         now_time = time.monotonic()
 
@@ -959,6 +1014,9 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._permanently_failed_blocks.clear()
                 self._block_failure_counts.clear()
+            if self._fast_meter_a_unsupported:
+                _LOGGER.info("Daily exclusion-list reset: retrying Meter A on the fast poll")
+                self._fast_meter_a_unsupported = False
             self._last_exclusion_reset_time = now_time
 
     @asynccontextmanager
@@ -1078,24 +1136,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             lock = self._merge_locks.get(address)
             if lock is None:
                 async with self._rmw_dict_lock:
-                    if address not in self._rmw_locks:
-                        # Hard LRU cap: always evict the oldest entry before adding a new one.
-                        # Should never exceed ~20 entries in normal operation.
-                        if len(self._rmw_locks) >= 64:
-                            evict_addr = next(iter(self._rmw_locks))
-                            del self._rmw_locks[evict_addr]
-                            if evict_addr in self._rmw_locks_last_access:
-                                del self._rmw_locks_last_access[evict_addr]
-                            _LOGGER.warning(
-                                "merge_write_register: evicted RMW lock for 0x%04x "
-                                "(LRU, capacity=64)",
-                                evict_addr,
-                            )
-                        self._rmw_locks[address] = asyncio.Lock()
-                    # Move to end so this entry is considered most-recently-used.
-                    self._rmw_locks.move_to_end(address)
-                    self._rmw_locks_last_access[address] = time.monotonic()
-                lock = self._rmw_locks[address]
+                    lock = self._rmw_locks.setdefault(address, asyncio.Lock())
 
             # Wait for any in-flight write to finish BEFORE acquiring the
             # per-address RMW lock, so the lock isn't held for up to 15s

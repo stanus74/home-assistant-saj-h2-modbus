@@ -39,6 +39,10 @@ CONF_ULTRA_FAST_ENABLED = "ultra_fast_enabled"
 CONF_MQTT_TOPIC_PREFIX = "mqtt_topic_prefix"
 CONF_MQTT_PUBLISH_ALL = "mqtt_publish_all"
 CONF_USE_HA_MQTT = "use_ha_mqtt"
+CONF_MQTT_HOST = "mqtt_host"
+CONF_MQTT_PORT = "mqtt_port"
+CONF_MQTT_USER = "mqtt_user"
+CONF_MQTT_PASSWORD = "mqtt_password"
 
 # MQTT defaults
 DEFAULT_MQTT_PORT = 1883
@@ -52,10 +56,10 @@ DEFAULT_CONFIG_SCHEMA: dict[str, Any] = {
     CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
     CONF_ULTRA_FAST_ENABLED: False,
     CONF_FAST_ENABLED: False,
-    "mqtt_host": "",
-    "mqtt_port": DEFAULT_MQTT_PORT,
-    "mqtt_user": "",
-    "mqtt_password": "",
+    CONF_MQTT_HOST: "",
+    CONF_MQTT_PORT: DEFAULT_MQTT_PORT,
+    CONF_MQTT_USER: "",
+    CONF_MQTT_PASSWORD: "",
     CONF_MQTT_TOPIC_PREFIX: DEFAULT_MQTT_TOPIC_PREFIX,
     CONF_MQTT_PUBLISH_ALL: False,
     CONF_USE_HA_MQTT: False,
@@ -207,6 +211,14 @@ power_sensors = [
     {"name": "Total Grid Power", "key": "totalgridPower", "icon": "power-socket"},
     {"name": "PV Power", "key": "pvPower", "icon": "solar-power"},
     {"name": "Battery Power", "key": "batteryPower", "icon": "battery-charging-100"},
+    # Inverter-side measurement (0x406D), independent of the 0xA000 BMS block.
+    # "Battery Power" above is the aggregate TotalBatteryPower at 0x40A6.
+    {
+        "name": "Battery Power (Inverter)",
+        "key": "BatPower",
+        "icon": "battery-charging-100",
+        "enable": True,
+    },
     {"name": "Inverter Power", "key": "inverterPower", "icon": "power-socket"},
     {"name": "PV1 Power", "key": "pv1Power", "icon": "flash"},
     {"name": "PV2 Power", "key": "pv2Power", "icon": "flash"},
@@ -373,6 +385,25 @@ voltage_sensors = [
         "name": "T-Phase Grid Voltage",
         "key": "TGridVolt",
         "icon": "sine-wave",
+        "enable": False,
+    },
+    # Inverter-side measurement (0x4069), independent of the 0xA000 BMS block.
+    {
+        "name": "Battery Voltage (Inverter)",
+        "key": "BatVolt",
+        "icon": "flash",
+        "enable": True,
+    },
+    {
+        "name": "BUS Voltage Master",
+        "key": "BusVoltMaster",
+        "icon": "flash",
+        "enable": False,
+    },
+    {
+        "name": "BUS Voltage Slave",
+        "key": "BusVoltSlave",
+        "icon": "flash",
         "enable": False,
     },
     {
@@ -621,6 +652,26 @@ current_sensors = [
     {
         "name": "T-Phase Grid Current",
         "key": "TGridCurr",
+        "icon": "current-dc",
+        "enable": False,
+    },
+    # Inverter-side measurement (0x406A), independent of the 0xA000 BMS block.
+    {
+        "name": "Battery Current (Inverter)",
+        "key": "BatCurr",
+        "icon": "current-dc",
+        "enable": True,
+    },
+    # 0x406B/0x406C are documented for H2/HS2 only, not for HS3.
+    {
+        "name": "Battery Controller 1 Current",
+        "key": "BatCurr1",
+        "icon": "current-dc",
+        "enable": False,
+    },
+    {
+        "name": "Battery Controller 2 Current",
+        "key": "BatCurr2",
         "icon": "current-dc",
         "enable": False,
     },

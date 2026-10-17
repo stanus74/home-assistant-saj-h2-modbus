@@ -9,12 +9,26 @@ from pymodbus.client.mixin import ModbusClientMixin
 from asyncio import Lock
 
 from .const import DEVICE_STATUSSES, FAULT_MESSAGES
-from .modbus_utils import try_read_registers, ReconnectionNeededError, BlockUnsupportedError
+from .modbus_utils import (
+    try_read_registers,
+    ReconnectionNeededError,
+    BlockUnsupportedError,
+    ENABLE_DETAILED_MODBUS_READ_LOGGING,
+)
 
 DataDict: TypeAlias = dict[str, Any]
 ReadResult: TypeAlias = tuple[DataDict, list[str]]
 
 _LOGGER = logging.getLogger(__name__)
+
+# Devices report 0xFFFF on an unsigned register to mean "this value does not exist
+# on this unit" - seen on PV3/PV4 of inverters with fewer MPPT inputs and on the
+# slave-controller firmware version of single-controller models. Decoding it as a
+# measurement produces 6553.5 V / 655.35 A / 65535 W, which is not just wrong on
+# screen but poisons Home Assistant long-term statistics. Only unsigned values are
+# affected: on "16i" the same bit pattern is a legitimate -1 that real registers
+# use (directionBattery signals "discharging" that way).
+_UNAVAILABLE_UINT16 = 0xFFFF
 
 
 def _log_partial_errors(
@@ -56,8 +70,18 @@ REALTIME_DATA_MAP = [
 ]
 
 ADDITIONAL_DATA_1_PART_1_MAP = [
-    ("BatTemp", "16i", 0.1),
-    ("batEnergyPercent", None),
+    # 0x4067-0x406D: inverter-side measurements. These are measured by the inverter
+    # itself, not reported by the BMS, so they stay available when the 0xA000 BMS
+    # block is silent or absent (some models do not implement it at all).
+    ("BusVoltMaster", None, 0.1),  # 0x4067
+    ("BusVoltSlave", None, 0.1),  # 0x4068
+    ("BatVolt", None, 0.1),  # 0x4069
+    ("BatCurr", "16i", 0.01),  # 0x406A
+    ("BatCurr1", "16i", 0.01),  # 0x406B - H2 only, undocumented for HS3
+    ("BatCurr2", "16i", 0.01),  # 0x406C - H2 only, undocumented for HS3
+    ("BatPower", "16i", 1),  # 0x406D
+    ("BatTemp", "16i", 0.1),  # 0x406E
+    ("batEnergyPercent", None),  # 0x406F
     (None, "skip_bytes", 2),
     ("pv1Voltage", None, 0.1),
     ("pv1TotalCurrent", None),
@@ -414,6 +438,23 @@ async def _read_modbus_data(
 
         try:
             raw_value = regs[index]
+
+            if method == "16u" and raw_value == _UNAVAILABLE_UINT16:
+                # Opt-in only: the condition is static on a given device, so at
+                # plain DEBUG this would repeat every poll cycle for the lifetime
+                # of the integration (4 lines a minute on a unit with two unused
+                # MPPT inputs) and bury the rest of the log. Enable with
+                # SAJ_DEBUG_MODBUS_READ=1 when diagnosing a missing value.
+                if ENABLE_DETAILED_MODBUS_READ_LOGGING:
+                    _LOGGER.debug(
+                        "%s: register 0x%04X reports 0xFFFF (not available), "
+                        "skipping key %s",
+                        data_key,
+                        start_address + index,
+                        key,
+                    )
+                continue
+
             if method == "16i":
                 value = client.convert_from_registers(
                     [raw_value], ModbusClientMixin.DATATYPE.INT16
@@ -510,8 +551,8 @@ async def read_modbus_inverter_data(client: ModbusTcpClient, lock: Lock) -> Data
 
 _DATA_READ_CONFIG = {
     "additional_data_1_part_1": {
-        "address": 16494,
-        "count": 15,
+        "address": 0x4067,
+        "count": 22,
         "decode_map": ADDITIONAL_DATA_1_PART_1_MAP,
         "data_key": "additional_data_1_part_1",
         "default_factor": 0.01,
