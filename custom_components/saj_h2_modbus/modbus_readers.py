@@ -13,6 +13,7 @@ from .modbus_utils import (
     try_read_registers,
     ReconnectionNeededError,
     BlockUnsupportedError,
+    ENABLE_DETAILED_MODBUS_READ_LOGGING,
 )
 
 DataDict: TypeAlias = dict[str, Any]
@@ -439,7 +440,12 @@ async def _read_modbus_data(
             raw_value = regs[index]
 
             if method == "16u" and raw_value == _UNAVAILABLE_UINT16:
-                if _LOGGER.isEnabledFor(logging.DEBUG):
+                # Opt-in only: the condition is static on a given device, so at
+                # plain DEBUG this would repeat every poll cycle for the lifetime
+                # of the integration (4 lines a minute on a unit with two unused
+                # MPPT inputs) and bury the rest of the log. Enable with
+                # SAJ_DEBUG_MODBUS_READ=1 when diagnosing a missing value.
+                if ENABLE_DETAILED_MODBUS_READ_LOGGING:
                     _LOGGER.debug(
                         "%s: register 0x%04X reports 0xFFFF (not available), "
                         "skipping key %s",
