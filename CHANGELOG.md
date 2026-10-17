@@ -1,6 +1,14 @@
+## v3.1.3
+
+### Fixed
+
+- **Failed Setup Attempts Leaked Background Resources:** When the inverter was unreachable while Home Assistant started, the first poll failed and Home Assistant retried the setup with backoff — but each attempt left behind what the hub had already started: the five-minute cache cleanup timer, the MQTT component-load listener and, with an external broker configured, the Paho client. Every retry added another set, all running until the next restart. The hub is now torn down before the failure is passed on to Home Assistant, so a retry starts from a clean slate.
+
+- **Permanent Setup Errors Were Retried Forever:** Setup turned every exception into "not ready yet", so a fault that can never resolve on its own — an unusable stored option, a bug in the hub's construction — made Home Assistant retry indefinitely, showing the entry as "Retrying setup" with only a one-line message in the log. Such errors now fail the setup with the full traceback, which is what a bug report needs. An unreachable inverter is unaffected and is still retried as before; that case was already reported as "not ready" by the first poll itself.
+
 ## v3.1.2
 
-> **Reliability release:** Eight defects, seven of which only surfaced once something
+> **Reliability release:** Six defects, five of which only surfaced once something
 > went wrong. A reload during a schedule write could leave the inverter holding a
 > half-applied charge slot. Registers a device does not implement were decoded as
 > measurements, writing nonsense into long-term statistics for months. The circuit
@@ -30,10 +38,6 @@
 - **Part-1 Fast Sensors Were Missing From MQTT in Ultra-Fast Mode:** The slow loop skipped every key in `FAST_POLL_SENSORS` when publishing to MQTT, on the assumption that a fast loop was covering them. The 1s ultra-fast loop only reads `part_2`, though, so the `part_1` keys — `pv1Power` and `pv2Power` — were excluded from the slow publish while nothing else ever published them: in ultra-fast mode they were absent from MQTT entirely, even though the matching Home Assistant entities still updated every 60s. The slow loop now skips only the keys the fast loop actually published on its last cycle. That set starts empty and is cleared when the loops stop, so whenever no fast loop is live the slow loop covers everything.
 
 - **Command Worker Spun for the Lifetime of the Integration:** `_process_queue()` only left its loop when shutdown had been requested *and* the queue was empty. With an idle queue the 0.5s `wait_for` timeout simply looped back, so after the first setting was ever written each config entry kept a task waking twice a second for as long as Home Assistant ran, with `_is_processing` stuck at True. Workers now stand down once the queue drains and are started again by the next command. The retirement clears `_is_processing` under the same lock `_ensure_worker()` checks it under, so a command arriving in that window either finds a live worker or starts a fresh one — it can never find neither and be stranded. The task's done-callback also no longer resets the worker handle unconditionally, which would otherwise discard a successor's handle now that workers come and go.
-
-- **Failed Setup Attempts Leaked Background Resources:** When the inverter was unreachable while Home Assistant started, the first poll failed and Home Assistant retried the setup with backoff — but each attempt left behind what the hub had already started: the five-minute cache cleanup timer, the MQTT component-load listener and, with an external broker configured, the Paho client. Every retry added another set, all running until the next restart. The hub is now torn down before the failure is passed on to Home Assistant, so a retry starts from a clean slate.
-
-- **Permanent Setup Errors Were Retried Forever:** Setup turned every exception into "not ready yet", so a fault that can never resolve on its own — an unusable stored option, a bug in the hub's construction — made Home Assistant retry indefinitely, showing the entry as "Retrying setup" with only a one-line message in the log. Such errors now fail the setup with the full traceback, which is what a bug report needs. An unreachable inverter is unaffected and is still retried as before; that case was already reported as "not ready" by the first poll itself.
 
 ### Code Quality
 
