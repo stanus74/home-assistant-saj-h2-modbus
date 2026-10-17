@@ -157,7 +157,18 @@ async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
         )
         hub.fast_enabled = fast_enabled
 
-        await hub.async_config_entry_first_refresh()
+        try:
+            await hub.async_config_entry_first_refresh()
+        except BaseException:
+            # The constructor already started the cache cleanup timer, the
+            # MQTT component listener and possibly the Paho client. HA retries
+            # a failed setup with a fresh hub, so without this teardown every
+            # retry while the inverter is unreachable would leak another set.
+            try:
+                await hub.async_unload_entry()
+            except Exception as cleanup_err:
+                _LOGGER.debug("Ignoring hub teardown error: %s", cleanup_err)
+            raise
         _LOGGER.info(
             f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
         )
