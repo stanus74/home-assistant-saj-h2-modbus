@@ -230,12 +230,10 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_ULTRA_FAST_ENABLED,
                     default=cur[CONF_ULTRA_FAST_ENABLED],
-                    description={"name": "Ultra Fast (1s over MQTT)"},
                 ): bool,
                 vol.Optional(
                     CONF_MQTT_HOST,
                     default="" if use_ha_mqtt_default else cur[CONF_MQTT_HOST],
-                    description={"name": "MQTT Host (ignored when HA MQTT is active)"},
                 ): str,
                 vol.Optional(CONF_MQTT_PORT, default=cur[CONF_MQTT_PORT]): int,
                 vol.Optional(CONF_MQTT_USER, default=cur[CONF_MQTT_USER]): str,
@@ -249,9 +247,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_USE_HA_MQTT,
                     default=use_ha_mqtt_default,
-                    description={
-                        "name": "Use Home Assistant MQTT (ignores Host/Port settings)"
-                    },
                 ): bool,
             }
         )

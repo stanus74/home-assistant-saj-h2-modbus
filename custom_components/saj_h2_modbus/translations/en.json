@@ -29,6 +29,13 @@
     "step": {
       "init": {
         "data": {
+          "host": "Inverter IP address or hostname",
+          "port": "Modbus TCP port",
+          "scan_interval": "Polling interval in seconds (min. 60)",
+          "mqtt_host": "MQTT broker host (ignored when HA MQTT is active)",
+          "mqtt_port": "MQTT broker port",
+          "mqtt_user": "MQTT username",
+          "mqtt_password": "MQTT password",
           "fast_enabled": "Realtime sensors (10s polling)",
           "mqtt_topic_prefix": "MQTT topic prefix (e.g. saj/h2)",
           "mqtt_publish_all": "Publish all sensors on main interval",

@@ -29,6 +29,13 @@
     "step": {
       "init": {
         "data": {
+          "host": "Endereço IP ou nome de host do inversor",
+          "port": "Porta Modbus TCP",
+          "scan_interval": "Intervalo de consulta em segundos (mín. 60)",
+          "mqtt_host": "Host do broker MQTT (ignorado quando o MQTT do HA está ativo)",
+          "mqtt_port": "Porta do broker MQTT",
+          "mqtt_user": "Utilizador MQTT",
+          "mqtt_password": "Palavra-passe MQTT",
           "fast_enabled": "Sensores em tempo real (consulta a cada 10s)",
           "mqtt_topic_prefix": "Prefixo do tópico MQTT (ex.: saj/h2)",
           "mqtt_publish_all": "Publicar todos os sensores no intervalo principal",

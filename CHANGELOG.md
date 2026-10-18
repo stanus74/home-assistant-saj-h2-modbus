@@ -14,6 +14,8 @@
 
 - **Setup Accepted an Inverter It Could Not Reach:** The setup form only checked that the host looked like a valid address. A typo in the IP or the wrong port still created the entry, which then sat in "Retrying setup" with nothing in the form to say why. Setup now opens a test connection first and shows "Failed to connect" right in the form if that fails, so the input can be corrected on the spot. Changing the host in the options also checks it is a valid address now; no test connection is made there, so options can still be saved while the inverter is offline.
 
+- **Unlabelled Fields in the Options Form:** Host, port, scan interval and the MQTT broker host, port, username and password had no translation, so the options form showed their internal keys (`mqtt_user`, `scan_interval`, …) instead of readable labels. All seven now have labels in English, German, Spanish, Dutch and Portuguese.
+
 - **Changing the Host Kept the Old Address Reserved:** A config entry is identified by the host it was set up with, and changing the host in the options did not update that identity. Adding an inverter at the old address later was then refused as "already configured", although nothing used it any more. The entry now follows its current host. The options form also rejects a host that another entry is already using, which it previously accepted — leaving two entries polling the same inverter.
 
 ## v3.1.2

@@ -29,6 +29,13 @@
     "step": {
       "init": {
         "data": {
+          "host": "IP-Adresse oder Hostname des Wechselrichters",
+          "port": "Modbus-TCP-Port",
+          "scan_interval": "Abfrageintervall in Sekunden (min. 60)",
+          "mqtt_host": "MQTT-Broker-Host (ignoriert, wenn HA MQTT aktiv ist)",
+          "mqtt_port": "MQTT-Broker-Port",
+          "mqtt_user": "MQTT-Benutzername",
+          "mqtt_password": "MQTT-Passwort",
           "fast_enabled": "Realtime Sensoren (10s Abfrage)",
           "mqtt_topic_prefix": "MQTT-Themenpräfix (z. B. saj/h2)",
           "mqtt_publish_all": "Alle Sensoren im Hauptintervall veröffentlichen",

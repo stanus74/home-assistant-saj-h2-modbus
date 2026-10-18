@@ -29,6 +29,13 @@
     "step": {
       "init": {
         "data": {
+          "host": "IP-adres of hostnaam van de omvormer",
+          "port": "Modbus TCP-poort",
+          "scan_interval": "Pollinginterval in seconden (min. 60)",
+          "mqtt_host": "MQTT-broker host (genegeerd als HA MQTT actief is)",
+          "mqtt_port": "MQTT-broker poort",
+          "mqtt_user": "MQTT-gebruikersnaam",
+          "mqtt_password": "MQTT-wachtwoord",
           "fast_enabled": "Realtime sensoren (10s polling)",
           "mqtt_topic_prefix": "MQTT-topicvoorvoegsel (bijv. saj/h2)",
           "mqtt_publish_all": "Alle sensoren publiceren bij het hoofdinterval",
