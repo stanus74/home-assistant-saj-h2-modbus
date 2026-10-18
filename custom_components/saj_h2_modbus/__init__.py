@@ -96,6 +96,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool
     # fast coordinator, closes client).
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
+    if not unload_ok:
+        # Entities of the platforms that failed to unload are still running,
+        # and HA keeps the entry (and its update listener) loaded as well, so
+        # the hub they depend on has to stay up until the next restart.
+        _LOGGER.warning(
+            "Unload platforms failed for entry %s; keeping the hub running",
+            entry.entry_id,
+        )
+        return False
+
     hub = getattr(entry, "runtime_data", None)
     if hub is not None:
         try:
@@ -103,12 +113,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool
         except Exception as e:
             _LOGGER.debug(f"Ignoring hub unload error: {e}")
 
-    if not unload_ok:
-        _LOGGER.warning(
-            "Unload platforms failed for entry %s; hub teardown still attempted",
-            entry.entry_id,
-        )
-    return unload_ok
+    return True
 
 
 async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> None:
