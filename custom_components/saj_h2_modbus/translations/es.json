@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "name_exists": "Ya hay un inversor configurado con este nombre",
       "already_configured": "El dispositivo ya está configurado",
       "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
     },

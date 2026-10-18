@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "name_exists": "Já existe um inversor configurado com este nome",
       "already_configured": "O dispositivo já se encontra configurado",
       "invalid_scan_interval": "O intervalo de varredura deve ser de pelo menos 60 segundos"
     },

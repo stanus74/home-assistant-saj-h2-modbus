@@ -43,6 +43,7 @@ DATA_SCHEMA = vol.Schema(
 
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
+ERROR_NAME_EXISTS = "name_exists"
 
 
 def host_valid(host):
@@ -64,6 +65,21 @@ def saj_modbus_entries(hass: HomeAssistant):
     }
 
 
+@callback
+def saj_modbus_names(hass: HomeAssistant) -> set[str]:
+    """Return the names already in use as entity unique_id prefixes.
+
+    Sensors prefix their unique_id with entry.data[CONF_NAME], switches,
+    numbers and texts with the entry title, so both have to be free.
+    """
+    names: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        names.add(entry.title)
+        if CONF_NAME in entry.data:
+            names.add(entry.data[CONF_NAME])
+    return names
+
+
 class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """SAJ Modbus configflow."""
 
@@ -82,6 +98,8 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if self._host_in_configuration_exists(host):
                 errors[CONF_HOST] = ERROR_ALREADY_CONFIGURED
+            elif user_input[CONF_NAME] in saj_modbus_names(self.hass):
+                errors[CONF_NAME] = ERROR_NAME_EXISTS
             elif not host_valid(host):
                 errors[CONF_HOST] = ERROR_INVALID_HOST
             else:

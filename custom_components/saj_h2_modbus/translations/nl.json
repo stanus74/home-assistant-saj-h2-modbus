@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "name_exists": "Er is al een omvormer met deze naam geconfigureerd",
       "already_configured": "Apparaat is al geconfigureerd",
       "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
     },

@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "name_exists": "An inverter with this name is already configured",
       "already_configured": "Device is already configured",
       "invalid_scan_interval": "Scan interval must be at least 60 seconds"
     },

@@ -6,6 +6,8 @@
 
 - **Permanent Setup Errors Were Retried Forever:** Setup turned every exception into "not ready yet", so a fault that can never resolve on its own — an unusable stored option, a bug in the hub's construction — made Home Assistant retry indefinitely, showing the entry as "Retrying setup" with only a one-line message in the log. Such errors now fail the setup with the full traceback, which is what a bug report needs. An unreachable inverter is unaffected and is still retried as before; that case was already reported as "not ready" by the first poll itself.
 
+- **A Second Inverter With the Same Name Lost Its Entities:** Setup only checked that the host was not configured yet. Entity IDs are derived from the name, though, so a second inverter added under the name of an existing one — easy to do, since every entry defaults to "SAJ" — produced the same unique IDs, and Home Assistant silently dropped the second inverter's entities as duplicates. The setup form now rejects a name that is already in use. Existing entries and their entity IDs are unchanged.
+
 ## v3.1.2
 
 > **Reliability release:** Six defects, five of which only surfaced once something
