@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "cannot_connect": "Failed to connect to the inverter. Check host, port and that Modbus TCP is enabled.",
       "name_exists": "An inverter with this name is already configured",
       "already_configured": "Device is already configured",
       "invalid_scan_interval": "Scan interval must be at least 60 seconds"
@@ -22,6 +23,7 @@
   },
   "options": {
     "error": {
+      "invalid_host": "Invalid hostname or IP address",
       "already_configured": "Device is already configured"
     },
     "step": {

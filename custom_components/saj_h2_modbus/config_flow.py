@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
 import voluptuous as vol
@@ -7,6 +8,7 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+from pymodbus.client import AsyncModbusTcpClient
 import logging
 
 from .const import (
@@ -44,6 +46,7 @@ DATA_SCHEMA = vol.Schema(
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
 ERROR_NAME_EXISTS = "name_exists"
+ERROR_CANNOT_CONNECT = "cannot_connect"
 
 
 def host_valid(host):
@@ -54,6 +57,19 @@ def host_valid(host):
     except ValueError:
         disallowed = re.compile(r"[^a-zA-Z\d\-]")
         return all(x and not disallowed.search(x) for x in host.split("."))
+
+
+async def can_connect(host: str, port: int) -> bool:
+    """Return True if a Modbus TCP connection to host:port can be opened."""
+    client = AsyncModbusTcpClient(host=host, port=port, timeout=5)
+    try:
+        async with asyncio.timeout(10):
+            return bool(await client.connect())
+    except Exception as err:
+        _LOGGER.debug("Connection test to %s:%s failed: %s", host, port, err)
+        return False
+    finally:
+        client.close()
 
 
 @callback
@@ -102,6 +118,8 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_NAME] = ERROR_NAME_EXISTS
             elif not host_valid(host):
                 errors[CONF_HOST] = ERROR_INVALID_HOST
+            elif not await can_connect(host, user_input[CONF_PORT]):
+                errors["base"] = ERROR_CANNOT_CONNECT
             else:
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
@@ -178,6 +196,8 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
             }
             if host_changed and merged[CONF_HOST] in other_hosts:
                 errors[CONF_HOST] = ERROR_ALREADY_CONFIGURED
+            elif host_changed and not host_valid(merged[CONF_HOST]):
+                errors[CONF_HOST] = ERROR_INVALID_HOST
 
             # If HA MQTT is forced, clear custom host to prevent Paho fallback
             if merged.get(CONF_USE_HA_MQTT, False):

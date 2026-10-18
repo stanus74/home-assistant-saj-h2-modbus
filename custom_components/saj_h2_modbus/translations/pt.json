@@ -12,6 +12,7 @@
       }
     },
     "error": {
+      "cannot_connect": "Não foi possível ligar ao inversor. Verifique o host, a porta e se o Modbus TCP está ativado.",
       "name_exists": "Já existe um inversor configurado com este nome",
       "already_configured": "O dispositivo já se encontra configurado",
       "invalid_scan_interval": "O intervalo de varredura deve ser de pelo menos 60 segundos"
@@ -22,6 +23,7 @@
   },
   "options": {
     "error": {
+      "invalid_host": "Nome de host ou endereço IP inválido",
       "already_configured": "O dispositivo já se encontra configurado"
     },
     "step": {
