@@ -8,6 +8,8 @@
 
 - **A Second Inverter With the Same Name Lost Its Entities:** Setup only checked that the host was not configured yet. Entity IDs are derived from the name, though, so a second inverter added under the name of an existing one — easy to do, since every entry defaults to "SAJ" — produced the same unique IDs, and Home Assistant silently dropped the second inverter's entities as duplicates. The setup form now rejects a name that is already in use. Existing entries and their entity IDs are unchanged.
 
+- **Changing the Host Kept the Old Address Reserved:** A config entry is identified by the host it was set up with, and changing the host in the options did not update that identity. Adding an inverter at the old address later was then refused as "already configured", although nothing used it any more. The entry now follows its current host. The options form also rejects a host that another entry is already using, which it previously accepted — leaving two entries polling the same inverter.
+
 ## v3.1.2
 
 > **Reliability release:** Six defects, five of which only surfaced once something

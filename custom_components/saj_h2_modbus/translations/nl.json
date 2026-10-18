@@ -21,6 +21,9 @@
     }
   },
   "options": {
+    "error": {
+      "already_configured": "Apparaat is al geconfigureerd"
+    },
     "step": {
       "init": {
         "data": {

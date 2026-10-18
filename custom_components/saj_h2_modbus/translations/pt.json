@@ -21,6 +21,9 @@
     }
   },
   "options": {
+    "error": {
+      "already_configured": "O dispositivo já se encontra configurado"
+    },
     "step": {
       "init": {
         "data": {

@@ -166,6 +166,19 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
             topic_prefix = (merged.get(CONF_MQTT_TOPIC_PREFIX) or "").strip()
             merged[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or topic_prefix_default
 
+            # The entry's unique_id follows the host (see async_update_options),
+            # so a new host another entry already uses must be rejected here.
+            # Only on a change: entries that already share a host must still be
+            # able to save their other options.
+            host_changed = merged[CONF_HOST] != self._current()[CONF_HOST]
+            other_hosts = {
+                get_config_value(entry, CONF_HOST)
+                for entry in self.hass.config_entries.async_entries(DOMAIN)
+                if entry.entry_id != self.config_entry.entry_id
+            }
+            if host_changed and merged[CONF_HOST] in other_hosts:
+                errors[CONF_HOST] = ERROR_ALREADY_CONFIGURED
+
             # If HA MQTT is forced, clear custom host to prevent Paho fallback
             if merged.get(CONF_USE_HA_MQTT, False):
                 merged[CONF_MQTT_HOST] = ""

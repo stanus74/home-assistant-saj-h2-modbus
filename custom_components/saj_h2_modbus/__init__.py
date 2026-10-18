@@ -130,6 +130,24 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
             mqtt_publish_all=config["mqtt_publish_all"],
             use_ha_mqtt=config["use_ha_mqtt"],
         )
+        # The entry's unique_id is the host it was set up with. Keep it in step
+        # with a host changed in the options, otherwise the old host stays
+        # blocked for new entries. Done after applying the settings: the update
+        # re-runs this listener, which then finds nothing left to change.
+        # Skipped if another entry still holds that host as a stale unique_id
+        # from a host change made before this sync existed.
+        host = config[CONF_HOST]
+        if entry.unique_id != host:
+            holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, host)
+            if holder is None:
+                hass.config_entries.async_update_entry(entry, unique_id=host)
+            else:
+                _LOGGER.warning(
+                    "Not updating unique_id of entry %s to %s: already used by entry %s",
+                    entry.title,
+                    host,
+                    holder.title,
+                )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
         await hass.config_entries.async_reload(entry.entry_id)
