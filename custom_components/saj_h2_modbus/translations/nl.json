@@ -15,7 +15,8 @@
       "cannot_connect": "Kan geen verbinding maken met de omvormer. Controleer host, poort en of Modbus TCP is ingeschakeld.",
       "name_exists": "Er is al een omvormer met deze naam geconfigureerd",
       "already_configured": "Apparaat is al geconfigureerd",
-      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
+      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn",
+      "invalid_host": "Ongeldige hostnaam of IP-adres"
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd"
@@ -24,7 +25,8 @@
   "options": {
     "error": {
       "invalid_host": "Ongeldige hostnaam of IP-adres",
-      "already_configured": "Apparaat is al geconfigureerd"
+      "already_configured": "Apparaat is al geconfigureerd",
+      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
     },
     "step": {
       "init": {

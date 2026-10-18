@@ -15,7 +15,8 @@
       "cannot_connect": "Verbindung zum Wechselrichter fehlgeschlagen. Host, Port und aktiviertes Modbus TCP prüfen.",
       "name_exists": "Ein Wechselrichter mit diesem Namen ist bereits eingerichtet",
       "already_configured": "Gerät ist bereits konfiguriert",
-      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen"
+      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen",
+      "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse"
     },
     "abort": {
       "already_configured": "Gerät ist bereits konfiguriert"
@@ -24,7 +25,8 @@
   "options": {
     "error": {
       "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
-      "already_configured": "Gerät ist bereits konfiguriert"
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen"
     },
     "step": {
       "init": {

@@ -15,7 +15,8 @@
       "cannot_connect": "No se pudo conectar con el inversor. Compruebe el host, el puerto y que Modbus TCP esté activado.",
       "name_exists": "Ya hay un inversor configurado con este nombre",
       "already_configured": "El dispositivo ya está configurado",
-      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
+      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos",
+      "invalid_host": "Nombre de host o dirección IP no válidos"
     },
     "abort": {
       "already_configured": "El dispositivo ya está configurado"
@@ -24,7 +25,8 @@
   "options": {
     "error": {
       "invalid_host": "Nombre de host o dirección IP no válidos",
-      "already_configured": "El dispositivo ya está configurado"
+      "already_configured": "El dispositivo ya está configurado",
+      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
     },
     "step": {
       "init": {
