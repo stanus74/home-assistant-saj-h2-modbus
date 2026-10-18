@@ -38,7 +38,9 @@ async def async_setup_entry(
             hub=hub,
             key=desc["key"],
             name=f"SAJ {desc['name']} (Time)",
-            unique_id=f"{hub.name}{desc['unique_id_suffix']}",
+            # Prefix from entry.data via device_info, like the sensors: hub.name
+            # is the entry title, which changes when the user renames the entry.
+            unique_id=f"{device_info['name']}{desc['unique_id_suffix']}",
             set_method=getattr(hub, desc["setter"]),
             device_info=device_info,
         )

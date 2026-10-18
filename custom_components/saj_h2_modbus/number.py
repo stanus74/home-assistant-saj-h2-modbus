@@ -306,7 +306,9 @@ async def async_setup_entry(
             hub=hub,
             key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
-            unique_id=f"{hub.name}_{desc['key']}_input",
+            # Prefix from entry.data via device_info, like the sensors: hub.name
+            # is the entry title, which changes when the user renames the entry.
+            unique_id=f"{device_info['name']}_{desc['key']}_input",
             min_val=desc["min"],
             max_val=desc["max"],
             step=desc["step"],

@@ -76,8 +76,11 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity, SajBaseEntity):
             if self._switch_type in PASSIVE_SWITCH_KEYS
             else f"_pending_{self._switch_type}_state"
         )
+        # Prefix from entry.data via device_info, like the sensors: hub.name
+        # is the entry title, which changes when the user renames the entry.
         self._attr_unique_id = (
-            f"{hub.name}_{self._switch_type}{description['unique_id_suffix']}"
+            f"{device_info['name']}_{self._switch_type}"
+            f"{description['unique_id_suffix']}"
         )
         # has_entity_name lets HA prefix the device name itself. Without it the
         # name was built as "<device> <label>" and HA prefixed the device again,
