@@ -41,13 +41,31 @@ Nach der Ersteinrichtung können Sie über **Einstellungen** → **Geräte & Die
 
 Aktiviert eine schnellere Aktualisierung für kritische Sensoren.
 
-**Betroffene Sensoren:**
-- `sensor.saj_pv_power` - PV Produktion
-- `sensor.saj_battery_power` - Batterie Leistung
-- `sensor.saj_battery_soc` - Batterie Ladezustand
-- `sensor.saj_grid_power` - Netz Leistung
-- `sensor.saj_total_load_power` - Gesamtlast
-- `sensor.saj_inverter_power` - Wechselrichter Leistung
+**Wo die 10-Sekunden-Werte erscheinen:** in eigenen *Fast*-Sensoren, z. B.
+`sensor.saj_fast_pv_power`, `sensor.saj_fast_battery_power`,
+`sensor.saj_fast_grid_load_power`, `sensor.saj_fast_total_load_power`,
+`sensor.saj_fast_inverter_power` (insgesamt 21). Die normalen Sensoren wie
+`sensor.saj_pv_power` aktualisieren weiter im Haupt-Abfrageintervall und
+behalten ihre Langzeitstatistik.
+
+Bei Neuinstallationen sind die Fast-Sensoren **standardmäßig deaktiviert** –
+benötigte unter *Einstellungen → Geräte & Dienste → SAJ H2 Modbus → Entitäten*
+aktivieren.
+
+**Recorder:** Fast-Sensoren haben keine Langzeitstatistik, ihre Zustände landen
+aber wie bei jeder Entität in der Historie-Datenbank – bei aktivem Fast-Polling
+alle 10 Sekunden. Wer sie nur für Live-Dashboards braucht, schließt sie aus:
+
+```yaml
+recorder:
+  exclude:
+    entity_globs:
+      - sensor.saj_fast_*
+```
+
+(`saj` anpassen, falls die Integration anders benannt wurde.) Die normalen
+Sensoren (`sensor.saj_pv_power` …) **nicht** ausschließen – sonst fehlen ihre
+Historie und Statistik, auch im Energie-Dashboard.
 
 **Vorteile:**
 - Echtzeit-Überwachung

@@ -29,8 +29,9 @@ async def async_setup_entry(
     for description in SENSOR_TYPES.values():
         if description.key in FAST_POLL_SENSORS:
             # Create BOTH entities for fast-poll sensors:
-            # 1. Normal entity (60s, with DB recording)
-            # 2. Fast entity (10s, no DB recording) with "fast_" prefix
+            # 1. Normal entity (60s, with long-term statistics)
+            # 2. Fast entity (10s, no statistics, disabled by default) with
+            #    "fast_" prefix
             entities.append(
                 SajSensor(hub, device_info, description, is_fast_variant=False)
             )
@@ -239,15 +240,18 @@ class SajSensor(CoordinatorEntity, SensorEntity, SajBaseEntity):
 
 
 class FastPollSensor(SajSensor):
-    """Sensor for fast-polling (10s) - NO state_class to prevent DB logging.
+    """Sensor for fast-polling (10s) - no state_class, disabled by default.
 
-    These sensors update every 10 seconds but are NOT recorded in the database
-    to prevent excessive database growth. They still show live updates in the UI.
+    Without a state_class these sensors stay out of the long-term statistics.
+    That does NOT keep them out of the recorder: every state change still lands
+    in the states table, every 10 s while the fast loop runs. They are
+    therefore created disabled, and users who enable them should exclude them
+    from the recorder unless they want that history.
 
     Note: Only fast variants (is_fast_variant=True) should use this class.
     """
 
-    _attr_state_class = None  # No DB recording for fast-poll sensors
+    _attr_state_class = None  # No long-term statistics for fast-poll sensors
 
     def __init__(
         self,
@@ -258,6 +262,8 @@ class FastPollSensor(SajSensor):
     ):
         """Initialize the fast-poll sensor."""
         super().__init__(hub, device_info, description, is_fast_variant=True)
-        # Enabled-default is inherited from the base description via
-        # SajSensor.__init__, so sensors the user intentionally disabled do
-        # not reappear through their fast variant.
+        # Disabled by default regardless of the base description: an enabled
+        # fast variant writes a state row on every change, ~10k rows a day even
+        # with the fast loop off and far more with it on. Only affects new
+        # registrations; entities already in the registry keep their state.
+        self._attr_entity_registry_enabled_default = False

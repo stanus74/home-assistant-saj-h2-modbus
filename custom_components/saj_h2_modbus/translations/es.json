@@ -45,7 +45,7 @@
           "use_ha_mqtt": "Usar MQTT de Home Assistant (ignora los ajustes de host/puerto)"
         },
         "data_description": {
-          "fast_enabled": "Consulta los sensores de energía principales cada 10 segundos y actualiza las entidades de Home Assistant. Se desactiva automáticamente mientras Ultra Rápido está activo.",
+          "fast_enabled": "Consulta los sensores de energía principales cada 10 segundos y actualiza las entidades de Home Assistant. Se desactiva automáticamente mientras Ultra Rápido está activo. Los valores de 10 segundos se publican en los sensores «Fast …», que están desactivados por defecto: active los que necesite. Como cualquier entidad se guardan en el historial, así que exclúyalos del recorder si no lo necesita.",
           "ultra_fast_enabled": "La resolución de 1 segundo se publica únicamente por MQTT. Mientras esta opción está activa, el ciclo de 10 s se desactiva: las entidades de Home Assistant pasan a actualizarse solo en el intervalo principal y la potencia PV1/PV2 no se consulta en absoluto."
         }
       }

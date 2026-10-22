@@ -45,7 +45,7 @@
           "use_ha_mqtt": "Gebruik Home Assistant MQTT (negeert host/port instellingen)"
         },
         "data_description": {
-          "fast_enabled": "Vraagt de belangrijkste energiesensoren elke 10 seconden op en werkt de Home Assistant-entiteiten bij. Wordt automatisch uitgeschakeld zolang Ultrasnel actief is.",
+          "fast_enabled": "Vraagt de belangrijkste energiesensoren elke 10 seconden op en werkt de Home Assistant-entiteiten bij. Wordt automatisch uitgeschakeld zolang Ultrasnel actief is. De 10-secondenwaarden komen in de \"Fast …\"-sensoren, die standaard zijn uitgeschakeld – schakel de benodigde in. Zoals elke entiteit worden ze in de geschiedenis vastgelegd; sluit ze uit van de recorder als u dat niet nodig hebt.",
           "ultra_fast_enabled": "De resolutie van 1 seconde gaat alleen naar MQTT. Zolang dit actief is wordt de 10s-lus uitgeschakeld: Home Assistant-entiteiten werken alleen nog bij op het hoofdinterval en PV1/PV2-vermogen wordt helemaal niet opgevraagd."
         }
       }

@@ -42,13 +42,30 @@ After initial setup, you can configure additional options via **Settings** → *
 
 Enables faster updates for critical sensors.
 
-**Affected sensors:**
-- `sensor.saj_pv_power` - PV production
-- `sensor.saj_battery_power` - Battery power
-- `sensor.saj_battery_soc` - Battery state of charge
-- `sensor.saj_grid_power` - Grid power
-- `sensor.saj_total_load_power` - Total load
-- `sensor.saj_inverter_power` - Inverter power
+**Where the 10-second values appear:** in separate *Fast* sensors, e.g.
+`sensor.saj_fast_pv_power`, `sensor.saj_fast_battery_power`,
+`sensor.saj_fast_grid_load_power`, `sensor.saj_fast_total_load_power`,
+`sensor.saj_fast_inverter_power` (21 in total). The regular sensors such as
+`sensor.saj_pv_power` keep updating on the main scan interval and keep their
+long-term statistics.
+
+On new installations the Fast sensors are **disabled by default** — enable the
+ones you need under *Settings → Devices & Services → SAJ H2 Modbus → Entities*.
+
+**Recorder:** Fast sensors have no long-term statistics, but like every entity
+their states are written to the history database — with fast polling on, every
+10 seconds. If you only need them for live dashboards, exclude them:
+
+```yaml
+recorder:
+  exclude:
+    entity_globs:
+      - sensor.saj_fast_*
+```
+
+(Adjust `saj` if you gave the integration a different name.) Do **not** exclude
+the regular sensors (`sensor.saj_pv_power` …) — that removes their history and
+statistics, including the energy dashboard data.
 
 **Pros:**
 - Real-time monitoring
