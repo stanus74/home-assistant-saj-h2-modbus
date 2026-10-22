@@ -24,6 +24,10 @@
 
 - **Changing the Host Kept the Old Address Reserved:** A config entry is identified by the host it was set up with, and changing the host in the options did not update that identity. Adding an inverter at the old address later was then refused as "already configured", although nothing used it any more. The entry now follows its current host. The options form also rejects a host that another entry is already using, which it previously accepted — leaving two entries polling the same inverter.
 
+### Code Quality
+
+- **Coordinator Receives Its Config Entry Explicitly:** The hub's `DataUpdateCoordinator` found its config entry through Home Assistant's setup context instead of being handed it. That works as long as the hub is created inside `async_setup_entry`, which it is, and Home Assistant does not enforce the explicit form for custom integrations — but the documented pattern passes `config_entry=` directly, which no longer depends on where the hub is constructed. No behaviour change.
+
 ## v3.1.2
 
 > **Reliability release:** Six defects, five of which only surfaced once something

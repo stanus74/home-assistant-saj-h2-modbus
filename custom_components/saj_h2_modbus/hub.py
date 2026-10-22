@@ -153,6 +153,7 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=config_entry.title,
+            config_entry=config_entry,
             update_interval=timedelta(seconds=scan_interval),
             update_method=self._async_update_data,
         )
