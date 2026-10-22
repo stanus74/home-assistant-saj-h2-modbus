@@ -208,6 +208,9 @@ class SajNumberEntity(NumberEntity, SajBaseEntity):
 
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
+    # No async_update: the value is written on setup and on every change, so
+    # HA's 30 s entity polling would only rewrite the unchanged state.
+    _attr_should_poll = False
 
     def __init__(
         self,
