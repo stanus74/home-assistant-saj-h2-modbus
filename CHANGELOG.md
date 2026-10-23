@@ -1,5 +1,23 @@
 ## v3.1.3
 
+> **Inputs and setup release.** ⚠️ **One change needs action:** the eight sensors
+> that mirror power settings — the four passive charge/discharge powers and the
+> battery/grid power limits — now show the raw register value instead of a
+> percentage, ten times the previous number (50 % → 500). Automations, templates
+> and dashboards comparing against them need new thresholds; the same applies to
+> their MQTT values.
+>
+> Everything else is fixes. Many input fields did not show what the inverter
+> actually holds: thirteen displayed a built-in default or a tenth of the register
+> value, and slot 1 of the charge/discharge schedule reverted to its defaults after
+> every restart — so saving a displayed value back could write something nobody
+> intended. Setup now tests the connection, rejects a name already in use and no
+> longer orphans switches, numbers and texts when the entry is renamed; a failed
+> start no longer leaks timers on every retry. Fast sensors are created disabled on
+> new installations, as they wrote about 10,000 database rows a day even with fast
+> polling off. Rejected inputs now fail visibly instead of reporting success, and
+> the MQTT password is masked.
+
 ### Changed
 
 - **⚠️ Power Setting Sensors Show the Raw Register Value:** Eight sensors that mirror writable power settings now show exactly the number stored in the register, without a unit — the same number their input writes. Affected: `sensor.saj_passive_grid_charge_power`, `sensor.saj_passive_grid_discharge_power`, `sensor.saj_passive_battery_charge_power`, `sensor.saj_passive_battery_discharge_power`, `sensor.saj_battery_charge_power_limit`, `sensor.saj_battery_discharge_power_limit`, `sensor.saj_grid_charge_power_limit` and `sensor.saj_grid_discharge_power_limit`. Previously they were divided by ten and labelled `%` (50 % for a register holding 500), while the matching input showed and wrote 500, so sensor and input disagreed by a factor of ten. **Their values are now ten times higher than before** (50 → 500, where 1100 = 110 % of rated power); automations, templates and dashboards that compare against these sensors need their thresholds multiplied by ten. The same applies to the values published over MQTT. The four power limits also lose the *battery* device class, which describes a state of charge and did not fit a power limit, and all eight no longer keep long-term statistics — they are settings that rarely change, and their history is still recorded. Home Assistant raises a one-time repair notice for the removed statistics, which can be confirmed under *Developer Tools → Statistics*. The three battery depth sensors (on-grid/off-grid discharge depth, charge depth) are unchanged: their raw value already is the percentage.
