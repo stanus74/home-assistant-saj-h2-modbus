@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # Every number shows the raw register value, the same unit its setter writes.
-# The readers store some of these registers under a different key ("source")
-# and/or already scaled ("source_factor", e.g. 0.1 turns raw 500 into 50.0);
-# the entity reads that key and divides the factor back out.
+# Where the reader stores the register under a different key, "source" names it.
 NUMBER_DEFINITIONS = [
     {
         "key": "charge_time_enable",
@@ -129,7 +127,6 @@ NUMBER_DEFINITIONS = [
         "unit": None,
         "setter": "set_battery_charge_power_limit",
         "source": "BatChargePower",
-        "source_factor": 0.1,
     },
     {
         "key": "battery_discharge_power_limit",
@@ -141,7 +138,6 @@ NUMBER_DEFINITIONS = [
         "unit": None,
         "setter": "set_battery_discharge_power_limit",
         "source": "BatDischargePower",
-        "source_factor": 0.1,
     },
     {
         "key": "grid_max_charge_power",
@@ -153,7 +149,6 @@ NUMBER_DEFINITIONS = [
         "unit": None,
         "setter": "set_grid_max_charge_power",
         "source": "GridChargePower",
-        "source_factor": 0.1,
     },
     {
         "key": "grid_max_discharge_power",
@@ -165,7 +160,6 @@ NUMBER_DEFINITIONS = [
         "unit": None,
         "setter": "set_grid_max_discharge_power",
         "source": "GridDischargePower",
-        "source_factor": 0.1,
     },
     {
         "key": "passive_charge_enable",
@@ -186,7 +180,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_passive_grid_charge_power",
-        "source_factor": 0.1,
     },
     {
         "key": "passive_grid_discharge_power",
@@ -197,7 +190,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_passive_grid_discharge_power",
-        "source_factor": 0.1,
     },
     {
         "key": "passive_bat_charge_power",
@@ -208,7 +200,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_passive_bat_charge_power",
-        "source_factor": 0.1,
     },
     {
         "key": "passive_bat_discharge_power",
@@ -219,7 +210,6 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_passive_bat_discharge_power",
-        "source_factor": 0.1,
     },
 ]
 
@@ -277,14 +267,12 @@ class SajGenericNumberEntity(SajNumberEntity):
         set_method_name: str | None = None,
         allowed_values: list[int] | None = None,
         source: str | None = None,
-        source_factor: float | None = None,
     ) -> None:
         super().__init__(
             hub, name, unique_id, min_val, max_val, step, default, device_info, unit
         )
         self._key = key
         self._source = source or key
-        self._source_factor = source_factor
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
         self._allowed_values = allowed_values
 
@@ -293,8 +281,6 @@ class SajGenericNumberEntity(SajNumberEntity):
         await super().async_added_to_hass()
         current = self._hub.inverter_data.get(self._source)
         if current is not None:
-            if self._source_factor:
-                current = round(current / self._source_factor)
             self._attr_native_value = current
             self.async_write_ha_state()
 
@@ -348,7 +334,6 @@ async def async_setup_entry(
             device_info=device_info,
             allowed_values=desc.get("allowed_values"),
             source=desc.get("source"),
-            source_factor=desc.get("source_factor"),
         )
         for desc in all_definitions
     ]

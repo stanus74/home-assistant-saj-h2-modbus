@@ -839,30 +839,6 @@ battery_sensors = [
         "enable": True,
     },
     {"name": "Battery charge depth", "key": "BatcharDepth", "enable": True},
-    {
-        "name": "Battery Charge Power Limit",
-        "key": "BatChargePower",
-        "icon": "battery-charging",
-        "enable": True,
-    },
-    {
-        "name": "Battery Discharge Power Limit",
-        "key": "BatDischargePower",
-        "icon": "battery",
-        "enable": True,
-    },
-    {
-        "name": "Grid Charge Power Limit",
-        "key": "GridChargePower",
-        "icon": "transmission-tower",
-        "enable": True,
-    },
-    {
-        "name": "Grid Discharge Power Limit",
-        "key": "GridDischargePower",
-        "icon": "transmission-tower",
-        "enable": True,
-    },
 ]
 
 temperature_sensors = [
@@ -1977,28 +1953,51 @@ battery_schedule_sensors = [
         "name": "Passive Grid Charge Power",
         "key": "passive_grid_charge_power",
         "icon": "transmission-tower",
-        "unit_of_measurement": "%",
         "enable": True,
     },
     {
         "name": "Passive Grid Discharge Power",
         "key": "passive_grid_discharge_power",
         "icon": "transmission-tower",
-        "unit_of_measurement": "%",
         "enable": True,
     },
     {
         "name": "Passive Battery Charge Power",
         "key": "passive_bat_charge_power",
         "icon": "battery-charging",
-        "unit_of_measurement": "%",
         "enable": True,
     },
     {
         "name": "Passive Battery Discharge Power",
         "key": "passive_bat_discharge_power",
         "icon": "battery",
-        "unit_of_measurement": "%",
+        "enable": True,
+    },
+    # Power limits from the same register block. Shown as the raw register
+    # value without unit or statistics, like the passive powers above:
+    # 500 = 50 % of rated power, exactly what the matching input writes.
+    {
+        "name": "Battery Charge Power Limit",
+        "key": "BatChargePower",
+        "icon": "battery-charging",
+        "enable": True,
+    },
+    {
+        "name": "Battery Discharge Power Limit",
+        "key": "BatDischargePower",
+        "icon": "battery",
+        "enable": True,
+    },
+    {
+        "name": "Grid Charge Power Limit",
+        "key": "GridChargePower",
+        "icon": "transmission-tower",
+        "enable": True,
+    },
+    {
+        "name": "Grid Discharge Power Limit",
+        "key": "GridDischargePower",
+        "icon": "transmission-tower",
         "enable": True,
     },
 ]
