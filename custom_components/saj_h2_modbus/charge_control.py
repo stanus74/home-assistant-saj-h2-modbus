@@ -141,18 +141,22 @@ MODBUS_ADDRESSES = {
         "passive_grid_charge_power": {
             "address": 0x3637,
             "label": "passive grid charge power",
+            "cache_factor": 0.1,
         },
         "passive_grid_discharge_power": {
             "address": 0x3638,
             "label": "passive grid discharge power",
+            "cache_factor": 0.1,
         },
         "passive_bat_charge_power": {
             "address": 0x3639,
             "label": "passive battery charge power",
+            "cache_factor": 0.1,
         },
         "passive_bat_discharge_power": {
             "address": 0x363A,
             "label": "passive battery discharge power",
+            "cache_factor": 0.1,
         },
         "tou_outside_mode": {"address": 0x365F, "label": "tou outside mode"},
         "time_bat_dis": {
@@ -452,12 +456,16 @@ class ChargeSettingHandler:
         if int_value is None:
             return
 
-        # Write and update cache immediately
+        # Write and update cache immediately. The value written is raw; where the
+        # reader stores this register scaled ("cache_factor"), cache it the same
+        # way, or the sensor shows the raw number (500 %) until the next poll.
+        factor = setting_def.get("cache_factor")
+        cache_value = round(int_value * factor, 2) if factor else int_value
         await self._write_and_cache(
             setting_def["address"],
             int_value,
             setting_def["label"],
-            {key: int_value},
+            {key: cache_value},
         )
 
     async def _handle_slot_setting(self, mode_type: str, payload: dict) -> None:
