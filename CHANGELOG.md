@@ -28,6 +28,8 @@
 
 - **Unlabelled Fields in the Options Form:** Host, port, scan interval and the MQTT broker host, port, username and password had no translation, so the options form showed their internal keys (`mqtt_user`, `scan_interval`, …) instead of readable labels. All seven now have labels in English, German, Spanish, Dutch and Portuguese.
 
+- **MQTT Password Shown in Plain Text:** The MQTT password in the options form was an ordinary text field, so anyone looking at the screen while the options were open could read it. It is now a password field with masked input. The stored value is unchanged.
+
 - **Untranslated Error Messages:** Entering an invalid host during setup, or a scan interval below 60 seconds in the options, showed the raw error key (`invalid_host`, `invalid_scan_interval`) instead of a message. Both now show a readable error in all five languages.
 
 - **Changing the Host Kept the Old Address Reserved:** A config entry is identified by the host it was set up with, and changing the host in the options did not update that identity. Adding an inverter at the old address later was then refused as "already configured", although nothing used it any more. The entry now follows its current host. The options form also rejects a host that another entry is already using, which it previously accepted — leaving two entries polling the same inverter.

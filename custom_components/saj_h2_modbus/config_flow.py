@@ -8,6 +8,11 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 from pymodbus.client import AsyncModbusTcpClient
 import logging
 
@@ -237,7 +242,9 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 ): str,
                 vol.Optional(CONF_MQTT_PORT, default=cur[CONF_MQTT_PORT]): int,
                 vol.Optional(CONF_MQTT_USER, default=cur[CONF_MQTT_USER]): str,
-                vol.Optional(CONF_MQTT_PASSWORD, default=cur[CONF_MQTT_PASSWORD]): str,
+                vol.Optional(
+                    CONF_MQTT_PASSWORD, default=cur[CONF_MQTT_PASSWORD]
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
                 vol.Optional(
                     CONF_MQTT_TOPIC_PREFIX, default=self._get_topic_prefix_default()
                 ): str,
