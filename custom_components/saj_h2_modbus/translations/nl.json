@@ -50,5 +50,13 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "value_not_allowed": {
+      "message": "{value} is geen geldige waarde voor {entity}. Toegestaan: {allowed}."
+    },
+    "switch_cooldown": {
+      "message": "{entity} is zojuist geschakeld. Wacht {seconds} s voordat u opnieuw schakelt."
+    }
   }
 }

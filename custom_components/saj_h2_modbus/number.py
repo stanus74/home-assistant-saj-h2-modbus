@@ -7,7 +7,9 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from .const import DOMAIN
 from .entity import SajBaseEntity
 from .utils import generate_slot_definitions
 
@@ -285,22 +287,26 @@ class SajGenericNumberEntity(SajNumberEntity):
             self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
+        # HA's number.set_value already rejects values outside min/max, so
+        # only the gaps in allowed_values (e.g. app_mode 4-9) need checking.
+        # Raise instead of logging: the action must fail visibly, otherwise
+        # the UI and automations treat a discarded value as written.
         val = int(value)
-        if self._allowed_values is not None:
-            if val not in self._allowed_values:
-                _LOGGER.error(
-                    "Invalid value for %s: %s (allowed: %s)",
-                    self._attr_name,
-                    val,
-                    self._allowed_values,
-                )
-                return
-        elif not self._attr_native_min_value <= val <= self._attr_native_max_value:
-            _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
-            return
-        self._attr_native_value = val
+        if self._allowed_values is not None and val not in self._allowed_values:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="value_not_allowed",
+                translation_placeholders={
+                    "entity": str(self._attr_name),
+                    "value": str(val),
+                    "allowed": ", ".join(str(v) for v in self._allowed_values),
+                },
+            )
         if self.set_method:
             await self.set_method(val)
+        # Only after the setter accepted it, so a failed write does not leave
+        # a value displayed that was never sent.
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 

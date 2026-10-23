@@ -50,5 +50,13 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "value_not_allowed": {
+      "message": "{value} ist kein gültiger Wert für {entity}. Erlaubt: {allowed}."
+    },
+    "switch_cooldown": {
+      "message": "{entity} wurde gerade geschaltet. Bitte {seconds} s warten, bevor erneut geschaltet wird."
+    }
   }
 }

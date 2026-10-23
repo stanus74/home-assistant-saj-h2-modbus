@@ -28,6 +28,8 @@
 
 - **Unlabelled Fields in the Options Form:** Host, port, scan interval and the MQTT broker host, port, username and password had no translation, so the options form showed their internal keys (`mqtt_user`, `scan_interval`, …) instead of readable labels. All seven now have labels in English, German, Spanish, Dutch and Portuguese.
 
+- **Rejected Inputs Reported Success:** Two cases discarded a command while the action still reported success. *App Mode* accepts 0–12 but only 0, 1, 2, 3, 10 and 12 are valid; any other value in that range was dropped with a line in the log, while the UI and automations carried on as if it had been written. The charge/discharge and passive switches ignore a second toggle within two seconds, again only with a log warning, so an automation switching quickly lost the second command without noticing. Both now fail the action with a clear, translated message — e.g. "5 is not a valid value for App Mode. Allowed: 0, 1, 2, 3, 10, 12." — which the UI shows and which stops the automation. Number inputs also update their displayed value only after the write was accepted, so a failed write no longer leaves a value on screen that was never sent.
+
 - **MQTT Password Shown in Plain Text:** The MQTT password in the options form was an ordinary text field, so anyone looking at the screen while the options were open could read it. It is now a password field with masked input. The stored value is unchanged.
 
 - **Untranslated Error Messages:** Entering an invalid host during setup, or a scan interval below 60 seconds in the options, showed the raw error key (`invalid_host`, `invalid_scan_interval`) instead of a message. Both now show a readable error in all five languages.
