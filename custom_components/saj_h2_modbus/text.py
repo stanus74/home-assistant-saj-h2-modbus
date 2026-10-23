@@ -37,6 +37,7 @@ async def async_setup_entry(
         SajTimeTextEntity(
             hub=hub,
             key=desc["key"],
+            source=desc.get("source"),
             name=f"SAJ {desc['name']} (Time)",
             # Prefix from entry.data via device_info, like the sensors: hub.name
             # is the entry title, which changes when the user renames the entry.
@@ -56,10 +57,11 @@ _DEFAULT_TIMES = {"charge": ("01:00", "01:10"), "discharge": ("02:00", "02:10")}
 class SajTimeTextEntity(TextEntity, SajBaseEntity):
     """Base class for SAJ writable time entities."""
 
-    def __init__(self, hub, key, name, unique_id, set_method, device_info):
+    def __init__(self, hub, key, name, unique_id, set_method, device_info, source=None):
         """Initialize the entity."""
         SajBaseEntity.__init__(self, hub, device_info)
         self._key = key
+        self._source = source or key
         self._attr_name = name
         self._attr_unique_id = unique_id
         self._attr_should_poll = False
@@ -81,7 +83,7 @@ class SajTimeTextEntity(TextEntity, SajBaseEntity):
     async def async_added_to_hass(self) -> None:
         """Restore the current time from the hub cache if available."""
         await super().async_added_to_hass()
-        current = self._hub.inverter_data.get(self._key)
+        current = self._hub.inverter_data.get(self._source)
         if isinstance(current, int):
             self._attr_native_value = f"{(current >> 8) & 0xFF:02d}:{current & 0xFF:02d}"
             self.async_write_ha_state()
