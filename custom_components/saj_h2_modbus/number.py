@@ -89,7 +89,7 @@ NUMBER_DEFINITIONS = [
     {
         "key": "battery_on_grid_discharge_depth",
         "name": "Battery On Grid Discharge Depth",
-        "min": 0,
+        "min": 5,  # protocol minimum (0x3644)
         "max": 100,
         "step": 1,
         "default": 20,
@@ -100,7 +100,7 @@ NUMBER_DEFINITIONS = [
     {
         "key": "battery_off_grid_discharge_depth",
         "name": "Battery Off Grid Discharge Depth",
-        "min": 0,
+        "min": 5,  # protocol minimum (0x3645)
         "max": 100,
         "step": 1,
         "default": 20,
@@ -111,7 +111,7 @@ NUMBER_DEFINITIONS = [
     {
         "key": "battery_capacity_charge_upper_limit",
         "name": "Battery Capacity Charge Upper Limit",
-        "min": 0,
+        "min": 20,  # protocol minimum (0x3646)
         "max": 100,
         "step": 1,
         "default": 100,
