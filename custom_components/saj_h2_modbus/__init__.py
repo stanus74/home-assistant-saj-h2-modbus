@@ -55,6 +55,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool:
     _LOGGER.debug("Starting async_setup_entry")
     start_time = time.monotonic()
 
+    _sync_unique_id_with_host(hass, entry)
+
     hub = await _create_hub(hass, entry)
     hub.device_info = _create_device_info(entry)
     _update_device_info_from_inverter_data(hub)
@@ -121,6 +123,16 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
     hub: SAJModbusHub | None = getattr(entry, "runtime_data", None)
     if hub is not None:
         config = get_config_values(entry, DEFAULT_CONFIG_SCHEMA)
+        # pymodbus fixes the target address when the client is created, so a
+        # new host or port cannot be applied to the running hub - the client
+        # would keep talking to the old address. Rebuild everything instead;
+        # setup also moves the entry's unique_id to the new host.
+        if (config[CONF_HOST], config[CONF_PORT]) != (
+            hub.connection.host,
+            hub.connection.port,
+        ):
+            await hass.config_entries.async_reload(entry.entry_id)
+            return
         await hub.update_connection_settings(
             host=config[CONF_HOST],
             port=config[CONF_PORT],
@@ -135,27 +147,33 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
             mqtt_publish_all=config["mqtt_publish_all"],
             use_ha_mqtt=config["use_ha_mqtt"],
         )
-        # The entry's unique_id is the host it was set up with. Keep it in step
-        # with a host changed in the options, otherwise the old host stays
-        # blocked for new entries. Done after applying the settings: the update
-        # re-runs this listener, which then finds nothing left to change.
-        # Skipped if another entry still holds that host as a stale unique_id
-        # from a host change made before this sync existed.
-        host = config[CONF_HOST]
-        if entry.unique_id != host:
-            holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, host)
-            if holder is None:
-                hass.config_entries.async_update_entry(entry, unique_id=host)
-            else:
-                _LOGGER.warning(
-                    "Not updating unique_id of entry %s to %s: already used by entry %s",
-                    entry.title,
-                    host,
-                    holder.title,
-                )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
         await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _sync_unique_id_with_host(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Keep the entry's unique_id equal to its configured host.
+
+    The unique_id is the host the entry was set up with; after a host change in
+    the options the old address would otherwise stay blocked for new entries.
+    Runs at setup, before the update listener is registered, so changing the
+    unique_id here does not trigger an options update. Skipped if another entry
+    still holds that host as a stale unique_id from an earlier host change.
+    """
+    host = get_config_value(entry, CONF_HOST)
+    if not host or entry.unique_id == host:
+        return
+    holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, host)
+    if holder is None:
+        hass.config_entries.async_update_entry(entry, unique_id=host)
+    else:
+        _LOGGER.warning(
+            "Not updating unique_id of entry %s to %s: already used by entry %s",
+            entry.title,
+            host,
+            holder.title,
+        )
 
 
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:

@@ -1,3 +1,9 @@
+## v3.1.4
+
+### Fixed
+
+- **Changing the Inverter's Address in the Options Had No Effect:** A new host or port entered in the options was only written into the log messages — the Modbus connection itself kept using the address the integration was started with, because pymodbus fixes the target when the client is created and the integration reused that client. After a DHCP change, for example, the integration went on polling the old address until the next Home Assistant restart, while the log claimed it was connected to the new one. A host or port change now reloads the integration, which builds a new connection to the new address; if the inverter is not reachable there, the entry shows "Retrying setup" as on startup. Other option changes (intervals, fast modes, MQTT) still apply without a reload. Found during regression testing of v3.1.3; the defect predates it.
+
 ## v3.1.3
 
 > **Inputs and setup release.** ⚠️ **One change needs action:** the eight sensors
