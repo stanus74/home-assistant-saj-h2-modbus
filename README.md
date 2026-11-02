@@ -74,6 +74,11 @@ If you want fast updates **inside Home Assistant**, use *Realtime sensors (10s)*
 Enabling both does not give you both — Ultra Fast wins and the HA entities get
 slower, not faster.
 
+The 10s values go to separate *Fast* sensors (`sensor.saj_fast_pv_power`, …),
+which are **disabled by default** on new installations — enable the ones you need.
+Their states are recorded in the history like any entity, so consider
+excluding them with `recorder: exclude: entity_globs: [sensor.saj_fast_*]`.
+
 
 ### 🚀 Charging/Discharging Control
 

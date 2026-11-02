@@ -297,20 +297,20 @@ for i in range(7):
 
 PASSIVE_BATTERY_DATA_MAP = [
     ("passive_charge_enable", "16u", 1),
-    ("passive_grid_charge_power", "16u"),
-    ("passive_grid_discharge_power", "16u"),
-    ("passive_bat_charge_power", "16u"),
-    ("passive_bat_discharge_power", "16u"),
+    ("passive_grid_charge_power", "16u", 1),
+    ("passive_grid_discharge_power", "16u", 1),
+    ("passive_bat_charge_power", "16u", 1),
+    ("passive_bat_discharge_power", "16u", 1),
     (None, "skip_bytes", 18),
     ("BatOnGridDisDepth", "16u", 1),
     ("BatOffGridDisDepth", "16u", 1),
     ("BatcharDepth", "16u", 1),
     ("AppMode", "16u", 1),
     (None, "skip_bytes", 10),
-    ("BatChargePower", "16u"),
-    ("BatDischargePower", "16u"),
-    ("GridChargePower", "16u"),
-    ("GridDischargePower", "16u"),
+    ("BatChargePower", "16u", 1),
+    ("BatDischargePower", "16u", 1),
+    ("GridChargePower", "16u", 1),
+    ("GridDischargePower", "16u", 1),
     (None, "skip_bytes", 18),
     ("AntiRefluxPowerLimit", "16u", 1),
     ("AntiRefluxCurrentLimit", "16u", 1),
@@ -960,7 +960,9 @@ async def read_passive_battery_data(client: ModbusTcpClient, lock: Lock) -> Data
             43,
             PASSIVE_BATTERY_DATA_MAP,
             "passive_battery_anti_reflux_data",
-            default_factor=0.1,
+            # Raw register values throughout: the power settings in this block
+            # are shown exactly as written (500 = 50 %), like their inputs.
+            default_factor=1,
         )
         _log_partial_errors("passive_battery_anti_reflux_data", errors, logging.ERROR)
         if data:

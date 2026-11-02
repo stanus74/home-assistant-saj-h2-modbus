@@ -7,7 +7,6 @@ import time
 from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.const import (
     CONF_HOST,
     CONF_NAME,
@@ -97,6 +96,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool
     # fast coordinator, closes client).
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
+    if not unload_ok:
+        # Entities of the platforms that failed to unload are still running,
+        # and HA keeps the entry (and its update listener) loaded as well, so
+        # the hub they depend on has to stay up until the next restart.
+        _LOGGER.warning(
+            "Unload platforms failed for entry %s; keeping the hub running",
+            entry.entry_id,
+        )
+        return False
+
     hub = getattr(entry, "runtime_data", None)
     if hub is not None:
         try:
@@ -104,12 +113,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SAJConfigEntry) -> bool
         except Exception as e:
             _LOGGER.debug(f"Ignoring hub unload error: {e}")
 
-    if not unload_ok:
-        _LOGGER.warning(
-            "Unload platforms failed for entry %s; hub teardown still attempted",
-            entry.entry_id,
-        )
-    return unload_ok
+    return True
 
 
 async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> None:
@@ -131,6 +135,24 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
             mqtt_publish_all=config["mqtt_publish_all"],
             use_ha_mqtt=config["use_ha_mqtt"],
         )
+        # The entry's unique_id is the host it was set up with. Keep it in step
+        # with a host changed in the options, otherwise the old host stays
+        # blocked for new entries. Done after applying the settings: the update
+        # re-runs this listener, which then finds nothing left to change.
+        # Skipped if another entry still holds that host as a stale unique_id
+        # from a host change made before this sync existed.
+        host = config[CONF_HOST]
+        if entry.unique_id != host:
+            holder = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, host)
+            if holder is None:
+                hass.config_entries.async_update_entry(entry, unique_id=host)
+            else:
+                _LOGGER.warning(
+                    "Not updating unique_id of entry %s to %s: already used by entry %s",
+                    entry.title,
+                    host,
+                    holder.title,
+                )
     else:
         # If hub doesn't exist, reload the entry to create it with new options
         await hass.config_entries.async_reload(entry.entry_id)
@@ -138,38 +160,44 @@ async def async_update_options(hass: HomeAssistant, entry: SAJConfigEntry) -> No
 
 async def _create_hub(hass: HomeAssistant, entry: ConfigEntry) -> SAJModbusHub:
     """Helper function to create the SAJ Modbus hub."""
+    # No catch-all here: the constructor does no network I/O, so anything it
+    # raises is a permanent fault (bad options, a bug) that should surface as
+    # a setup error instead of a retry loop. Connection failures in the first
+    # refresh already arrive as ConfigEntryNotReady from the coordinator.
+
+    # Get fast_enabled setting from config entry options or data
+    fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
+
+    # Ensure the scan_interval is correctly passed to the hub
+    scan_interval = get_config_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
+    _LOGGER.info("Starting hub with first refresh...")
+
+    from .hub import SAJModbusHub
+
+    hub = SAJModbusHub(
+        hass,
+        entry,  # Pass the full ConfigEntry object
+    )
+    hub.fast_enabled = fast_enabled
+
     try:
-        # Get fast_enabled setting from config entry options or data
-        fast_enabled = get_config_value(entry, CONF_FAST_ENABLED, False)
-
-        # Ensure the scan_interval is correctly passed to the hub
-        scan_interval = get_config_value(
-            entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-        )
-        _LOGGER.info(f"Setting scan interval to {scan_interval} seconds")
-        _LOGGER.info("Starting hub with first refresh...")
-
-        from .hub import SAJModbusHub
-
-        hub = SAJModbusHub(
-            hass,
-            entry,  # Pass the full ConfigEntry object
-        )
-        hub.fast_enabled = fast_enabled
-
         await hub.async_config_entry_first_refresh()
-        _LOGGER.info(
-            f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
-        )
-
-        return hub
-    except ConfigEntryNotReady:
+    except BaseException:
+        # The constructor already started the cache cleanup timer, the
+        # MQTT component listener and possibly the Paho client. HA retries
+        # a failed setup with a fresh hub, so without this teardown every
+        # retry while the inverter is unreachable would leak another set.
+        try:
+            await hub.async_unload_entry()
+        except Exception as cleanup_err:
+            _LOGGER.debug("Ignoring hub teardown error: %s", cleanup_err)
         raise
-    except Exception as e:
-        _LOGGER.error(f"Failed to set up SAJ Modbus hub: {e}")
-        raise ConfigEntryNotReady(
-            f"Failed to set up SAJ Modbus hub: {e}"
-        ) from e
+    _LOGGER.info(
+        f"Hub first refresh completed, coordinator should run every {scan_interval} seconds"
+    )
+
+    return hub
 
 
 def _create_device_info(entry: ConfigEntry) -> dict:

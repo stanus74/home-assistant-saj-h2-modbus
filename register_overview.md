@@ -371,6 +371,10 @@ value **3** = off-grid, value **4** = on-grid.
 
 These registers are written via `number` entities (see `number.py` / `charge_control.py`). They are read/write (`R/W`).
 
+**Values are raw register values.** Inputs and their matching sensors show exactly the number stored in the register, without scaling. The power settings (`3637H`–`363AH`, `364DH`–`3650H`, `365AH`) are in 0.1 % of rated power: `500` = 50 %, `1100` = 110 %. On an 8 kW inverter `500` is 4000 W, so watts = value / 1000 × rated power. They accept 0–1100 in steps of 10 (1 %). The battery limits `3644H`/`3645H` accept 5–100 %, `3646H` (maximum SOC the battery is charged to) 20–100 %, as specified by the protocol.
+
+*Entity IDs are those of a new installation. Installations that predate a rename keep their old IDs, e.g. `sensor.saj_battary_on_grid_discharge_depth`.*
+
 | Register | Entity | Mode | Description |
 |---|---|---|---|
 | `3604H` | `number.saj_charge_time_enable_input` | R/W | Charge time enable control |
@@ -378,19 +382,19 @@ These registers are written via `number` entities (see `number.py` / `charge_con
 | `3636H` | `number.saj_passive_charge_enable_input` | R/W | Passive charge and discharge Enabled (Effective when 0x3647 is in Passive Mode) 0: Standby 1: Discharge 2: Charge |
 | `3637H` | `number.saj_passive_grid_charge_power_input` | R/W | Passive grid charge power |
 | `3638H` | `number.saj_passive_grid_discharge_power_input` | R/W | Passive discharge power grid (the |
-| `3639H` | `number.saj_passive_bat_charge_power_input` | R/W | Passive battery power (the percentage of setting values for rated power systems, such as the system rated power is 5000 w, expected to set the discharge power of 2500 w, (2500/5000) * 10 = 500) |
-| `363AH` | `number.saj_passive_bat_discharge_power_input` | R/W | Passive battery Discharge power |
+| `3639H` | `number.saj_passive_battery_charge_power_input` | R/W | Passive battery power (the percentage of setting values for rated power systems, such as the system rated power is 5000 w, expected to set the discharge power of 2500 w, (2500/5000) * 1000 = 500) |
+| `363AH` | `number.saj_passive_battery_discharge_power_input` | R/W | Passive battery Discharge power |
 | `3644H` | `number.saj_battery_on_grid_discharge_depth_input` | R/W | Battery grid discharge limit (maximum charging battery capacity > battery grid discharge limit + 5) |
 | `3645H` | `number.saj_battery_off_grid_discharge_depth_input` | R/W | Off-grid battery discharge threshold (battery discharge grid floor > battery off-grid discharge limit + 5) |
 | `3646H` | `number.saj_battery_capacity_charge_upper_limit_input` | R/W | Battery charging capacity limit (maximum charging battery capacity > backup reserve value maximum charging battery capacity > battery SOC grid discharge limit + 5) |
 | `3647H` | `number.saj_app_mode_input` | R/W | Inverter application mode 0x00 Self-use_mode 0x01 time_mode 0x02 backup_mode 0x03 passive_mode 0x0E aging mode |
-| `364DH` | `number.saj_battery_charge_power_limit_input` | R/W | Battery power limit (set values for the system of the percentage of the rated power, rated power is 5000 w, such as the system expected to set the discharge power of 2500 w, (2500/5000) * 10 = 500) |
+| `364DH` | `number.saj_battery_charge_power_limit_input` | R/W | Battery power limit (set values for the system of the percentage of the rated power, rated power is 5000 w, such as the system expected to set the discharge power of 2500 w, (2500/5000) * 1000 = 500) |
 | `364EH` | `number.saj_battery_discharge_power_limit_input` | R/W | Battery discharge power limit |
-| `364FH` | `number.saj_grid_max_charge_power_input` | R/W | Biggest buy electric power grid (system allows from the grid into the maximum power of inverter, the percentage of setting values for rated power systems, such as the system rated power is 5000 w, expected to set the discharge power of 2500 w, (2500/5000) * 10 = 500) |
-| `3650H` | `number.saj_grid_max_discharge_power_input` | R/W | The electrical grid biggest selling (system allows maximum power from inverter power grid, set the value for the system of the percentage of the rated power, rated power is 5000 w, such as the system expected to set the discharge power of 2500 w, (2500/5000) * 10 = 500) |
+| `364FH` | `number.saj_grid_max_charge_power_input` | R/W | Biggest buy electric power grid (system allows from the grid into the maximum power of inverter, the percentage of setting values for rated power systems, such as the system rated power is 5000 w, expected to set the discharge power of 2500 w, (2500/5000) * 1000 = 500) |
+| `3650H` | `number.saj_grid_max_discharge_power_input` | R/W | The electrical grid biggest selling (system allows maximum power from inverter power grid, set the value for the system of the percentage of the rated power, rated power is 5000 w, such as the system expected to set the discharge power of 2500 w, (2500/5000) * 1000 = 500) |
 | `365AH` | `number.saj_export_limit_input` | R/W | Prevent reverse flow limit power (0x365C register for 1 or 3 effect: when 0x365C is 1: the register is total power anti-reflux; when 0x365C is 3: the register is phase power anti-reflux value) |
 | `365FH` | `number.saj_tou_outside_mode_input` | R/W | The charging and discharging period is not available in time-sharing mode |
-| `3660H` | `number.saj_time_bat_dis_input` | R/W | The charging and discharging period is available in time-sharing mode |
+| `3660H` | `number.saj_time_sharing_battery_discharge_allow_input` | R/W | The charging and discharging period is available in time-sharing mode |
 | `3608H` | `number.saj_charge1_day_mask_input` | R/W | First date and charging power (high byte said Thursday, each position can make, such as 0 b0100 said Wednesday. The lower position indicates the power. For example, 1 indicates 1 percent of the standard power of the model. |
 | `3608H` | `number.saj_charge1_power_percent_input` | R/W | First date and charging power (high byte said Thursday, each position can make, such as 0 b0100 said Wednesday. The lower position indicates the power. For example, 1 indicates 1 percent of the standard power of the model. |
 | `360BH` | `number.saj_charge2_day_mask_input` | R/W | The second date and charging power (high byte said Thursday, each position can make, such as 0 b0100 said Wednesday. |

@@ -12,17 +12,32 @@
       }
     },
     "error": {
+      "cannot_connect": "No se pudo conectar con el inversor. Compruebe el host, el puerto y que Modbus TCP esté activado.",
+      "name_exists": "Ya hay un inversor configurado con este nombre",
       "already_configured": "El dispositivo ya está configurado",
-      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
+      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos",
+      "invalid_host": "Nombre de host o dirección IP no válidos"
     },
     "abort": {
       "already_configured": "El dispositivo ya está configurado"
     }
   },
   "options": {
+    "error": {
+      "invalid_host": "Nombre de host o dirección IP no válidos",
+      "already_configured": "El dispositivo ya está configurado",
+      "invalid_scan_interval": "El intervalo de consulta debe ser de al menos 60 segundos"
+    },
     "step": {
       "init": {
         "data": {
+          "host": "Dirección IP o nombre de host del inversor",
+          "port": "Puerto Modbus TCP",
+          "scan_interval": "Intervalo de consulta en segundos (mín. 60)",
+          "mqtt_host": "Host del broker MQTT (se ignora si MQTT de HA está activo)",
+          "mqtt_port": "Puerto del broker MQTT",
+          "mqtt_user": "Usuario MQTT",
+          "mqtt_password": "Contraseña MQTT",
           "fast_enabled": "Sensores en tiempo real (consulta cada 10s)",
           "mqtt_topic_prefix": "Prefijo del tema MQTT (p. ej. saj/h2)",
           "mqtt_publish_all": "Publicar todos los sensores en el intervalo principal",
@@ -30,10 +45,18 @@
           "use_ha_mqtt": "Usar MQTT de Home Assistant (ignora los ajustes de host/puerto)"
         },
         "data_description": {
-          "fast_enabled": "Consulta los sensores de energía principales cada 10 segundos y actualiza las entidades de Home Assistant. Se desactiva automáticamente mientras Ultra Rápido está activo.",
+          "fast_enabled": "Consulta los sensores de energía principales cada 10 segundos y actualiza las entidades de Home Assistant. Se desactiva automáticamente mientras Ultra Rápido está activo. Los valores de 10 segundos se publican en los sensores «Fast …», que están desactivados por defecto: active los que necesite. Como cualquier entidad se guardan en el historial, así que exclúyalos del recorder si no lo necesita.",
           "ultra_fast_enabled": "La resolución de 1 segundo se publica únicamente por MQTT. Mientras esta opción está activa, el ciclo de 10 s se desactiva: las entidades de Home Assistant pasan a actualizarse solo en el intervalo principal y la potencia PV1/PV2 no se consulta en absoluto."
         }
       }
+    }
+  },
+  "exceptions": {
+    "value_not_allowed": {
+      "message": "{value} no es un valor válido para {entity}. Permitidos: {allowed}."
+    },
+    "switch_cooldown": {
+      "message": "{entity} se acaba de conmutar. Espere {seconds} s antes de volver a conmutarlo."
     }
   }
 }

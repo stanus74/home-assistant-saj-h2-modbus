@@ -12,17 +12,32 @@
       }
     },
     "error": {
+      "cannot_connect": "Verbindung zum Wechselrichter fehlgeschlagen. Host, Port und aktiviertes Modbus TCP prüfen.",
+      "name_exists": "Ein Wechselrichter mit diesem Namen ist bereits eingerichtet",
       "already_configured": "Gerät ist bereits konfiguriert",
-      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen"
+      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen",
+      "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse"
     },
     "abort": {
       "already_configured": "Gerät ist bereits konfiguriert"
     }
   },
   "options": {
+    "error": {
+      "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "invalid_scan_interval": "Scan-Intervall muss mindestens 60 Sekunden betragen"
+    },
     "step": {
       "init": {
         "data": {
+          "host": "IP-Adresse oder Hostname des Wechselrichters",
+          "port": "Modbus-TCP-Port",
+          "scan_interval": "Abfrageintervall in Sekunden (min. 60)",
+          "mqtt_host": "MQTT-Broker-Host (ignoriert, wenn HA MQTT aktiv ist)",
+          "mqtt_port": "MQTT-Broker-Port",
+          "mqtt_user": "MQTT-Benutzername",
+          "mqtt_password": "MQTT-Passwort",
           "fast_enabled": "Realtime Sensoren (10s Abfrage)",
           "mqtt_topic_prefix": "MQTT-Themenpräfix (z. B. saj/h2)",
           "mqtt_publish_all": "Alle Sensoren im Hauptintervall veröffentlichen",
@@ -30,10 +45,18 @@
           "use_ha_mqtt": "Home Assistant MQTT nutzen (ignoriert Host/Port Einstellungen)"
         },
         "data_description": {
-          "fast_enabled": "Fragt die wichtigsten Energiesensoren alle 10 Sekunden ab und aktualisiert die Home-Assistant-Entitäten. Wird automatisch abgeschaltet, solange Ultra-Schnell aktiv ist.",
+          "fast_enabled": "Fragt die wichtigsten Energiesensoren alle 10 Sekunden ab und aktualisiert die Home-Assistant-Entitäten. Wird automatisch abgeschaltet, solange Ultra-Schnell aktiv ist. Die 10-Sekunden-Werte landen in den „Fast …“-Sensoren, die standardmäßig deaktiviert sind – benötigte bitte aktivieren. Wie jede Entität werden sie in der Historie aufgezeichnet; bei Bedarf im Recorder ausschließen.",
           "ultra_fast_enabled": "Die 1-Sekunden-Auflösung geht ausschließlich an MQTT. Solange dies aktiv ist, wird der 10s-Loop abgeschaltet: Home-Assistant-Entitäten aktualisieren nur noch im Haupt-Abfrageintervall, und PV1/PV2-Leistung wird gar nicht abgefragt."
         }
       }
+    }
+  },
+  "exceptions": {
+    "value_not_allowed": {
+      "message": "{value} ist kein gültiger Wert für {entity}. Erlaubt: {allowed}."
+    },
+    "switch_cooldown": {
+      "message": "{entity} wurde gerade geschaltet. Bitte {seconds} s warten, bevor erneut geschaltet wird."
     }
   }
 }

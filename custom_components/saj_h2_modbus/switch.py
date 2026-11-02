@@ -5,9 +5,11 @@ import time
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import DOMAIN
 from .entity import SajBaseEntity
 from .hub import SAJModbusHub
 
@@ -76,8 +78,11 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity, SajBaseEntity):
             if self._switch_type in PASSIVE_SWITCH_KEYS
             else f"_pending_{self._switch_type}_state"
         )
+        # Prefix from entry.data via device_info, like the sensors: hub.name
+        # is the entry title, which changes when the user renames the entry.
         self._attr_unique_id = (
-            f"{hub.name}_{self._switch_type}{description['unique_id_suffix']}"
+            f"{device_info['name']}_{self._switch_type}"
+            f"{description['unique_id_suffix']}"
         )
         # has_entity_name lets HA prefix the device name itself. Without it the
         # name was built as "<device> <label>" and HA prefixed the device again,
@@ -149,8 +154,7 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity, SajBaseEntity):
             )
             return
 
-        if not self._allow_switch():
-            return
+        self._ensure_switch_allowed()
 
         try:
             _LOGGER.debug(
@@ -204,15 +208,19 @@ class BaseSajSwitch(CoordinatorEntity, SwitchEntity, SajBaseEntity):
         app_mode_value = int(data.get("AppMode", 0))
         return state_value and app_mode_value == 1
 
-    def _allow_switch(self) -> bool:
-        current_time = time.monotonic()
-        elapsed = current_time - self._last_switch_time
+    def _ensure_switch_allowed(self) -> None:
+        """Reject a toggle inside the cooldown with a visible error.
+
+        Logging and returning made the action report success while nothing
+        was switched, so an automation toggling quickly lost the command.
+        """
+        elapsed = time.monotonic() - self._last_switch_time
         if elapsed < self._switch_timeout:
-            remaining = round(self._switch_timeout - elapsed, 1)
-            _LOGGER.warning(
-                "Time lock active! Wait %ss before switching %s again.",
-                remaining,
-                self._switch_type,
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="switch_cooldown",
+                translation_placeholders={
+                    "entity": str(self._attr_name),
+                    "seconds": f"{self._switch_timeout - elapsed:.1f}",
+                },
             )
-            return False
-        return True

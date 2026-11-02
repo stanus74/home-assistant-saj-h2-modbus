@@ -1,3 +1,67 @@
+## v3.1.3
+
+> **Inputs and setup release.** ⚠️ **One change needs action:** the eight sensors
+> that mirror power settings — the four passive charge/discharge powers and the
+> battery/grid power limits — now show the raw register value instead of a
+> percentage, ten times the previous number (50 % → 500). Automations, templates
+> and dashboards comparing against them need new thresholds; the same applies to
+> their MQTT values.
+>
+> Everything else is fixes. Many input fields did not show what the inverter
+> actually holds: thirteen displayed a built-in default or a tenth of the register
+> value, and slot 1 of the charge/discharge schedule reverted to its defaults after
+> every restart — so saving a displayed value back could write something nobody
+> intended. Setup now tests the connection, rejects a name already in use and no
+> longer orphans switches, numbers and texts when the entry is renamed; a failed
+> start no longer leaks timers on every retry. Fast sensors are created disabled on
+> new installations, as they wrote about 10,000 database rows a day even with fast
+> polling off. Rejected inputs now fail visibly instead of reporting success, and
+> the MQTT password is masked.
+
+### Changed
+
+- **⚠️ Power Setting Sensors Show the Raw Register Value:** Eight sensors that mirror writable power settings now show exactly the number stored in the register, without a unit — the same number their input writes. Affected: `sensor.saj_passive_grid_charge_power`, `sensor.saj_passive_grid_discharge_power`, `sensor.saj_passive_battery_charge_power`, `sensor.saj_passive_battery_discharge_power`, `sensor.saj_battery_charge_power_limit`, `sensor.saj_battery_discharge_power_limit`, `sensor.saj_grid_charge_power_limit` and `sensor.saj_grid_discharge_power_limit`. Previously they were divided by ten and labelled `%` (50 % for a register holding 500), while the matching input showed and wrote 500, so sensor and input disagreed by a factor of ten. **Their values are now ten times higher than before** (50 → 500, where 1100 = 110 % of rated power); automations, templates and dashboards that compare against these sensors need their thresholds multiplied by ten. The same applies to the values published over MQTT. The four power limits also lose the *battery* device class, which describes a state of charge and did not fit a power limit, and all eight no longer keep long-term statistics — they are settings that rarely change, and their history is still recorded. Home Assistant raises a one-time repair notice for the removed statistics, which can be confirmed under *Developer Tools → Statistics*. The three battery depth sensors (on-grid/off-grid discharge depth, charge depth) are unchanged: their raw value already is the percentage.
+
+### Fixed
+
+- **Fast Sensors Filled the Recorder Database:** The 21 *Fast* sensor variants were meant to stay out of the database and had their `state_class` removed for that purpose. That only keeps them out of the long-term statistics — the recorder still writes every state change of every entity. On the development instance they produced about 9,700 rows a day with fast polling switched **off** (they then just mirror the regular sensors on the main interval), and with fast polling on it is roughly six times as many per sensor. Fast sensors are now created disabled on new installations; enable the ones you need when you turn on *Realtime sensors (10s)*, whose description in the options now says so. **Existing installations are unchanged** — to stop the recording, either disable the Fast sensors you do not use or add `recorder: exclude: entity_globs: [sensor.saj_fast_*]`. The wiki also listed the regular sensors (`sensor.saj_pv_power` …) as the ones that update every 10 seconds, which invited excluding exactly the wrong entities from the recorder — and with them their statistics and energy dashboard data; it now names the Fast sensors and shows the exclude.
+
+- **Input Numbers Did Not Show the Value in the Register:** Number inputs write the raw register value — `500` in *Passive Grid Charge Power* is 50 % — but on startup most of them did not display it. The four passive power inputs showed the scaled sensor value instead (`50` where the register holds `500`), so re-entering the displayed number wrote a tenth of the intended power. Nine others — *App Mode*, *Export Limit*, the three battery depth/limit percentages and the four battery/grid power limits — looked for the value under a key the reader never uses and always showed their built-in default (e.g. *Battery On Grid Discharge Depth* stuck at 20) regardless of what the inverter was set to. All 18 now start with the raw value of the register they write; verified for every one of them against the real readers.
+
+- **Charge/Discharge Slot 1 Inputs Always Showed Their Defaults:** The readers store the first slot without a number (`charge_start_time`, `charge_day_mask`, …) and slots 2–7 with one (`charge2_start_time`, …), while the inputs looked up `charge1_…` for slot 1. Its start and end time, day mask and power percent — for charging and discharging — therefore showed 01:00/01:10, 127 and 5 % after every restart, whatever the inverter had stored. They now show the stored values, like slots 2–7 already did.
+
+- **Number Entities Were Polled for Nothing:** The 46 number entities left Home Assistant's entity polling switched on without implementing an update, so every 30 seconds Home Assistant rewrote all of them with their unchanged values. They now opt out of polling like the text entities already did; their values are written on setup and on every change, as before.
+
+- **Failed Setup Attempts Leaked Background Resources:** When the inverter was unreachable while Home Assistant started, the first poll failed and Home Assistant retried the setup with backoff — but each attempt left behind what the hub had already started: the five-minute cache cleanup timer, the MQTT component-load listener and, with an external broker configured, the Paho client. Every retry added another set, all running until the next restart. The hub is now torn down before the failure is passed on to Home Assistant, so a retry starts from a clean slate.
+
+- **Permanent Setup Errors Were Retried Forever:** Setup turned every exception into "not ready yet", so a fault that can never resolve on its own — an unusable stored option, a bug in the hub's construction — made Home Assistant retry indefinitely, showing the entry as "Retrying setup" with only a one-line message in the log. Such errors now fail the setup with the full traceback, which is what a bug report needs. An unreachable inverter is unaffected and is still retried as before; that case was already reported as "not ready" by the first poll itself.
+
+- **Failed Unload Left Entities Running Against a Stopped Hub:** If Home Assistant could not unload one of the entity platforms, the integration still shut down its connection, timers and MQTT publishing. The entities that stayed behind then showed frozen values and accepted writes that went nowhere until the next restart. The hub now stays up when the unload fails, matching what Home Assistant does with the entry itself. A normal unload or reload is unaffected.
+
+- **Renaming the Integration Entry Orphaned the Controls:** Switch, number and text entities took their unique ID from the entry's title, sensors from the name entered at setup. Renaming the entry under Settings → Devices & Services changes only the title, so after the next restart Home Assistant created every switch, number and text entity again with a `_2` suffix and left the originals behind as unavailable — breaking automations, scripts and dashboards that used them. All platforms now use the setup name, which never changes. For entries that were never renamed nothing changes. **If you have already renamed your entry**, your controls currently carry the title-based IDs; after this update they return to the original ones from before the rename. Entities created after the rename then show as unavailable and can be deleted, and automations created since then need their entity IDs checked.
+
+- **A Second Inverter With the Same Name Lost Its Entities:** Setup only checked that the host was not configured yet. Entity IDs are derived from the name, though, so a second inverter added under the name of an existing one — easy to do, since every entry defaults to "SAJ" — produced the same unique IDs, and Home Assistant silently dropped the second inverter's entities as duplicates. The setup form now rejects a name that is already in use. Existing entries and their entity IDs are unchanged.
+
+- **Setup Accepted an Inverter It Could Not Reach:** The setup form only checked that the host looked like a valid address. A typo in the IP or the wrong port still created the entry, which then sat in "Retrying setup" with nothing in the form to say why. Setup now opens a test connection first and shows "Failed to connect" right in the form if that fails, so the input can be corrected on the spot. Changing the host in the options also checks it is a valid address now; no test connection is made there, so options can still be saved while the inverter is offline.
+
+- **Unlabelled Fields in the Options Form:** Host, port, scan interval and the MQTT broker host, port, username and password had no translation, so the options form showed their internal keys (`mqtt_user`, `scan_interval`, …) instead of readable labels. All seven now have labels in English, German, Spanish, Dutch and Portuguese.
+
+- **Power Inputs Only Allowed 10 % Steps:** *Export Limit*, the four passive powers and the four battery/grid power limits moved in steps of 100 — 10 % of rated power, 800 W on an 8 kW inverter — although the registers resolve to 0.1 %. A value the inverter already held, such as 190, did not fit that grid, and the UI could flag it as invalid. They now move in steps of 10 (1 %).
+
+- **Battery Limit Inputs Accepted Values the Inverter Does Not Allow:** *Battery On Grid Discharge Depth* and *Battery Off Grid Discharge Depth* accepted 0–4 %, *Battery Capacity Charge Upper Limit* (the SOC the battery is charged up to) accepted 0–19 %, although the protocol only allows 5–100 % and 20–100 % for these registers (`0x3644`–`0x3646`). The inputs now start at the protocol minimum, so Home Assistant rejects such values before anything is written.
+
+- **Rejected Inputs Reported Success:** Two cases discarded a command while the action still reported success. *App Mode* accepts 0–12 but only 0, 1, 2, 3, 10 and 12 are valid; any other value in that range was dropped with a line in the log, while the UI and automations carried on as if it had been written. The charge/discharge and passive switches ignore a second toggle within two seconds, again only with a log warning, so an automation switching quickly lost the second command without noticing. Both now fail the action with a clear, translated message — e.g. "5 is not a valid value for App Mode. Allowed: 0, 1, 2, 3, 10, 12." — which the UI shows and which stops the automation. Number inputs also update their displayed value only after the write was accepted, so a failed write no longer leaves a value on screen that was never sent.
+
+- **MQTT Password Shown in Plain Text:** The MQTT password in the options form was an ordinary text field, so anyone looking at the screen while the options were open could read it. It is now a password field with masked input. The stored value is unchanged.
+
+- **Untranslated Error Messages:** Entering an invalid host during setup, or a scan interval below 60 seconds in the options, showed the raw error key (`invalid_host`, `invalid_scan_interval`) instead of a message. Both now show a readable error in all five languages.
+
+- **Changing the Host Kept the Old Address Reserved:** A config entry is identified by the host it was set up with, and changing the host in the options did not update that identity. Adding an inverter at the old address later was then refused as "already configured", although nothing used it any more. The entry now follows its current host. The options form also rejects a host that another entry is already using, which it previously accepted — leaving two entries polling the same inverter.
+
+### Code Quality
+
+- **Coordinator Receives Its Config Entry Explicitly:** The hub's `DataUpdateCoordinator` found its config entry through Home Assistant's setup context instead of being handed it. That works as long as the hub is created inside `async_setup_entry`, which it is, and Home Assistant does not enforce the explicit form for custom integrations — but the documented pattern passes `config_entry=` directly, which no longer depends on where the hub is constructed. No behaviour change.
+
 ## v3.1.2
 
 > **Reliability release:** Six defects, five of which only surfaced once something

@@ -12,17 +12,32 @@
       }
     },
     "error": {
+      "cannot_connect": "Kan geen verbinding maken met de omvormer. Controleer host, poort en of Modbus TCP is ingeschakeld.",
+      "name_exists": "Er is al een omvormer met deze naam geconfigureerd",
       "already_configured": "Apparaat is al geconfigureerd",
-      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
+      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn",
+      "invalid_host": "Ongeldige hostnaam of IP-adres"
     },
     "abort": {
       "already_configured": "Apparaat is al geconfigureerd"
     }
   },
   "options": {
+    "error": {
+      "invalid_host": "Ongeldige hostnaam of IP-adres",
+      "already_configured": "Apparaat is al geconfigureerd",
+      "invalid_scan_interval": "Scan-interval moet minimaal 60 seconden zijn"
+    },
     "step": {
       "init": {
         "data": {
+          "host": "IP-adres of hostnaam van de omvormer",
+          "port": "Modbus TCP-poort",
+          "scan_interval": "Pollinginterval in seconden (min. 60)",
+          "mqtt_host": "MQTT-broker host (genegeerd als HA MQTT actief is)",
+          "mqtt_port": "MQTT-broker poort",
+          "mqtt_user": "MQTT-gebruikersnaam",
+          "mqtt_password": "MQTT-wachtwoord",
           "fast_enabled": "Realtime sensoren (10s polling)",
           "mqtt_topic_prefix": "MQTT-topicvoorvoegsel (bijv. saj/h2)",
           "mqtt_publish_all": "Alle sensoren publiceren bij het hoofdinterval",
@@ -30,10 +45,18 @@
           "use_ha_mqtt": "Gebruik Home Assistant MQTT (negeert host/port instellingen)"
         },
         "data_description": {
-          "fast_enabled": "Vraagt de belangrijkste energiesensoren elke 10 seconden op en werkt de Home Assistant-entiteiten bij. Wordt automatisch uitgeschakeld zolang Ultrasnel actief is.",
+          "fast_enabled": "Vraagt de belangrijkste energiesensoren elke 10 seconden op en werkt de Home Assistant-entiteiten bij. Wordt automatisch uitgeschakeld zolang Ultrasnel actief is. De 10-secondenwaarden komen in de \"Fast …\"-sensoren, die standaard zijn uitgeschakeld – schakel de benodigde in. Zoals elke entiteit worden ze in de geschiedenis vastgelegd; sluit ze uit van de recorder als u dat niet nodig hebt.",
           "ultra_fast_enabled": "De resolutie van 1 seconde gaat alleen naar MQTT. Zolang dit actief is wordt de 10s-lus uitgeschakeld: Home Assistant-entiteiten werken alleen nog bij op het hoofdinterval en PV1/PV2-vermogen wordt helemaal niet opgevraagd."
         }
       }
+    }
+  },
+  "exceptions": {
+    "value_not_allowed": {
+      "message": "{value} is geen geldige waarde voor {entity}. Toegestaan: {allowed}."
+    },
+    "switch_cooldown": {
+      "message": "{entity} is zojuist geschakeld. Wacht {seconds} s voordat u opnieuw schakelt."
     }
   }
 }

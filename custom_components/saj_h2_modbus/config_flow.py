@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
 import voluptuous as vol
@@ -7,6 +8,12 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
+from pymodbus.client import AsyncModbusTcpClient
 import logging
 
 from .const import (
@@ -43,6 +50,8 @@ DATA_SCHEMA = vol.Schema(
 
 ERROR_ALREADY_CONFIGURED = "already_configured"
 ERROR_INVALID_HOST = "invalid_host"
+ERROR_NAME_EXISTS = "name_exists"
+ERROR_CANNOT_CONNECT = "cannot_connect"
 
 
 def host_valid(host):
@@ -55,6 +64,19 @@ def host_valid(host):
         return all(x and not disallowed.search(x) for x in host.split("."))
 
 
+async def can_connect(host: str, port: int) -> bool:
+    """Return True if a Modbus TCP connection to host:port can be opened."""
+    client = AsyncModbusTcpClient(host=host, port=port, timeout=5)
+    try:
+        async with asyncio.timeout(10):
+            return bool(await client.connect())
+    except Exception as err:
+        _LOGGER.debug("Connection test to %s:%s failed: %s", host, port, err)
+        return False
+    finally:
+        client.close()
+
+
 @callback
 def saj_modbus_entries(hass: HomeAssistant):
     """Return the hosts already configured."""
@@ -62,6 +84,21 @@ def saj_modbus_entries(hass: HomeAssistant):
         get_config_value(entry, CONF_HOST)
         for entry in hass.config_entries.async_entries(DOMAIN)
     }
+
+
+@callback
+def saj_modbus_names(hass: HomeAssistant) -> set[str]:
+    """Return the names already in use as entity unique_id prefixes.
+
+    Sensors prefix their unique_id with entry.data[CONF_NAME], switches,
+    numbers and texts with the entry title, so both have to be free.
+    """
+    names: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        names.add(entry.title)
+        if CONF_NAME in entry.data:
+            names.add(entry.data[CONF_NAME])
+    return names
 
 
 class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,8 +119,12 @@ class SAJModbusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if self._host_in_configuration_exists(host):
                 errors[CONF_HOST] = ERROR_ALREADY_CONFIGURED
+            elif user_input[CONF_NAME] in saj_modbus_names(self.hass):
+                errors[CONF_NAME] = ERROR_NAME_EXISTS
             elif not host_valid(host):
                 errors[CONF_HOST] = ERROR_INVALID_HOST
+            elif not await can_connect(host, user_input[CONF_PORT]):
+                errors["base"] = ERROR_CANNOT_CONNECT
             else:
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
@@ -148,6 +189,21 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
             topic_prefix = (merged.get(CONF_MQTT_TOPIC_PREFIX) or "").strip()
             merged[CONF_MQTT_TOPIC_PREFIX] = topic_prefix or topic_prefix_default
 
+            # The entry's unique_id follows the host (see async_update_options),
+            # so a new host another entry already uses must be rejected here.
+            # Only on a change: entries that already share a host must still be
+            # able to save their other options.
+            host_changed = merged[CONF_HOST] != self._current()[CONF_HOST]
+            other_hosts = {
+                get_config_value(entry, CONF_HOST)
+                for entry in self.hass.config_entries.async_entries(DOMAIN)
+                if entry.entry_id != self.config_entry.entry_id
+            }
+            if host_changed and merged[CONF_HOST] in other_hosts:
+                errors[CONF_HOST] = ERROR_ALREADY_CONFIGURED
+            elif host_changed and not host_valid(merged[CONF_HOST]):
+                errors[CONF_HOST] = ERROR_INVALID_HOST
+
             # If HA MQTT is forced, clear custom host to prevent Paho fallback
             if merged.get(CONF_USE_HA_MQTT, False):
                 merged[CONF_MQTT_HOST] = ""
@@ -179,16 +235,16 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_ULTRA_FAST_ENABLED,
                     default=cur[CONF_ULTRA_FAST_ENABLED],
-                    description={"name": "Ultra Fast (1s over MQTT)"},
                 ): bool,
                 vol.Optional(
                     CONF_MQTT_HOST,
                     default="" if use_ha_mqtt_default else cur[CONF_MQTT_HOST],
-                    description={"name": "MQTT Host (ignored when HA MQTT is active)"},
                 ): str,
                 vol.Optional(CONF_MQTT_PORT, default=cur[CONF_MQTT_PORT]): int,
                 vol.Optional(CONF_MQTT_USER, default=cur[CONF_MQTT_USER]): str,
-                vol.Optional(CONF_MQTT_PASSWORD, default=cur[CONF_MQTT_PASSWORD]): str,
+                vol.Optional(
+                    CONF_MQTT_PASSWORD, default=cur[CONF_MQTT_PASSWORD]
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
                 vol.Optional(
                     CONF_MQTT_TOPIC_PREFIX, default=self._get_topic_prefix_default()
                 ): str,
@@ -198,9 +254,6 @@ class SAJModbusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_USE_HA_MQTT,
                     default=use_ha_mqtt_default,
-                    description={
-                        "name": "Use Home Assistant MQTT (ignores Host/Port settings)"
-                    },
                 ): bool,
             }
         )

@@ -36,6 +36,9 @@ def generate_slot_definitions(slot_type: str, count: int = 7) -> Dict[str, List[
 
     for i in range(1, count + 1):
         prefix = str(i)
+        # The readers store slot 1 without its number (charge_day_mask,
+        # charge_start_time, ...), slots 2-7 with it (charge2_day_mask, ...).
+        source = slot_type if i == 1 else f"{slot_type}{prefix}"
 
         # Number entities: day_mask and power_percent
         number_definitions.extend(
@@ -49,6 +52,7 @@ def generate_slot_definitions(slot_type: str, count: int = 7) -> Dict[str, List[
                     "default": 127,
                     "unit": None,
                     "setter": f"set_{slot_type}{prefix}_day_mask",
+                    "source": f"{source}_day_mask",
                 },
                 {
                     "key": f"{slot_type}{prefix}_power_percent",
@@ -59,6 +63,7 @@ def generate_slot_definitions(slot_type: str, count: int = 7) -> Dict[str, List[
                     "default": 5,
                     "unit": "%",
                     "setter": f"set_{slot_type}{prefix}_power_percent",
+                    "source": f"{source}_power_percent",
                 },
             ]
         )
@@ -71,12 +76,14 @@ def generate_slot_definitions(slot_type: str, count: int = 7) -> Dict[str, List[
                     "name": f"{slot_type.capitalize()}{prefix} Start Time",
                     "unique_id_suffix": f"_{slot_type}{prefix}_start_time",
                     "setter": f"set_{slot_type}{prefix}_start",
+                    "source": f"{source}_start_time",
                 },
                 {
                     "key": f"{slot_type}{prefix}_end_time",
                     "name": f"{slot_type.capitalize()}{prefix} End Time",
                     "unique_id_suffix": f"_{slot_type}{prefix}_end_time",
                     "setter": f"set_{slot_type}{prefix}_end",
+                    "source": f"{source}_end_time",
                 },
             ]
         )

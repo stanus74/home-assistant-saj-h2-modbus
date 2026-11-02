@@ -7,7 +7,9 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from .const import DOMAIN
 from .entity import SajBaseEntity
 from .utils import generate_slot_definitions
 
@@ -16,6 +18,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Every number shows the raw register value, the same unit its setter writes.
+# Where the reader stores the register under a different key, "source" names it.
 NUMBER_DEFINITIONS = [
     {
         "key": "charge_time_enable",
@@ -36,6 +40,7 @@ NUMBER_DEFINITIONS = [
         "default": 0,
         "unit": None,
         "setter": "set_app_mode",
+        "source": "AppMode",
         "allowed_values": [0, 1, 2, 3, 10, 12],
     },
     {
@@ -43,10 +48,11 @@ NUMBER_DEFINITIONS = [
         "name": "Export Limit",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 0,
         "unit": None,
         "setter": "set_export_limit",
+        "source": "AntiRefluxPowerLimit",
     },
     {
         "key": "tou_outside_mode",
@@ -83,72 +89,79 @@ NUMBER_DEFINITIONS = [
     {
         "key": "battery_on_grid_discharge_depth",
         "name": "Battery On Grid Discharge Depth",
-        "min": 0,
+        "min": 5,  # protocol minimum (0x3644)
         "max": 100,
         "step": 1,
         "default": 20,
         "unit": "%",
         "setter": "set_battery_on_grid_discharge_depth",
+        "source": "BatOnGridDisDepth",
     },
     {
         "key": "battery_off_grid_discharge_depth",
         "name": "Battery Off Grid Discharge Depth",
-        "min": 0,
+        "min": 5,  # protocol minimum (0x3645)
         "max": 100,
         "step": 1,
         "default": 20,
         "unit": "%",
         "setter": "set_battery_off_grid_discharge_depth",
+        "source": "BatOffGridDisDepth",
     },
     {
         "key": "battery_capacity_charge_upper_limit",
         "name": "Battery Capacity Charge Upper Limit",
-        "min": 0,
+        "min": 20,  # protocol minimum (0x3646)
         "max": 100,
         "step": 1,
         "default": 100,
         "unit": "%",
         "setter": "set_battery_capacity_charge_upper_limit",
+        "source": "BatcharDepth",
     },
     {
         "key": "battery_charge_power_limit",
         "name": "Battery Charge Power Limit",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 1100,
         "unit": None,
         "setter": "set_battery_charge_power_limit",
+        "source": "BatChargePower",
     },
     {
         "key": "battery_discharge_power_limit",
         "name": "Battery Discharge Power Limit",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 1100,
         "unit": None,
         "setter": "set_battery_discharge_power_limit",
+        "source": "BatDischargePower",
     },
     {
         "key": "grid_max_charge_power",
         "name": "Grid Max Charge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 1100,
         "unit": None,
         "setter": "set_grid_max_charge_power",
+        "source": "GridChargePower",
     },
     {
         "key": "grid_max_discharge_power",
         "name": "Grid Max Discharge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 1100,
         "unit": None,
         "setter": "set_grid_max_discharge_power",
+        "source": "GridDischargePower",
     },
     {
         "key": "passive_charge_enable",
@@ -165,7 +178,7 @@ NUMBER_DEFINITIONS = [
         "name": "Passive Grid Charge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 0,
         "unit": None,
         "setter": "set_passive_grid_charge_power",
@@ -175,7 +188,7 @@ NUMBER_DEFINITIONS = [
         "name": "Passive Grid Discharge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 0,
         "unit": None,
         "setter": "set_passive_grid_discharge_power",
@@ -185,7 +198,7 @@ NUMBER_DEFINITIONS = [
         "name": "Passive Battery Charge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 0,
         "unit": None,
         "setter": "set_passive_bat_charge_power",
@@ -195,7 +208,7 @@ NUMBER_DEFINITIONS = [
         "name": "Passive Battery Discharge Power",
         "min": 0,
         "max": 1100,
-        "step": 100,
+        "step": 10,
         "default": 0,
         "unit": None,
         "setter": "set_passive_bat_discharge_power",
@@ -208,6 +221,9 @@ class SajNumberEntity(NumberEntity, SajBaseEntity):
 
     _attr_mode = NumberMode.BOX
     _attr_entity_category = EntityCategory.CONFIG
+    # No async_update: the value is written on setup and on every change, so
+    # HA's 30 s entity polling would only rewrite the unchanged state.
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -252,39 +268,45 @@ class SajGenericNumberEntity(SajNumberEntity):
         unit: str | None = None,
         set_method_name: str | None = None,
         allowed_values: list[int] | None = None,
+        source: str | None = None,
     ) -> None:
         super().__init__(
             hub, name, unique_id, min_val, max_val, step, default, device_info, unit
         )
         self._key = key
+        self._source = source or key
         self.set_method = getattr(hub, set_method_name) if set_method_name else None
         self._allowed_values = allowed_values
 
     async def async_added_to_hass(self) -> None:
-        """Restore the current value from the hub cache if available."""
+        """Restore the raw register value from the hub cache if available."""
         await super().async_added_to_hass()
-        current = self._hub.inverter_data.get(self._key)
+        current = self._hub.inverter_data.get(self._source)
         if current is not None:
             self._attr_native_value = current
             self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
+        # HA's number.set_value already rejects values outside min/max, so
+        # only the gaps in allowed_values (e.g. app_mode 4-9) need checking.
+        # Raise instead of logging: the action must fail visibly, otherwise
+        # the UI and automations treat a discarded value as written.
         val = int(value)
-        if self._allowed_values is not None:
-            if val not in self._allowed_values:
-                _LOGGER.error(
-                    "Invalid value for %s: %s (allowed: %s)",
-                    self._attr_name,
-                    val,
-                    self._allowed_values,
-                )
-                return
-        elif not self._attr_native_min_value <= val <= self._attr_native_max_value:
-            _LOGGER.error("Invalid value for %s: %s", self._attr_name, val)
-            return
-        self._attr_native_value = val
+        if self._allowed_values is not None and val not in self._allowed_values:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="value_not_allowed",
+                translation_placeholders={
+                    "entity": str(self._attr_name),
+                    "value": str(val),
+                    "allowed": ", ".join(str(v) for v in self._allowed_values),
+                },
+            )
         if self.set_method:
             await self.set_method(val)
+        # Only after the setter accepted it, so a failed write does not leave
+        # a value displayed that was never sent.
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 
@@ -306,7 +328,9 @@ async def async_setup_entry(
             hub=hub,
             key=desc["key"],
             name=f"SAJ {desc['name']} (Input)",
-            unique_id=f"{hub.name}_{desc['key']}_input",
+            # Prefix from entry.data via device_info, like the sensors: hub.name
+            # is the entry title, which changes when the user renames the entry.
+            unique_id=f"{device_info['name']}_{desc['key']}_input",
             min_val=desc["min"],
             max_val=desc["max"],
             step=desc["step"],
@@ -315,6 +339,7 @@ async def async_setup_entry(
             set_method_name=desc["setter"],
             device_info=device_info,
             allowed_values=desc.get("allowed_values"),
+            source=desc.get("source"),
         )
         for desc in all_definitions
     ]
