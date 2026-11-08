@@ -4,6 +4,7 @@
 .agents*
 .kilo
 .claude
+.vscode
 /graphify-out/
 # Added by code-review-graph
 .code-review-graph/

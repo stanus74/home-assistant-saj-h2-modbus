@@ -6,3 +6,4 @@
 # Agent skill helper scripts are tooling, not part of the integration
 /.agents/
 /.claude/
+.vscode
