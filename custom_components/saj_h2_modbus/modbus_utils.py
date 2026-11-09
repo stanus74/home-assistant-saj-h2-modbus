@@ -725,7 +725,15 @@ async def try_write_registers(
                 values=values,
             )
         if isinstance(result, ExceptionResponse):
-            raise ModbusIOException("Write response error")
+            exc_code = getattr(result, "exception_code", None)
+            if exc_code == 4:
+                # Slave Device Failure — may be transient, allow retries
+                raise ModbusIOException(f"Write response error (Code: {exc_code})")
+            # Every other code is a deterministic rejection, as in the read path.
+            # ValueError is not retried here, and ChargeSettingHandler treats it
+            # as final as well; as ModbusIOException it was retried up to 3×3
+            # times while _write_done held back every poll.
+            raise ValueError(f"Write rejected by device (Exception code {exc_code})")
 
         if ENABLE_DETAILED_MODBUS_WRITE_LOGGING:
             _LOGGER.debug(
