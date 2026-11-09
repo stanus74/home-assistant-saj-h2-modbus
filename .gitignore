@@ -6,5 +6,7 @@
 .claude
 .vscode
 /graphify-out/
+.graphifyignore
 # Added by code-review-graph
 .code-review-graph/
+
