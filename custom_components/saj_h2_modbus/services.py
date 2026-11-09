@@ -172,33 +172,9 @@ class ModbusConnectionManager:
                 await self._close_socket()
                 _LOGGER.debug("Modbus socket closed after cache cleanup")
 
-    async def update_config(self, host: str, port: int) -> None:
-        """
-        Updates connection parameters.
-
-        Closes the existing socket BEFORE switching to the new host/port and
-        does so while holding _connection_lock, so a concurrent get_client()
-        can never observe a still-open socket to the old host paired with
-        _saj_host/_saj_port already pointing at the new one.
-        """
-        if host == self._host and port == self._port:
-            return
-
-        _LOGGER.info(
-            "Updating Modbus config: %s:%s -> %s:%s",
-            self._host,
-            self._port,
-            host,
-            port,
-        )
-        async with self._connection_lock:
-            await self._connection_cache.invalidate()
-            await self._close_socket()
-
-            self._host = host
-            self._port = port
-            self._client._saj_host = host
-            self._client._saj_port = port
+    # No update_config(host, port): pymodbus fixes the target address when the
+    # client is created, so changing it here had no effect. A host or port
+    # change reloads the config entry instead (async_update_options).
 
 
 class MqttCircuitBreaker(CircuitBreaker):

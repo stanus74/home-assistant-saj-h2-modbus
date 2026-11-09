@@ -6,6 +6,10 @@
 
 - **A Rejected Write Was Retried Nine Times While Polling Waited:** When the inverter refused a write outright — a register this firmware does not support, or a value it does not accept — the integration treated the refusal like a lost connection and repeated it three times with back-off, and the command queue repeated that whole sequence three times again: nine attempts for an answer that was final after the first. Throughout each round all polling was held back, since reads wait for pending writes to finish. Such refusals now end the write after a single attempt with an error in the log, the same way the read path already handles them. *Slave Device Failure*, which can be temporary, and genuine connection errors are still retried as before.
 
+### Code Quality
+
+- **Removed the Unused Host-Change Method:** `ModbusConnectionManager.update_config` could not move the connection to a new address, because pymodbus fixes the target when the client is created. Since a host or port change now reloads the integration, the method was only ever called with the current address and returned at once. It is removed so it cannot be reused for a host change by mistake. No change in behaviour.
+
 ## v3.1.3
 
 > **Inputs and setup release.** ⚠️ **One change needs action:** the eight sensors

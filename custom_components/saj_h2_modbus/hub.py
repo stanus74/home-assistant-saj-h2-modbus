@@ -843,8 +843,8 @@ class SAJModbusHub(DataUpdateCoordinator[dict[str, Any]]):
             return
         self.updating_settings = True
         try:
-            # Update Services
-            await self.connection.update_config(host, port)
+            # host/port are not applied here: a change of either reloads the
+            # config entry in async_update_options, so they arrive unchanged.
 
             # Restart cache-cleanup timer so it fires relative to the new config change,
             # not from whenever the integration was first set up.
